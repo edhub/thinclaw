@@ -3,8 +3,9 @@
 
   interface Props {
     onSend: (content: string) => void;
+    onAbort?: () => void;
   }
-  let { onSend }: Props = $props();
+  let { onSend, onAbort }: Props = $props();
 
   let value = $state('');
   let textareaEl = $state<HTMLTextAreaElement | undefined>(undefined);
@@ -46,12 +47,14 @@
     ></textarea>
     <button
       class="send-btn"
-      disabled={!value.trim() || $isStreaming}
-      onclick={submit}
-      title="Send"
+      disabled={!value.trim() && !$isStreaming}
+      onclick={$isStreaming ? onAbort : submit}
+      title={$isStreaming ? 'Stop' : 'Send'}
     >
       {#if $isStreaming}
-        <span class="spinner"></span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+          <rect x="6" y="6" width="12" height="12" rx="2"/>
+        </svg>
       {:else}
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
           <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
@@ -129,19 +132,6 @@
 
   .send-btn:not(:disabled):hover {
     opacity: 0.85;
-  }
-
-  .spinner {
-    width: 14px;
-    height: 14px;
-    border: 2px solid rgba(255,255,255,0.4);
-    border-top-color: white;
-    border-radius: 50%;
-    animation: spin 0.7s linear infinite;
-  }
-
-  @keyframes spin {
-    to { transform: rotate(360deg); }
   }
 
   .hint {

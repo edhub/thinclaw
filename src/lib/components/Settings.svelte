@@ -1,12 +1,11 @@
 <script lang="ts">
-  import { settings, MODELS, type Theme } from '$lib/stores/settings';
+  import { settings, MODELS, PERSONAS, type Theme } from '$lib/stores/settings';
 
   interface Props {
     onClose: () => void;
   }
   let { onClose }: Props = $props();
 
-  // Local copy for the form
   let draft = $state({ ...$settings });
   let showKey = $state(false);
 
@@ -39,8 +38,9 @@
     </div>
 
     <div class="modal-body">
+      <!-- API Key -->
       <div class="field">
-        <label for="api-key">OpenAI API Key</label>
+        <label for="api-key">API Key</label>
         <div class="key-input-wrap">
           <input
             id="api-key"
@@ -54,18 +54,50 @@
             {showKey ? 'Hide' : 'Show'}
           </button>
         </div>
-        <p class="field-hint">Stored locally in your browser. Never sent to any server other than OpenAI.</p>
+        <p class="field-hint">Stored locally in your browser. Never sent anywhere except the AI API.</p>
       </div>
 
+      <!-- Model -->
       <div class="field">
         <label for="model">Model</label>
         <select id="model" bind:value={draft.model}>
           {#each MODELS as m (m.id)}
-            <option value={m.id}>{m.label}</option>
+            <option value={m.id}>{m.name}</option>
           {/each}
         </select>
       </div>
 
+      <!-- Persona -->
+      <div class="field">
+        <label id="persona-label" for="persona-group">Persona</label>
+        <div id="persona-group" class="persona-grid" role="group" aria-labelledby="persona-label">
+          {#each PERSONAS as p (p.id)}
+            <button
+              class="persona-card"
+              class:selected={draft.personaId === p.id}
+              type="button"
+              onclick={() => (draft.personaId = p.id)}
+            >
+              <span class="persona-emoji">{p.emoji}</span>
+              <span class="persona-name">{p.name}</span>
+              <span class="persona-desc">{p.description}</span>
+            </button>
+          {/each}
+        </div>
+      </div>
+
+      <!-- Custom system prompt -->
+      <div class="field">
+        <label for="system-prompt">自定义指令 <span class="label-hint">（追加到 Persona 末尾）</span></label>
+        <textarea
+          id="system-prompt"
+          bind:value={draft.systemPrompt}
+          rows="3"
+          placeholder="可选：添加额外的行为说明…"
+        ></textarea>
+      </div>
+
+      <!-- Theme -->
       <div class="field">
         <label for="theme">Theme</label>
         <select id="theme" bind:value={draft.theme}>
@@ -73,16 +105,6 @@
             <option value={t.value}>{t.label}</option>
           {/each}
         </select>
-      </div>
-
-      <div class="field">
-        <label for="system-prompt">System Prompt</label>
-        <textarea
-          id="system-prompt"
-          bind:value={draft.systemPrompt}
-          rows="4"
-          placeholder="You are a helpful assistant."
-        ></textarea>
       </div>
     </div>
 
@@ -110,7 +132,7 @@
     border: 1px solid var(--border);
     border-radius: 14px;
     width: 100%;
-    max-width: 480px;
+    max-width: 500px;
     max-height: 90vh;
     display: flex;
     flex-direction: column;
@@ -142,11 +164,7 @@
     display: flex;
     transition: all 0.1s;
   }
-
-  .btn-close:hover {
-    background: var(--surface-hover);
-    color: var(--text-primary);
-  }
+  .btn-close:hover { background: var(--surface-hover); color: var(--text-primary); }
 
   .modal-body {
     padding: 20px 24px;
@@ -168,6 +186,12 @@
     color: var(--text-secondary);
   }
 
+  .label-hint {
+    font-weight: 400;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+  }
+
   input, select, textarea {
     background: var(--surface-input);
     border: 1px solid var(--border);
@@ -181,18 +205,10 @@
     width: 100%;
     box-sizing: border-box;
   }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 70px; }
 
-  input:focus, select:focus, textarea:focus {
-    border-color: var(--accent);
-  }
-
-  textarea { resize: vertical; min-height: 80px; }
-
-  .key-input-wrap {
-    display: flex;
-    gap: 8px;
-  }
-
+  .key-input-wrap { display: flex; gap: 8px; }
   .key-input-wrap input { flex: 1; }
 
   .btn-toggle-key {
@@ -206,17 +222,40 @@
     white-space: nowrap;
     transition: all 0.1s;
   }
-
-  .btn-toggle-key:hover {
-    background: var(--surface-hover);
-    color: var(--text-primary);
-  }
+  .btn-toggle-key:hover { background: var(--surface-hover); color: var(--text-primary); }
 
   .field-hint {
     font-size: 0.75rem;
     color: var(--text-muted);
     margin: 0;
   }
+
+  /* Persona grid */
+  .persona-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 8px;
+  }
+
+  .persona-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 10px 8px;
+    background: var(--surface-elevated);
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-align: center;
+  }
+  .persona-card:hover { border-color: var(--accent); background: var(--surface-hover); }
+  .persona-card.selected { border-color: var(--accent); background: var(--surface-active); }
+
+  .persona-emoji { font-size: 1.4rem; }
+  .persona-name { font-size: 0.8rem; font-weight: 600; color: var(--text-primary); }
+  .persona-desc { font-size: 0.7rem; color: var(--text-muted); line-height: 1.3; }
 
   .modal-footer {
     display: flex;
@@ -236,11 +275,7 @@
     color: var(--text-secondary);
     transition: all 0.1s;
   }
-
-  .btn-cancel:hover {
-    background: var(--surface-hover);
-    color: var(--text-primary);
-  }
+  .btn-cancel:hover { background: var(--surface-hover); color: var(--text-primary); }
 
   .btn-save {
     background: var(--accent);
@@ -253,6 +288,5 @@
     font-weight: 500;
     transition: opacity 0.1s;
   }
-
   .btn-save:hover { opacity: 0.85; }
 </style>

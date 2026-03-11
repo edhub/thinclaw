@@ -9,12 +9,15 @@
     sendMessage,
     createConversation,
     activeMessages,
+    streamingMessage,
     activeConversationId,
     activeConversation,
     isStreaming,
     streamError,
+    abortStreaming,
   } from '$lib/stores/chat';
   import { settings } from '$lib/stores/settings';
+  import { getPersonaById } from '$lib/personas';
 
   let showSettings = $state(false);
   let chatEndEl = $state<HTMLDivElement | undefined>(undefined);
@@ -23,41 +26,31 @@
     await loadConversations();
   });
 
-  // Auto-scroll to bottom when messages change or streaming
+  // Auto-scroll when messages or streaming message change
   $effect(() => {
-    const _ = $activeMessages.length + ($isStreaming ? 1 : 0);
-    void _;
-    if (chatEndEl) {
-      chatEndEl.scrollIntoView({ behavior: 'smooth', block: 'end' });
-    }
+    const _a = $activeMessages.length;
+    const _b = $streamingMessage;
+    void _a; void _b;
+    chatEndEl?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   });
 
   async function handleSend(content: string) {
-    let convId = $activeConversationId;
-    if (!convId) {
-      convId = await createConversation($settings.model);
-    }
-    await sendMessage({
-      content,
-      conversationId: convId,
-      model: $settings.model,
-      apiKey: $settings.apiKey,
-      systemPrompt: $settings.systemPrompt,
-    });
+    await sendMessage(content);
   }
 
   // Apply theme
   $effect(() => {
     const theme = $settings.theme;
     const root = document.documentElement;
-    if (theme === 'dark') {
-      root.setAttribute('data-theme', 'dark');
-    } else if (theme === 'light') {
-      root.setAttribute('data-theme', 'light');
-    } else {
-      root.removeAttribute('data-theme');
-    }
+    if (theme === 'dark') root.setAttribute('data-theme', 'dark');
+    else if (theme === 'light') root.setAttribute('data-theme', 'light');
+    else root.removeAttribute('data-theme');
   });
+
+  // Active persona info for header badge
+  const activePersona = $derived(
+    $activeConversation ? getPersonaById($activeConversation.personaId) : null,
+  );
 </script>
 
 <svelte:head>
@@ -78,10 +71,10 @@
           <p class="warn">
             No API key set.
             <button onclick={() => (showSettings = true)}>Open Settings</button>
-            to add your OpenAI key.
+            to add your key.
           </p>
         {:else}
-          <button class="btn-start" onclick={() => createConversation($settings.model)}>
+          <button class="btn-start" onclick={() => createConversation()}>
             Start a conversation
           </button>
         {/if}
@@ -92,21 +85,28 @@
         <div class="messages-inner">
           {#if $activeConversation}
             <div class="thread-header">
-              <span class="thread-model">{$activeConversation.model}</span>
+              {#if activePersona}
+                <span class="thread-badge">{activePersona.emoji} {activePersona.name}</span>
+              {/if}
+              <span class="thread-badge">{$activeConversation.model}</span>
             </div>
           {/if}
 
-          {#each $activeMessages as msg, i (msg.id)}
-            <ChatMessage
-              message={msg}
-              isStreaming={$isStreaming && i === $activeMessages.length - 1}
-            />
+          <!-- Persisted messages -->
+          {#each $activeMessages as msg (msg.timestamp)}
+            <ChatMessage message={msg} isStreaming={false} />
           {/each}
+
+          <!-- In-flight streaming message -->
+          {#if $streamingMessage}
+            <ChatMessage message={$streamingMessage} isStreaming={true} />
+          {/if}
 
           {#if $streamError}
             <div class="error-banner">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
                 <line x1="12" y1="16" x2="12.01" y2="16"/>
               </svg>
               {$streamError}
@@ -117,7 +117,7 @@
         </div>
       </div>
 
-      <ChatInput onSend={handleSend} />
+      <ChatInput onSend={handleSend} onAbort={abortStreaming} />
     {/if}
   </main>
 </div>
@@ -142,7 +142,7 @@
     min-width: 0;
   }
 
-  /* Welcome screen */
+  /* Welcome */
   .welcome {
     flex: 1;
     display: flex;
@@ -164,15 +164,11 @@
     letter-spacing: -0.02em;
   }
 
-  .welcome p {
-    color: var(--text-secondary);
-    margin: 0;
-    font-size: 1rem;
-  }
+  .welcome p { color: var(--text-secondary); margin: 0; font-size: 1rem; }
 
   .warn {
-    background: var(--warn-bg);
-    color: var(--warn-color);
+    background: var(--warn-bg, var(--error-bg));
+    color: var(--warn-color, var(--error));
     padding: 10px 16px;
     border-radius: 8px;
     font-size: 0.9rem !important;
@@ -203,10 +199,9 @@
     margin-top: 8px;
     transition: opacity 0.1s;
   }
-
   .btn-start:hover { opacity: 0.85; }
 
-  /* Messages thread */
+  /* Messages */
   .messages {
     flex: 1;
     overflow-y: auto;
@@ -223,10 +218,12 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    gap: 8px;
     padding: 8px 0 16px;
+    flex-wrap: wrap;
   }
 
-  .thread-model {
+  .thread-badge {
     font-size: 0.75rem;
     color: var(--text-muted);
     background: var(--surface-elevated);

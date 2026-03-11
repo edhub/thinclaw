@@ -1,34 +1,32 @@
 /**
  * Settings store — persisted to localStorage.
- * Holds API key, selected model, and theme preference.
+ * Holds API key, selected model, persona, theme, and optional custom system prompt.
  */
 import { writable, get } from 'svelte/store';
 import { browser } from '$app/environment';
+import { MODELS, DEFAULT_MODEL_ID } from '$lib/models';
+import { PERSONAS, DEFAULT_PERSONA_ID } from '$lib/personas';
 
-export const MODELS = [
-  { id: 'gpt-4o', label: 'GPT-4o' },
-  { id: 'gpt-4o-mini', label: 'GPT-4o Mini' },
-  { id: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
-  { id: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo' },
-] as const;
+export { MODELS, PERSONAS };
 
-export type ModelId = (typeof MODELS)[number]['id'];
 export type Theme = 'light' | 'dark' | 'system';
 
 export interface Settings {
   apiKey: string;
-  model: ModelId;
+  model: string;        // Model id from MODELS
+  personaId: string;    // Persona id from PERSONAS
   theme: Theme;
-  systemPrompt: string;
+  systemPrompt: string; // Optional extra instructions appended to persona prompt
 }
 
 const STORAGE_KEY = 'thinclaw:settings';
 
 const DEFAULTS: Settings = {
   apiKey: '',
-  model: 'gpt-4o',
+  model: DEFAULT_MODEL_ID,
+  personaId: DEFAULT_PERSONA_ID,
   theme: 'system',
-  systemPrompt: 'You are a helpful assistant.',
+  systemPrompt: '',
 };
 
 function loadFromStorage(): Settings {

@@ -1,6 +1,5 @@
 <script lang="ts">
   import { createConversation, removeConversation, selectConversation, renameConversation, conversations, activeConversationId } from '$lib/stores/chat';
-  import { settings } from '$lib/stores/settings';
 
   interface Props {
     onOpenSettings: () => void;
@@ -11,7 +10,7 @@
   let renameValue = $state('');
 
   async function handleNew() {
-    await createConversation($settings.model);
+    await createConversation();
   }
 
   async function handleSelect(id: string) {
