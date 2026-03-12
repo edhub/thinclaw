@@ -15,9 +15,9 @@
     isStreaming,
     streamError,
     abortStreaming,
+    compactionStatus,
   } from '$lib/stores/chat';
   import { settings } from '$lib/stores/settings';
-  import { getPersonaById } from '$lib/personas';
 
   let showSettings = $state(false);
   let chatEndEl = $state<HTMLDivElement | undefined>(undefined);
@@ -47,10 +47,7 @@
     else root.removeAttribute('data-theme');
   });
 
-  // Active persona info for header badge
-  const activePersona = $derived(
-    $activeConversation ? getPersonaById($activeConversation.personaId) : null,
-  );
+
 </script>
 
 <svelte:head>
@@ -85,15 +82,12 @@
         <div class="messages-inner">
           {#if $activeConversation}
             <div class="thread-header">
-              {#if activePersona}
-                <span class="thread-badge">{activePersona.emoji} {activePersona.name}</span>
-              {/if}
               <span class="thread-badge">{$activeConversation.model}</span>
             </div>
           {/if}
 
           <!-- Persisted messages -->
-          {#each $activeMessages as msg (msg.timestamp)}
+          {#each $activeMessages as msg, i (i)}
             <ChatMessage message={msg} isStreaming={false} />
           {/each}
 
@@ -118,6 +112,13 @@
       </div>
 
       <ChatInput onSend={handleSend} onAbort={abortStreaming} />
+
+      {#if $compactionStatus === 'compacting'}
+        <div class="compaction-banner">
+          <span class="compaction-spinner"></span>
+          Compressing conversation history…
+        </div>
+      {/if}
     {/if}
   </main>
 </div>
@@ -243,5 +244,32 @@
     padding: 10px 14px;
     font-size: 0.875rem;
     margin: 8px 0;
+  }
+
+  .compaction-banner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px 16px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    border-top: 1px solid var(--border);
+    background: var(--surface-main);
+  }
+
+  .compaction-spinner {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
   }
 </style>
