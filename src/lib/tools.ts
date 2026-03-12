@@ -1,20 +1,29 @@
 /**
  * Browser-safe tools for the AI agent.
- * These run entirely in the browser — no network calls, no file system.
+ * All tools run entirely in the browser — no network calls, no file system.
+ *
+ * Tools:
+ *   calculate       — evaluate JS math expressions
+ *   get_datetime    — current local date/time
+ *   soul_update     — AI rewrites its own soul (identity evolution)
+ *   soul_read       — AI reads its current soul
+ *   memory_save     — persist a memory across conversations
+ *   memory_recall   — keyword search over saved memories
+ *   memory_delete   — remove a specific memory by id
  */
 import { Type } from '@mariozechner/pi-ai';
 import type { AgentTool } from '@mariozechner/pi-agent-core';
+import { soul } from '$lib/soul';
+import { memories } from '$lib/stores/memory';
 
-// Define params schemas first to avoid "used before declaration" errors
+// ─── calculate ────────────────────────────────────────────────────────────────
+
 const calculateParams = Type.Object({
   expression: Type.String({
     description: 'JS math expression to evaluate, e.g. "2 + 2 * 3" or "Math.sqrt(144)"',
   }),
 });
 
-const datetimeParams = Type.Object({});
-
-/** Evaluate a mathematical expression using the JS engine */
 export const calculateTool: AgentTool<typeof calculateParams> = {
   name: 'calculate',
   label: 'Calculator',
@@ -43,7 +52,10 @@ export const calculateTool: AgentTool<typeof calculateParams> = {
   },
 };
 
-/** Return the current date and time in the user's local timezone */
+// ─── get_datetime ─────────────────────────────────────────────────────────────
+
+const datetimeParams = Type.Object({});
+
 export const datetimeTool: AgentTool<typeof datetimeParams> = {
   name: 'get_datetime',
   label: 'Date & Time',
@@ -65,8 +77,141 @@ export const datetimeTool: AgentTool<typeof datetimeParams> = {
   },
 };
 
-// Use double cast to widen the typed array safely
+// ─── soul_update ──────────────────────────────────────────────────────────────
+
+const soulUpdateParams = Type.Object({
+  content: Type.String({
+    description:
+      'The new soul content (full replacement, Markdown). Write the complete soul — not just a diff.',
+  }),
+});
+
+export const soulUpdateTool: AgentTool<typeof soulUpdateParams> = {
+  name: 'soul_update',
+  label: 'Update Soul',
+  description:
+    "Update your soul — your core identity, values, and operating principles. Use when something about who you are needs to evolve. Always tell the user what changed and why after calling this tool.",
+  parameters: soulUpdateParams,
+  execute: async (_id, { content }) => {
+    soul.set(content);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: `Soul updated (${content.length} chars). Remember to tell the user what changed.`,
+        },
+      ],
+      details: { length: content.length },
+    };
+  },
+};
+
+// ─── soul_read ────────────────────────────────────────────────────────────────
+
+const soulReadParams = Type.Object({});
+
+export const soulReadTool: AgentTool<typeof soulReadParams> = {
+  name: 'soul_read',
+  label: 'Read Soul',
+  description:
+    'Read your current soul. Useful mid-conversation when you want to reference or reflect on your identity before deciding whether to update it.',
+  parameters: soulReadParams,
+  execute: async () => {
+    const content = soul.current();
+    return {
+      content: [{ type: 'text' as const, text: content }],
+      details: { length: content.length },
+    };
+  },
+};
+
+// ─── memory_save ─────────────────────────────────────────────────────────────
+
+const memorySaveParams = Type.Object({
+  content: Type.String({
+    description:
+      "The memory to save. Be concise and specific — one fact or note per entry. E.g. \"User's name is Alice\", \"Prefers TypeScript over JavaScript\", \"Working on a SvelteKit project called ThinClaw\".",
+  }),
+});
+
+export const memorySaveTool: AgentTool<typeof memorySaveParams> = {
+  name: 'memory_save',
+  label: 'Save Memory',
+  description:
+    "Persist a memory that should survive across conversations: the user's name, preferences, ongoing projects, important facts. If someone says 'remember this' — write it down.",
+  parameters: memorySaveParams,
+  execute: async (_id, { content }) => {
+    const mem = await memories.add(content);
+    return {
+      content: [{ type: 'text' as const, text: `Memory saved (id: ${mem.id})` }],
+      details: { id: mem.id, content },
+    };
+  },
+};
+
+// ─── memory_recall ────────────────────────────────────────────────────────────
+
+const memoryRecallParams = Type.Object({
+  query: Type.String({
+    description: 'Keywords to search for. All tokens must match (case-insensitive).',
+  }),
+});
+
+export const memoryRecallTool: AgentTool<typeof memoryRecallParams> = {
+  name: 'memory_recall',
+  label: 'Recall Memory',
+  description:
+    'Search your saved memories by keywords. Use to retrieve context that was stored in a previous conversation.',
+  parameters: memoryRecallParams,
+  execute: async (_id, { query }) => {
+    const results = await memories.search(query);
+    if (results.length === 0) {
+      return {
+        content: [{ type: 'text' as const, text: `No memories found for: "${query}"` }],
+        details: { query, count: 0 },
+      };
+    }
+    const text = results
+      .map((m) => {
+        const date = new Date(m.createdAt).toLocaleDateString('en-CA');
+        return `[${m.id}] [${date}] ${m.content}`;
+      })
+      .join('\n');
+    return {
+      content: [{ type: 'text' as const, text }],
+      details: { query, count: results.length },
+    };
+  },
+};
+
+// ─── memory_delete ────────────────────────────────────────────────────────────
+
+const memoryDeleteParams = Type.Object({
+  id: Type.String({ description: 'ID of the memory to delete (from memory_recall results).' }),
+});
+
+export const memoryDeleteTool: AgentTool<typeof memoryDeleteParams> = {
+  name: 'memory_delete',
+  label: 'Delete Memory',
+  description: 'Delete a specific memory by its ID. Use to remove stale or incorrect entries.',
+  parameters: memoryDeleteParams,
+  execute: async (_id, { id }) => {
+    await memories.remove(id);
+    return {
+      content: [{ type: 'text' as const, text: `Memory ${id} deleted.` }],
+      details: { id },
+    };
+  },
+};
+
+// ─── export ───────────────────────────────────────────────────────────────────
+
 export const browserTools: AgentTool[] = [
   calculateTool as unknown as AgentTool,
   datetimeTool as unknown as AgentTool,
+  soulUpdateTool as unknown as AgentTool,
+  soulReadTool as unknown as AgentTool,
+  memorySaveTool as unknown as AgentTool,
+  memoryRecallTool as unknown as AgentTool,
+  memoryDeleteTool as unknown as AgentTool,
 ];
