@@ -17,6 +17,9 @@
     abortStreaming,
     compactionStatus,
   } from '$lib/stores/chat';
+  import type { ImageContent } from '@mariozechner/pi-ai';
+  import { memories } from '$lib/stores/memory';
+
   import { settings } from '$lib/stores/settings';
 
   let showSettings = $state(false);
@@ -24,6 +27,9 @@
   let chatEndEl = $state<HTMLDivElement | undefined>(undefined);
 
   onMount(async () => {
+    // Load memories once at startup. The memory_save / memory_delete tools
+    // keep the store in sync incrementally — no need to reload on every agent turn.
+    await memories.load();
     await loadConversations();
   });
 
@@ -36,8 +42,8 @@
     chatEndEl?.scrollIntoView({ behavior, block: 'end' });
   });
 
-  async function handleSend(content: string) {
-    await sendMessage(content);
+  async function handleSend(content: string, images: ImageContent[]) {
+    await sendMessage(content, images);
   }
 
   // Apply theme
@@ -123,7 +129,7 @@
           {/if}
 
           <!-- Persisted messages -->
-          {#each $activeMessages as msg, i (i)}
+          {#each $activeMessages as msg ((msg as any).timestamp)}
             <ChatMessage message={msg} isStreaming={false} />
           {/each}
 

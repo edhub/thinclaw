@@ -12,7 +12,7 @@
 import { writable, derived, get } from 'svelte/store';
 import { Agent } from '@mariozechner/pi-agent-core';
 import type { AgentEvent, AgentMessage } from '@mariozechner/pi-agent-core';
-import type { Message } from '@mariozechner/pi-ai';
+import type { ImageContent, Message } from '@mariozechner/pi-ai';
 import { nanoid } from '$lib/utils/nanoid';
 import { getModelById } from '$lib/agent/models';
 import { buildSystemPrompt, formatMemoriesForPrompt } from '$lib/agent/prompts';
@@ -111,8 +111,10 @@ export const activeConversation = derived(
   ([$convs, $id]) => $convs.find((c) => c.id === $id) ?? null,
 );
 
-// Track how many messages existed before the current agent run
-let _prevMessageCount = 0;
+// Per-conversation message count before the current agent run.
+// Using a Map prevents cross-conversation pollution when onAgentEnd and
+// selectConversation race on the same module-level variable.
+const _prevMessageCounts = new Map<string, number>();
 
 function handleAgentEvent(event: AgentEvent) {
   switch (event.type) {
@@ -144,8 +146,13 @@ function handleAgentEvent(event: AgentEvent) {
       isStreaming.set(false);
       streamingMessage.set(null);
       activeMessages.set([...getAgent().state.messages]);
-      // Fire-and-forget: persist → auto-compact (order matters)
-      onAgentEnd();
+      // Fire-and-forget: persist → auto-compact (order matters).
+      // Catch here so IDB / compaction errors surface to the user instead of
+      // becoming silent unhandled rejections.
+      onAgentEnd().catch((err: unknown) => {
+        console.error('[chat] Failed to save messages:', err);
+        streamError.set('Failed to save messages — please refresh if they appear missing.');
+      });
       break;
   }
 }
@@ -163,20 +170,28 @@ async function persistNewMessages(): Promise<void> {
   const convId = get(activeConversationId);
   if (!convId) return;
   const all = getAgent().state.messages;
-  const newMsgs = all.slice(_prevMessageCount);
+  // Use per-conversation count so concurrent onAgentEnd / selectConversation
+  // calls on different conversations don't overwrite each other's offsets.
+  const prevCount = _prevMessageCounts.get(convId) ?? 0;
+  const newMsgs = all.slice(prevCount);
   if (newMsgs.length === 0) return;
-  await appendMessages(convId, newMsgs, _prevMessageCount);
+  await appendMessages(convId, newMsgs, prevCount);
   const conv = get(conversations).find((c) => c.id === convId);
   if (conv) {
     await saveConversation({ ...conv, updatedAt: Date.now() });
   }
-  _prevMessageCount = all.length;
+  _prevMessageCounts.set(convId, all.length);
 }
 
 /**
  * Run auto-compaction if context is nearly full.
  * Replaces the agent's in-memory messages and syncs IndexedDB.
  * Errors are non-fatal — logged and silently ignored.
+ *
+ * Race condition guard: if the user switches conversations during the LLM
+ * summarisation call, the IDB update still applies to the correct conversation
+ * but in-memory state / UI updates are skipped to avoid clobbering the new
+ * conversation's agent state.
  */
 async function maybeCompact(): Promise<void> {
   const agent = getAgent();
@@ -195,12 +210,19 @@ async function maybeCompact(): Promise<void> {
   try {
     const result = await compactMessages(messages, model, apiKey);
 
+    // Always write the compacted history to IDB for the originating conversation.
+    if (convId) await replaceAllMessages(convId, result.messages);
+
+    // If the user switched away during the (slow) LLM summarisation call,
+    // don't touch the agent state or UI — they now belong to a different conversation.
+    if (get(activeConversationId) !== convId) {
+      console.info('[compaction] conversation switched during compaction; IDB updated, in-memory state skipped.');
+      return;
+    }
+
     // Update in-memory agent state
     agent.replaceMessages(result.messages);
-    _prevMessageCount = result.messages.length;
-
-    // Sync IndexedDB
-    if (convId) await replaceAllMessages(convId, result.messages);
+    if (convId) _prevMessageCounts.set(convId, result.messages.length);
 
     // Reflect in UI
     activeMessages.set([...result.messages]);
@@ -217,11 +239,11 @@ async function maybeCompact(): Promise<void> {
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
+// loadConversations no longer calls memories.load() — memories are loaded
+// once at app startup (see +page.svelte onMount) and kept in sync by
+// memory_save / memory_delete tools incrementally.
 export async function loadConversations(): Promise<void> {
-  const [list] = await Promise.all([
-    listConversations(),
-    memories.load(), // ensure memory store is populated at startup
-  ]);
+  const list = await listConversations();
   conversations.set(list);
 }
 
@@ -242,7 +264,7 @@ export async function selectConversation(id: string): Promise<void> {
   agent.setThinkingLevel(selectedModel.reasoning ? 'medium' : 'off');
   agent.replaceMessages(msgs);
 
-  _prevMessageCount = msgs.length;
+  _prevMessageCounts.set(id, msgs.length);
   activeConversationId.set(id);
   activeMessages.set(msgs);
   streamingMessage.set(null);
@@ -272,7 +294,7 @@ export async function removeConversation(id: string): Promise<void> {
   activeConversationId.update((current) => {
     if (current === id) {
       getAgent().replaceMessages([]);
-      _prevMessageCount = 0;
+      _prevMessageCounts.delete(id);
       activeMessages.set([]);
       streamingMessage.set(null);
       return null;
@@ -282,15 +304,16 @@ export async function removeConversation(id: string): Promise<void> {
 }
 
 export async function renameConversation(id: string, title: string): Promise<void> {
+  const now = Date.now();
   conversations.update((list) =>
-    list.map((c) => (c.id === id ? { ...c, title, updatedAt: Date.now() } : c)),
+    list.map((c) => (c.id === id ? { ...c, title, updatedAt: now } : c)),
   );
-  const list = await listConversations();
-  const conv = list.find((c) => c.id === id);
-  if (conv) await saveConversation({ ...conv, title, updatedAt: Date.now() });
+  // Read back from the already-updated store — no extra IDB round-trip needed.
+  const conv = get(conversations).find((c) => c.id === id);
+  if (conv) await saveConversation(conv);
 }
 
-export async function sendMessage(content: string): Promise<void> {
+export async function sendMessage(content: string, images: ImageContent[] = []): Promise<void> {
   const agent = getAgent();
   if (agent.state.isStreaming) return;
 
@@ -312,10 +335,10 @@ export async function sendMessage(content: string): Promise<void> {
   agent.setModel(selectedModel);
   agent.setThinkingLevel(selectedModel.reasoning ? 'medium' : 'off');
 
-  _prevMessageCount = agent.state.messages.length;
+  _prevMessageCounts.set(convId, agent.state.messages.length);
 
   try {
-    await agent.prompt(content);
+    await agent.prompt(content, images.length > 0 ? images : undefined);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     streamError.set(msg);

@@ -21,7 +21,7 @@ export const MODELS: Model<"anthropic-messages" | "google-generative-ai">[] = [
     // Uses thinkingLevel enum (not budgetTokens); pi-ai maps effort→level for Gemini 3 Flash models
     // medium effort → thinkingLevel: "MEDIUM"
     reasoning: true,
-    input: ["text"],
+    input: ["text", "image"],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 1000000,
     maxTokens: 8192,
@@ -34,7 +34,7 @@ export const MODELS: Model<"anthropic-messages" | "google-generative-ai">[] = [
     // pi-ai sets apiVersion="" when baseUrl is provided, so include version here
     baseUrl: "https://api.bianxie.ai/v1beta",
     reasoning: true,
-    input: ["text"],
+    input: ["text", "image"],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 1000000,
     maxTokens: 8192,
@@ -48,7 +48,7 @@ export const MODELS: Model<"anthropic-messages" | "google-generative-ai">[] = [
     provider: "bianxie",
     baseUrl: "https://api.bianxie.ai", // SDK appends /v1/messages
     reasoning: true,
-    input: ["text"],
+    input: ["text", "image"],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 200000,
     maxTokens: 16000,
@@ -60,7 +60,7 @@ export const MODELS: Model<"anthropic-messages" | "google-generative-ai">[] = [
     provider: "bianxie",
     baseUrl: "https://api.bianxie.ai",
     reasoning: false,
-    input: ["text"],
+    input: ["text", "image"],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 200000,
     maxTokens: 8192,

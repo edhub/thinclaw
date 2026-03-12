@@ -14,9 +14,15 @@ importers:
       '@mariozechner/pi-ai':
         specifier: ^0.57.1
         version: 0.57.1(ws@8.19.0)(zod@4.3.6)
+      highlight.js:
+        specifier: ^11.11.1
+        version: 11.11.1
       idb:
         specifier: ^8.0.3
         version: 8.0.3
+      marked:
+        specifier: ^17.0.4
+        version: 17.0.4
     devDependencies:
       '@sveltejs/adapter-static':
         specifier: ^3.0.10
@@ -30,12 +36,6 @@ importers:
       '@tailwindcss/vite':
         specifier: ^4.2.1
         version: 4.2.1(vite@7.3.1(@types/node@25.4.0)(jiti@2.6.1)(lightningcss@1.31.1))
-      highlight.js:
-        specifier: ^11.11.1
-        version: 11.11.1
-      marked:
-        specifier: ^17.0.4
-        version: 17.0.4
       svelte:
         specifier: ^5.53.10
         version: 5.53.10

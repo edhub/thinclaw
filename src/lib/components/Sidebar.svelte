@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createConversation, removeConversation, selectConversation, renameConversation, conversations, activeConversationId } from '$lib/stores/chat';
+  import { createConversation, removeConversation, selectConversation, renameConversation, conversations, activeConversationId, isStreaming } from '$lib/stores/chat';
 
   interface Props {
     onOpenSettings: () => void;
@@ -19,6 +19,9 @@
   async function handleSelect(id: string) {
     onClose?.(); // always close drawer on mobile
     if ($activeConversationId === id) return;
+    // Don't allow switching while the agent is mid-stream: the agent's internal
+    // message list and _prevMessageCounts would get entangled between conversations.
+    if ($isStreaming) return;
     await selectConversation(id);
   }
 

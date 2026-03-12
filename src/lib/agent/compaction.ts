@@ -70,7 +70,10 @@ export function estimateTokens(message: AgentMessage): number {
       if (typeof c === 'string') return estimateStringTokens(c);
       if (Array.isArray(c)) {
         let tokens = 0;
-        for (const b of c) if (b.type === 'text' && b.text) tokens += estimateStringTokens(b.text as string);
+        for (const b of c) {
+          if (b.type === 'text' && b.text) tokens += estimateStringTokens(b.text as string);
+          else if (b.type === 'image') tokens += 4_800; // ~1024×1024 image estimate
+        }
         return tokens;
       }
       return 0;

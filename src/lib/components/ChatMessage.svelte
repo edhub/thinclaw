@@ -7,6 +7,7 @@
     TextContent,
     ThinkingContent,
     ToolCall,
+    ImageContent,
   } from '@mariozechner/pi-ai';
 
   interface Props {
@@ -46,6 +47,15 @@
             .map((b) => (b as TextContent).text)
             .join('')
       : '',
+  );
+
+  // User message images (only present when content is an array)
+  const userImages = $derived(
+    message.role === 'user' && Array.isArray(message.content)
+      ? (message.content as (TextContent | ImageContent)[]).filter(
+          (b): b is ImageContent => b.type === 'image',
+        )
+      : [],
   );
 
   // Render markdown for assistant text
@@ -90,7 +100,20 @@
 
     {#if isUser}
       <!-- User message -->
-      <p class="user-text">{userText}</p>
+      {#if userImages.length > 0}
+        <div class="user-images">
+          {#each userImages as img}
+            <img
+              src="data:{img.mimeType};base64,{img.data}"
+              alt=""
+              class="user-image"
+            />
+          {/each}
+        </div>
+      {/if}
+      {#if userText}
+        <p class="user-text">{userText}</p>
+      {/if}
 
     {:else if isAssistant}
       <!-- Thinking block (collapsible) -->
@@ -226,6 +249,24 @@
     white-space: pre-wrap;
     word-break: break-word;
     margin: 0;
+  }
+
+  /* User attached images */
+  .user-images {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+
+  .user-image {
+    max-width: 320px;
+    max-height: 320px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    object-fit: contain;
+    display: block;
+    cursor: zoom-in;
   }
 
   /* Thinking block */
