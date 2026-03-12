@@ -540,4 +540,40 @@
     transition: opacity 0.1s;
   }
   .btn-save:hover { opacity: 0.85; }
+
+  /* ── Mobile: bottom sheet ── */
+  @media (max-width: 639px) {
+    .overlay {
+      align-items: flex-end;
+      padding: 0;
+    }
+
+    .modal {
+      border-radius: 18px 18px 0 0;
+      max-width: 100%;
+      /* svh avoids the iOS Safari toolbar collapsing issue */
+      max-height: 88svh;
+    }
+
+    .modal-header {
+      padding: 14px 16px 0;
+    }
+
+    .tab {
+      padding: 8px 10px 12px;
+      font-size: 0.82rem;
+    }
+
+    .modal-body {
+      padding: 16px;
+    }
+
+    .modal-footer {
+      padding: 12px 16px 20px;
+    }
+
+    .soul-textarea {
+      min-height: 180px;
+    }
+  }
 </style>

@@ -98,6 +98,21 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Disable double-tap zoom on all interactive elements */
+a, button, [role="button"], label, select {
+  touch-action: manipulation;
+}
+
+/* ─── Prevent iOS Safari from zooming on input focus ─── */
+/* iOS zooms in when the focused element's font-size is below 16px.   */
+/* We bump inputs to 16px on mobile; visual size stays controlled by  */
+/* each component's padding/line-height rather than font-size alone.  */
+@media (max-width: 639px) {
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+}
+
 /* ─── Scrollbar ─── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }

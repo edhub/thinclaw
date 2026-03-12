@@ -20,6 +20,7 @@
   import { settings } from '$lib/stores/settings';
 
   let showSettings = $state(false);
+  let sidebarOpen = $state(false);
   let chatEndEl = $state<HTMLDivElement | undefined>(undefined);
 
   onMount(async () => {
@@ -56,9 +57,43 @@
 </svelte:head>
 
 <div class="app-shell">
-  <Sidebar onOpenSettings={() => (showSettings = true)} />
+  <!-- Mobile backdrop (shown when sidebar is open) -->
+  {#if sidebarOpen}
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <div
+      class="mobile-backdrop"
+      role="presentation"
+      onclick={() => (sidebarOpen = false)}
+    ></div>
+  {/if}
+
+  <Sidebar
+    onOpenSettings={() => (showSettings = true)}
+    open={sidebarOpen}
+    onClose={() => (sidebarOpen = false)}
+  />
 
   <main class="chat-area">
+    <!-- Mobile-only top bar -->
+    <header class="mobile-header">
+      <button class="btn-hamburger" onclick={() => (sidebarOpen = true)} aria-label="Open sidebar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="3" y1="6" x2="21" y2="6"/>
+          <line x1="3" y1="12" x2="21" y2="12"/>
+          <line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+      </button>
+      <span class="mobile-title">
+        {$activeConversation?.title ?? 'ThinClaw'}
+      </span>
+      <button class="btn-mobile-settings" onclick={() => (showSettings = true)} aria-label="Settings">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+        </svg>
+      </button>
+    </header>
+
     {#if !$activeConversationId}
       <!-- Welcome screen -->
       <div class="welcome">
@@ -272,5 +307,77 @@
 
   @keyframes spin {
     to { transform: rotate(360deg); }
+  }
+
+  /* ── Mobile backdrop ── */
+  .mobile-backdrop {
+    display: none;
+  }
+
+  /* ── Mobile header (hidden on desktop) ── */
+  .mobile-header {
+    display: none;
+  }
+
+  @media (max-width: 639px) {
+    /* Backdrop behind the sidebar drawer */
+    .mobile-backdrop {
+      display: block;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.4);
+      z-index: 40;
+    }
+
+    /* Top bar replaces the sidebar brand on mobile */
+    .mobile-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      height: 52px;
+      padding: 0 12px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface-main);
+      flex-shrink: 0;
+    }
+
+    .mobile-title {
+      flex: 1;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      text-align: center;
+    }
+
+    .btn-hamburger,
+    .btn-mobile-settings {
+      background: none;
+      border: none;
+      padding: 6px;
+      border-radius: 8px;
+      cursor: pointer;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      flex-shrink: 0;
+      transition: all 0.1s;
+    }
+    .btn-hamburger:hover,
+    .btn-mobile-settings:hover {
+      background: var(--surface-hover);
+      color: var(--text-primary);
+    }
+
+    /* Reduce chat area horizontal padding on mobile */
+    .messages {
+      padding: 0 12px;
+    }
+
+    .messages-inner {
+      padding: 16px 0;
+    }
   }
 </style>

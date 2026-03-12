@@ -3,17 +3,21 @@
 
   interface Props {
     onOpenSettings: () => void;
+    open?: boolean;       // mobile: whether the drawer is visible
+    onClose?: () => void; // mobile: called when sidebar should close
   }
-  let { onOpenSettings }: Props = $props();
+  let { onOpenSettings, open = false, onClose }: Props = $props();
 
   let renamingId = $state<string | null>(null);
   let renameValue = $state('');
 
   async function handleNew() {
     await createConversation();
+    onClose?.();
   }
 
   async function handleSelect(id: string) {
+    onClose?.(); // always close drawer on mobile
     if ($activeConversationId === id) return;
     await selectConversation(id);
   }
@@ -35,7 +39,7 @@
   }
 </script>
 
-<aside class="sidebar">
+<aside class="sidebar" class:mobile-open={open}>
   <div class="sidebar-header">
     <span class="brand">ThinClaw</span>
     <button class="btn-icon" onclick={handleNew} title="New conversation">
@@ -262,5 +266,26 @@
   .btn-settings:hover {
     background: var(--surface-hover);
     color: var(--text-primary);
+  }
+
+  /* ── Mobile: slide-in drawer ── */
+  @media (max-width: 639px) {
+    .sidebar {
+      position: fixed;
+      left: 0;
+      top: 0;
+      height: 100%;
+      z-index: 50;
+      width: 280px;
+      min-width: unset;
+      transform: translateX(-100%);
+      transition: transform 0.25s ease;
+      /* shadow to separate from backdrop */
+      box-shadow: 4px 0 24px rgba(0, 0, 0, 0.18);
+    }
+
+    .sidebar.mobile-open {
+      transform: translateX(0);
+    }
   }
 </style>

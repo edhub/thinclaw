@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { isStreaming } from '$lib/stores/chat';
 
   interface Props {
@@ -9,6 +10,11 @@
 
   let value = $state('');
   let textareaEl = $state<HTMLTextAreaElement | undefined>(undefined);
+  let isMobile = $state(false);
+
+  onMount(() => {
+    isMobile = window.matchMedia('(max-width: 639px)').matches;
+  });
 
   function handleKeydown(e: KeyboardEvent) {
     // Send on Enter (without Shift)
@@ -39,7 +45,11 @@
     <textarea
       bind:this={textareaEl}
       bind:value
-      placeholder={$isStreaming ? 'Waiting for response…' : 'Message (Enter to send, Shift+Enter for new line)'}
+      placeholder={$isStreaming
+        ? 'Waiting for response…'
+        : isMobile
+          ? 'Message…'
+          : 'Message (Enter to send, Shift+Enter for new line)'}
       rows="1"
       disabled={$isStreaming}
       onkeydown={handleKeydown}
@@ -139,5 +149,15 @@
     color: var(--text-muted);
     text-align: center;
     margin: 8px 0 0;
+  }
+
+  @media (max-width: 639px) {
+    .input-area {
+      padding: 8px 12px 16px;
+    }
+
+    .hint {
+      display: none;
+    }
   }
 </style>

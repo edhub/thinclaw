@@ -67,7 +67,7 @@ export const MODELS: Model<"anthropic-messages" | "google-generative-ai">[] = [
   },
 ];
 
-export const DEFAULT_MODEL_ID = MODELS[0].id;
+export const DEFAULT_MODEL_ID = "claude-haiku-4-5-20251001-thinking";
 
 export function getModelById(
   id: string,
