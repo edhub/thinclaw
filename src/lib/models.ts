@@ -1,67 +1,62 @@
 /**
- * Model definitions for bianxie.ai (OpenAI-compatible proxy).
- * All models use the openai-completions API with explicit compat overrides
- * to disable features the proxy doesn't support (store, developer role, etc.)
+ * Model definitions for bianxie.ai proxy.
+ *
+ * Claude models  → Anthropic Messages API  (native format, POST /v1/messages)
+ * Gemini models  → Google Generative AI API (native format, POST /v1beta/models/…)
+ *
+ * Using native formats gives access to provider-specific features:
+ *   - Anthropic: extended thinking, cache control, fine-grained tool streaming
+ *   - Google: thinkingConfig, thoughtSignature, native tool use
  */
-import type { Model, OpenAICompletionsCompat } from '@mariozechner/pi-ai';
+import type { Model } from '@mariozechner/pi-ai';
 
-/** Shared compat settings for all bianxie.ai models */
-const bianxieCompat: OpenAICompletionsCompat = {
-  supportsStore: false,
-  supportsDeveloperRole: false,
-  supportsReasoningEffort: false,
-  supportsUsageInStreaming: false, // conservative for proxy
-  maxTokensField: 'max_tokens',
-  requiresToolResultName: false,
-  requiresAssistantAfterToolResult: false,
-  requiresThinkingAsText: false, // thinking comes back as reasoning_content field
-  supportsStrictMode: false,
-};
-
-export const MODELS: Model<'openai-completions'>[] = [
+export const MODELS: Model<'anthropic-messages' | 'google-generative-ai'>[] = [
+  // ── Anthropic (via bianxie) ─────────────────────────────────────────────────
   {
     id: 'claude-haiku-4-5-20251001-thinking',
     name: 'Claude Haiku 4.5 (Thinking)',
-    api: 'openai-completions',
+    api: 'anthropic-messages',
     provider: 'bianxie',
-    baseUrl: 'https://api.bianxie.ai/v1',
-    reasoning: true, // emits ThinkingContent blocks via reasoning_content field
+    baseUrl: 'https://api.bianxie.ai', // SDK appends /v1/messages
+    reasoning: true,
     input: ['text'],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 200000,
     maxTokens: 16000,
-    compat: bianxieCompat,
   },
   {
     id: 'claude-haiku-4-5-20251001',
     name: 'Claude Haiku 4.5',
-    api: 'openai-completions',
+    api: 'anthropic-messages',
     provider: 'bianxie',
-    baseUrl: 'https://api.bianxie.ai/v1',
+    baseUrl: 'https://api.bianxie.ai',
     reasoning: false,
     input: ['text'],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 200000,
     maxTokens: 8192,
-    compat: bianxieCompat,
   },
+
+  // ── Google Gemini (via bianxie) ─────────────────────────────────────────────
   {
     id: 'gemini-3-flash-preview-thinking',
     name: 'Gemini 3 Flash (Thinking)',
-    api: 'openai-completions',
+    api: 'google-generative-ai',
     provider: 'bianxie',
-    baseUrl: 'https://api.bianxie.ai/v1',
+    // pi-ai sets apiVersion="" when baseUrl is provided, so include version here
+    baseUrl: 'https://api.bianxie.ai/v1beta',
     reasoning: true,
     input: ['text'],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 1000000,
     maxTokens: 8192,
-    compat: bianxieCompat,
   },
 ];
 
 export const DEFAULT_MODEL_ID = MODELS[0].id;
 
-export function getModelById(id: string): Model<'openai-completions'> {
+export function getModelById(
+  id: string,
+): Model<'anthropic-messages' | 'google-generative-ai'> {
   return MODELS.find((m) => m.id === id) ?? MODELS[0];
 }
