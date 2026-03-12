@@ -227,7 +227,9 @@ export async function selectConversation(id: string): Promise<void> {
   const conv = get(conversations).find((c) => c.id === id);
 
   agent.setSystemPrompt(assembleSystemPrompt());
-  agent.setModel(getModelById(conv?.model ?? get(settings).model));
+  const selectedModel = getModelById(conv?.model ?? get(settings).model);
+  agent.setModel(selectedModel);
+  agent.setThinkingLevel(selectedModel.reasoning ? 'medium' : 'off');
   agent.replaceMessages(msgs);
 
   _prevMessageCount = msgs.length;
@@ -295,8 +297,10 @@ export async function sendMessage(content: string): Promise<void> {
 
   // Rebuild system prompt before every message so soul/memory changes take effect
   const conv = get(conversations).find((c) => c.id === convId);
+  const selectedModel = getModelById(conv?.model ?? s.model);
   agent.setSystemPrompt(assembleSystemPrompt());
-  agent.setModel(getModelById(conv?.model ?? s.model));
+  agent.setModel(selectedModel);
+  agent.setThinkingLevel(selectedModel.reasoning ? 'medium' : 'off');
 
   _prevMessageCount = agent.state.messages.length;
 

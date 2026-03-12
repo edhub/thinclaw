@@ -39,6 +39,20 @@ export const MODELS: Model<'anthropic-messages' | 'google-generative-ai'>[] = [
 
   // ── Google Gemini (via bianxie) ─────────────────────────────────────────────
   {
+    id: 'gemini-3.1-flash-lite-preview',
+    name: 'Gemini 3.1 Flash Lite (Thinking)',
+    api: 'google-generative-ai',
+    provider: 'bianxie',
+    baseUrl: 'https://api.bianxie.ai/v1beta',
+    // Uses thinkingLevel enum (not budgetTokens); pi-ai maps effort→level for Gemini 3 Flash models
+    // medium effort → thinkingLevel: "MEDIUM"
+    reasoning: true,
+    input: ['text'],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: 1000000,
+    maxTokens: 8192,
+  },
+  {
     id: 'gemini-3-flash-preview-thinking',
     name: 'Gemini 3 Flash (Thinking)',
     api: 'google-generative-ai',
