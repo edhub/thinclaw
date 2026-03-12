@@ -29,6 +29,7 @@ import {
   replaceAllMessages,
   type Conversation,
 } from '$lib/db';
+import { completeSimple, type Model } from '@mariozechner/pi-ai';
 import {
   compactMessages,
   estimateContextTokens,
@@ -153,6 +154,9 @@ async function onAgentEnd(): Promise<void> {
   await persistNewMessages();
   await loadConversations();
   await maybeCompact();
+  // Auto-title after 5 rounds (fire-and-forget, non-blocking).
+  const convId = get(activeConversationId);
+  if (convId) maybeGenerateTitle(convId, 5).catch(() => {});
 }
 
 async function persistNewMessages(): Promise<void> {
@@ -222,6 +226,12 @@ export async function loadConversations(): Promise<void> {
 }
 
 export async function selectConversation(id: string): Promise<void> {
+  // Title the conversation we're leaving (if it still has the default title).
+  const prevId = get(activeConversationId);
+  if (prevId && prevId !== id) {
+    maybeGenerateTitle(prevId, 1).catch(() => {});
+  }
+
   const msgs = await getMessages(id);
   const agent = getAgent();
   const conv = get(conversations).find((c) => c.id === id);
@@ -310,20 +320,114 @@ export async function sendMessage(content: string): Promise<void> {
     const msg = err instanceof Error ? err.message : String(err);
     streamError.set(msg);
   }
-
-  await maybeAutoTitle(convId, content);
 }
 
 export function abortStreaming(): void {
   getAgent().abort();
 }
 
-async function maybeAutoTitle(conversationId: string, firstUserContent: string): Promise<void> {
-  const list = await listConversations();
-  const conv = list.find((c) => c.id === conversationId);
+// ─── AI title generation ──────────────────────────────────────────────────────
+
+/** Serialize first few user/assistant turns to plain text for the title prompt. */
+function serializeForTitle(messages: AgentMessage[]): string {
+  const parts: string[] = [];
+  for (const m of messages) {
+    const msg = m as any;
+    if (msg.role === 'user') {
+      const text: string =
+        typeof msg.content === 'string'
+          ? msg.content
+          : (msg.content as any[])
+              .filter((b: any) => b.type === 'text')
+              .map((b: any) => b.text as string)
+              .join('');
+      if (text) parts.push(`User: ${text.slice(0, 400)}`);
+    } else if (msg.role === 'assistant') {
+      const texts = (msg.content as any[])
+        .filter((b: any) => b.type === 'text')
+        .map((b: any) => b.text as string);
+      if (texts.length) parts.push(`Assistant: ${texts.join('').slice(0, 400)}`);
+    }
+    // First 3 rounds is enough context for a title.
+    if (parts.length >= 6) break;
+  }
+  return parts.join('\n\n');
+}
+
+/** Count actual user turns in the message list. */
+function countUserMessages(messages: AgentMessage[]): number {
+  return messages.filter((m) => (m as any).role === 'user').length;
+}
+
+/**
+ * Call the LLM to generate a short title (≤8 words) for the conversation.
+ * Returns undefined on failure so the caller can ignore it silently.
+ */
+async function generateAiTitle(
+  messages: AgentMessage[],
+  model: Model<any>,
+  apiKey: string,
+): Promise<string | undefined> {
+  const text = serializeForTitle(messages);
+  if (!text) return undefined;
+
+  const response = await completeSimple(
+    model,
+    {
+      systemPrompt:
+        'You are a conversation title generator. ' +
+        'Output ONLY a short title (5–8 words max) that captures the main topic. ' +
+        'No quotes, no trailing punctuation, no explanations.',
+      messages: [
+        {
+          role: 'user',
+          content: [{ type: 'text', text: `Generate a title for this conversation:\n\n${text}` }],
+          timestamp: Date.now(),
+        },
+      ],
+    },
+    { maxTokens: 50, apiKey },
+  );
+
+  if (response.stopReason === 'error') return undefined;
+
+  const title = response.content
+    .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
+    .map((c) => c.text)
+    .join('')
+    .trim()
+    .replace(/^["']|["']$/g, '') // strip surrounding quotes if the model added them
+    .slice(0, 80);
+
+  return title || undefined;
+}
+
+/**
+ * Generate an AI title for a conversation if:
+ *   - The title is still the default 'New conversation' (never been titled).
+ *   - The user has sent at least `minRounds` messages.
+ *
+ * minRounds=5  → triggered after 5 back-and-forths
+ * minRounds=1  → triggered on conversation switch (any content)
+ */
+async function maybeGenerateTitle(convId: string, minRounds: number): Promise<void> {
+  const conv = get(conversations).find((c) => c.id === convId);
+  // Skip if already titled.
   if (!conv || conv.title !== 'New conversation') return;
-  const title = firstUserContent.trim().slice(0, 60) || 'New conversation';
-  const updated = { ...conv, title, updatedAt: Date.now() };
-  await saveConversation(updated);
-  conversations.update((cs) => cs.map((c) => (c.id === conversationId ? updated : c)));
+
+  const agent = getAgent();
+  const messages = agent.state.messages;
+  if (countUserMessages(messages) < minRounds) return;
+
+  const model = agent.state.model;
+  if (!model) return;
+  const apiKey = (await agent.getApiKey?.(model.provider)) ?? '';
+  if (!apiKey) return;
+
+  try {
+    const title = await generateAiTitle(messages, model, apiKey);
+    if (title) await renameConversation(convId, title);
+  } catch (err) {
+    console.warn('[auto-title] Failed to generate title:', err instanceof Error ? err.message : err);
+  }
 }
