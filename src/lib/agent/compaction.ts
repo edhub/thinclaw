@@ -43,40 +43,63 @@ export const KEEP_RECENT_TOKENS = 50_000;
 
 // ─── Token estimation ─────────────────────────────────────────────────────────
 
-/** Estimate token count for one message via chars/4 heuristic. */
+// CJK Unified Ideographs and common CJK ranges.
+// Each CJK character typically maps to 1–2 tokens; we use 1.5 as a middle estimate.
+// Latin/ASCII characters use the standard ~4 chars per token heuristic.
+const CJK_RE =
+  /[\u2E80-\u2FFF\u3000-\u303F\u3040-\u30FF\u3100-\u312F\u3200-\u32FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFFEF]/;
+
+/** Estimate token count for a string, accounting for CJK characters. */
+export function estimateStringTokens(str: string): number {
+  let cjkChars = 0;
+  let otherChars = 0;
+  for (let i = 0; i < str.length; i++) {
+    if (CJK_RE.test(str[i])) cjkChars++;
+    else otherChars++;
+  }
+  return Math.ceil(cjkChars * 1.5 + otherChars / 4);
+}
+
+/** Estimate token count for one message, with CJK-aware string estimation. */
 export function estimateTokens(message: AgentMessage): number {
   const msg = message as any;
-  let chars = 0;
 
   switch (msg.role as string) {
     case 'user': {
       const c = msg.content;
-      if (typeof c === 'string') chars = c.length;
-      else if (Array.isArray(c))
-        for (const b of c) if (b.type === 'text' && b.text) chars += (b.text as string).length;
-      return Math.ceil(chars / 4);
-    }
-    case 'assistant':
-      for (const b of msg.content ?? []) {
-        if (b.type === 'text') chars += (b.text as string).length;
-        else if (b.type === 'thinking') chars += (b.thinking as string).length;
-        else if (b.type === 'toolCall')
-          chars += (b.name as string).length + JSON.stringify(b.arguments).length;
+      if (typeof c === 'string') return estimateStringTokens(c);
+      if (Array.isArray(c)) {
+        let tokens = 0;
+        for (const b of c) if (b.type === 'text' && b.text) tokens += estimateStringTokens(b.text as string);
+        return tokens;
       }
-      return Math.ceil(chars / 4);
-
+      return 0;
+    }
+    case 'assistant': {
+      let tokens = 0;
+      for (const b of msg.content ?? []) {
+        if (b.type === 'text') tokens += estimateStringTokens(b.text as string);
+        else if (b.type === 'thinking') tokens += estimateStringTokens(b.thinking as string);
+        else if (b.type === 'toolCall')
+          tokens += estimateStringTokens((b.name as string) + JSON.stringify(b.arguments));
+      }
+      return tokens;
+    }
     case 'toolResult': {
       const c = msg.content;
-      if (typeof c === 'string') chars = c.length;
-      else if (Array.isArray(c))
+      if (typeof c === 'string') return estimateStringTokens(c);
+      if (Array.isArray(c)) {
+        let tokens = 0;
         for (const b of c) {
-          if (b.type === 'text' && b.text) chars += (b.text as string).length;
-          if (b.type === 'image') chars += 4_800;
+          if (b.type === 'text' && b.text) tokens += estimateStringTokens(b.text as string);
+          if (b.type === 'image') tokens += 4_800;
         }
-      return Math.ceil(chars / 4);
+        return tokens;
+      }
+      return 0;
     }
     case 'compactionSummary':
-      return Math.ceil((msg as CompactionSummaryMessage).summary.length / 4);
+      return estimateStringTokens((msg as CompactionSummaryMessage).summary);
 
     default:
       return 0;

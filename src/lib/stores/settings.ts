@@ -7,7 +7,7 @@
  */
 import { writable, get } from 'svelte/store';
 import { browser } from '$app/environment';
-import { MODELS, DEFAULT_MODEL_ID } from '$lib/models';
+import { MODELS, DEFAULT_MODEL_ID } from '$lib/agent/models';
 
 export { MODELS };
 

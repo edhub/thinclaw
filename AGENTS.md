@@ -8,7 +8,7 @@ all messaging channels, gateway daemon, and Node.js infrastructure are removed.
 What remains: a single-page SvelteKit app that talks directly to AI APIs from the browser.
 
 - **Repo:** `~/dev/web/thinclaw` (local only for now)
-- **Stack:** SvelteKit 2 + Svelte 5 + TypeScript, Vercel AI SDK, IndexedDB (idb), Tailwind CSS v4
+- **Stack:** SvelteKit 2 + Svelte 5 + TypeScript, `@mariozechner/pi-ai` + `pi-agent-core`, IndexedDB (idb), Tailwind CSS v4
 - **Deploy target:** any static file host (nginx, Caddy, GitHub Pages, Cloudflare Pages, etc.)
 
 ---
@@ -33,19 +33,26 @@ src/
 ├── app.css               # Global styles, CSS design tokens, dark/light theme vars
 ├── app.html              # HTML shell
 ├── lib/
+│   ├── agent/
+│   │   ├── compaction.ts # Auto-compaction for long conversations (CJK-aware)
+│   │   ├── models.ts     # Model definitions (Anthropic, Gemini via bianxie proxy)
+│   │   ├── prompts.ts    # System prompt builder (soul + memory + custom instructions)
+│   │   ├── soul.ts       # AI's persistent identity (localStorage, self-evolving)
+│   │   └── tools.ts      # Browser-safe tools (calculate, datetime, soul_*, memory_*)
 │   ├── db/
-│   │   └── index.ts      # IndexedDB schema and CRUD (conversations + messages)
+│   │   └── index.ts      # IndexedDB schema v3 and CRUD (conversations + messages + memories)
 │   ├── stores/
 │   │   ├── settings.ts   # API key, model, theme, system prompt (localStorage)
-│   │   └── chat.ts       # Conversation state, message streaming, auto-title
+│   │   ├── chat.ts       # Conversation state, Agent lifecycle, streaming, auto-title
+│   │   └── memory.ts     # Reactive memory store (wraps IndexedDB memories table)
 │   ├── components/
 │   │   ├── Sidebar.svelte      # Conversation list (new/select/rename/delete)
-│   │   ├── ChatMessage.svelte  # Message bubble (user plain text, assistant Markdown)
+│   │   ├── ChatMessage.svelte  # Message bubble (user text, assistant Markdown, tool calls/results)
 │   │   ├── ChatInput.svelte    # Textarea input (Enter = send, Shift+Enter = newline)
-│   │   └── Settings.svelte     # Modal: API key, model, theme, system prompt
+│   │   └── Settings.svelte     # Modal: General / Soul / Memory tabs
 │   └── utils/
 │       ├── markdown.ts   # marked + highlight.js (hljs lazy-loaded on first code block)
-│       └── nanoid.ts     # Browser-native random ID (no external dependency)
+│       └── nanoid.ts     # Browser-native random ID (crypto.getRandomValues)
 └── routes/
     ├── +layout.ts        # ssr=false, prerender=true — pure SPA
     ├── +layout.svelte    # Imports app.css
@@ -60,24 +67,42 @@ src/
 `adapter-static` produces plain HTML/CSS/JS. There are no SvelteKit server routes.
 AI API calls go directly from the browser to the provider endpoint.
 
+### AI SDK
+The project uses `@mariozechner/pi-ai` for LLM calls and `@mariozechner/pi-agent-core`
+for the agent loop (tool calling, streaming, message management). Both packages are
+**browser-compatible** — they do not depend on Node.js APIs (`fs`, `path`, `process`, etc.).
+
+There is no `/api/chat` server route. The `Agent` class from `pi-agent-core` runs
+entirely in the browser, calling provider APIs directly.
+
 ### CORS
-OpenAI supports browser CORS. Other providers may not. If adding a provider that blocks
-browser-origin requests, add a thin Cloudflare Worker or similar edge proxy — do not add
-a stateful backend.
+The current providers (Anthropic, Google Gemini) are accessed through `api.bianxie.ai`,
+which supports browser CORS. If adding a provider that blocks browser-origin requests,
+add a thin Cloudflare Worker or similar edge proxy — do not add a stateful backend.
 
 ### Storage
 | Data | Location | Notes |
 |---|---|---|
 | API key, model, theme, system prompt | `localStorage` (key: `thinclaw:settings`) | Plain JSON, no encryption yet |
-| Conversations + messages | IndexedDB (DB: `thinclaw`, version 1) | Persists across sessions |
+| Soul (AI identity) | `localStorage` (key: `thinclaw:soul`) | Markdown, self-editable by AI |
+| Conversations + messages | IndexedDB (DB: `thinclaw`, version 3) | Persists across sessions |
+| Memories | IndexedDB (DB: `thinclaw`, version 3) | Cross-conversation persistent facts |
 
 ### Svelte 5 runes
 This project uses Svelte 5 rune syntax (`$state`, `$derived`, `$effect`, `$props`).
 Do **not** use the legacy `$:` reactive syntax or `export let` in new components.
 
-### Vercel AI SDK usage
-`streamText` from `ai` is called directly in the browser (`src/lib/stores/chat.ts`).
-There is no `/api/chat` server route. The `useChat` hook is intentionally not used.
+### System prompt assembly
+The system prompt is built from three layers before every message
+(see `src/lib/agent/prompts.ts`):
+1. **Soul** — AI identity (editable by the AI via `soul_update` tool)
+2. **Memory** — persistent facts from IndexedDB (managed via `memory_*` tools)
+3. **Custom instructions** — user-provided extra notes from Settings
+
+### Auto-compaction
+When context tokens exceed `(contextWindow - reserveTokens)`, old messages are
+summarized by the LLM and replaced with a `CompactionSummaryMessage`. Token
+estimation is CJK-aware (see `estimateStringTokens` in `compaction.ts`).
 
 ---
 
@@ -119,18 +144,17 @@ Key tokens:
 
 ## Adding a New AI Provider
 
-1. Install the provider package: `pnpm add @ai-sdk/<provider>`
-2. Add model entries to `MODELS` in `src/lib/stores/settings.ts`
-3. In `src/lib/stores/chat.ts`, update `sendMessage` to instantiate the correct provider
-   based on `model` prefix or a separate `provider` setting field.
+1. Install the provider package (must be browser-compatible): `pnpm add <package>`
+2. Add model entries to `MODELS` in `src/lib/agent/models.ts`
+3. In `src/lib/stores/chat.ts`, the `Agent` picks up the model's `api` and `provider`
+   fields automatically — no special-casing needed if the model definition is complete.
 4. If the provider blocks browser CORS, document the workaround in `docs/providers.md`.
 
 ---
 
 ## Roadmap (not yet implemented)
 
-- [ ] Multi-provider support (Anthropic, Gemini, Mistral, local Ollama)
-- [ ] Tool use / function calling
+- [ ] Multi-provider support (OpenAI, Mistral, local Ollama)
 - [ ] File / image attachment upload
 - [ ] Conversation export (JSON / Markdown)
 - [ ] Keyboard shortcuts
@@ -146,6 +170,7 @@ Key tokens:
 - Never commit real API keys. The `apiKey` field in Settings is user-supplied at runtime.
 - Do not add server-side routes (`+server.ts`). Keep the app purely static.
 - Do not add Node.js-only dependencies. All deps must be browser-compatible.
+- `@mariozechner/pi-ai` and `@mariozechner/pi-agent-core` are confirmed browser-compatible.
 - When adding dependencies, verify they work in browser ESM (no `process`, `fs`, `path`, etc.).
 - `highlight.js` is lazy-loaded to keep initial bundle small — preserve this pattern for
   other large optional libraries.

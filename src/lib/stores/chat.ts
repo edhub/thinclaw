@@ -14,11 +14,11 @@ import { Agent } from '@mariozechner/pi-agent-core';
 import type { AgentEvent, AgentMessage } from '@mariozechner/pi-agent-core';
 import type { Message } from '@mariozechner/pi-ai';
 import { nanoid } from '$lib/utils/nanoid';
-import { getModelById } from '$lib/models';
-import { buildSystemPrompt, formatMemoriesForPrompt } from '$lib/personas';
-import { soul } from '$lib/soul';
+import { getModelById } from '$lib/agent/models';
+import { buildSystemPrompt, formatMemoriesForPrompt } from '$lib/agent/prompts';
+import { soul } from '$lib/agent/soul';
 import { memories } from '$lib/stores/memory';
-import { browserTools } from '$lib/tools';
+import { browserTools } from '$lib/agent/tools';
 import { settings } from '$lib/stores/settings';
 import {
   listConversations,
@@ -35,7 +35,7 @@ import {
   estimateContextTokens,
   shouldCompact,
   type CompactionSummaryMessage,
-} from '$lib/compaction';
+} from '$lib/agent/compaction';
 
 // ─── Singleton agent ──────────────────────────────────────────────────────────
 

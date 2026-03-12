@@ -1,6 +1,6 @@
 <script lang="ts">
   import { settings, MODELS, type Theme } from '$lib/stores/settings';
-  import { soul, DEFAULT_SOUL } from '$lib/soul';
+  import { soul, DEFAULT_SOUL } from '$lib/agent/soul';
   import { memories, type Memory } from '$lib/stores/memory';
 
   interface Props {
@@ -75,8 +75,9 @@
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div class="overlay" role="dialog" aria-modal="true" aria-label="Settings" tabindex="-1" onkeydown={handleKeydown}>
-  <div class="modal">
+<div class="overlay" role="dialog" aria-modal="true" aria-label="Settings" tabindex="-1" onkeydown={handleKeydown} onclick={onClose}>
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="modal" onkeydown={() => {}} onclick={(e) => e.stopPropagation()}>
 
     <!-- Header -->
     <div class="modal-header">

@@ -31,7 +31,8 @@
     const _a = $activeMessages.length;
     const _b = $streamingMessage;
     void _a; void _b;
-    chatEndEl?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    const behavior = $streamingMessage ? 'instant' : 'smooth';
+    chatEndEl?.scrollIntoView({ behavior, block: 'end' });
   });
 
   async function handleSend(content: string) {

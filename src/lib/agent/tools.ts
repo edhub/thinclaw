@@ -13,7 +13,7 @@
  */
 import { Type } from '@mariozechner/pi-ai';
 import type { AgentTool } from '@mariozechner/pi-agent-core';
-import { soul } from '$lib/soul';
+import { soul } from '$lib/agent/soul';
 import { memories } from '$lib/stores/memory';
 
 // ─── calculate ────────────────────────────────────────────────────────────────
