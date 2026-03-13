@@ -9,15 +9,17 @@
     ToolCall,
     ImageContent,
   } from '@mariozechner/pi-ai'
-  import type { GeneratedImage } from '$lib/agent/image'
   import FileContextCard from '$lib/components/FileContextCard.svelte'
   import type { FileContext } from '$lib/components/FileContextCard.svelte'
+  import ToolCard from '$lib/components/ToolCard.svelte'
 
   interface Props {
     message: AgentMessage
     isStreaming?: boolean
+    /** toolCallId → ToolResultMessage, built by the parent from activeMessages */
+    toolResultMap?: Map<string, ToolResultMessage>
   }
-  let { message, isStreaming = false }: Props = $props()
+  let { message, isStreaming = false, toolResultMap }: Props = $props()
 
   // --- Derived helpers ---
 
@@ -35,43 +37,6 @@
   )
   const toolCallBlocks = $derived(
     assistantMsg?.content.filter((b): b is ToolCall => b.type === 'toolCall') ?? [],
-  )
-
-  // Tool result
-  const toolResultMsg = $derived(isToolResult ? (message as ToolResultMessage) : null)
-
-  // For fs_write / fs_edit / fs_move results: extract a file path to offer "Open" link
-  const openFilePath = $derived(
-    (() => {
-      if (!toolResultMsg || toolResultMsg.isError) return null
-      const text = toolResultMsg.content
-        .filter((c) => c.type === 'text')
-        .map((c) => (c as TextContent).text)
-        .join('')
-      switch (toolResultMsg.toolName) {
-        case 'fs_write': {
-          const m = text.match(/^Written: (.+?) \(/)
-          return m?.[1] ?? null
-        }
-        case 'fs_edit': {
-          const m = text.match(/^Edited: (.+)$/m)
-          return m?.[1]?.trim() ?? null
-        }
-        case 'fs_move': {
-          const m = text.match(/→ (.+)$/m)
-          return m?.[1]?.trim() ?? null
-        }
-        default:
-          return null
-      }
-    })(),
-  )
-
-  /** Generated image data for generate_image tool results. */
-  const generatedImage = $derived(
-    toolResultMsg?.toolName === 'generate_image' && !toolResultMsg.isError
-      ? (toolResultMsg.details as GeneratedImage | null)
-      : null,
   )
 
   // User message content
@@ -174,7 +139,7 @@
   {/if}
 
   <!-- Content -->
-  <div class="content" class:content-tool={isToolResult}>
+  <div class="content">
     {#if isUser}
       <!-- User message -->
       {#if userImages.length > 0}
@@ -228,27 +193,13 @@
         </div>
       {/if}
 
-      <!-- Tool calls (pending or completed) -->
+      <!-- Tool calls — merged with their results via ToolCard -->
       {#each toolCallBlocks as call}
-        <div class="tool-call-card">
-          <div class="tool-call-header">
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path
-                d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"
-              />
-            </svg>
-            <span class="tool-name">{call.name}</span>
-            <span class="tool-status-badge">调用中…</span>
-          </div>
-          <pre class="tool-args">{JSON.stringify(call.arguments, null, 2)}</pre>
-        </div>
+        <ToolCard
+          {call}
+          result={toolResultMap?.get(call.id) ?? null}
+          defaultExpanded={call.name === 'generate_image'}
+        />
       {/each}
 
       <!-- Main text -->
@@ -266,95 +217,8 @@
         </div>
       {/if}
     {:else if isToolResult}
-      <!-- Tool result card -->
-      <div class="tool-result-card" class:error={toolResultMsg?.isError}>
-        <div class="tool-result-header">
-          <svg
-            width="11"
-            height="11"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            {#if toolResultMsg?.isError}
-              <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line
-                x1="12"
-                y1="16"
-                x2="12.01"
-                y2="16"
-              />
-            {:else}
-              <polyline points="20 6 9 17 4 12" />
-            {/if}
-          </svg>
-          <span class="tool-name">{toolResultMsg?.toolName ?? 'tool'}</span>
-        </div>
-        <pre class="tool-result-text" class:hidden={!!generatedImage}>{toolResultMsg?.content
-            .filter((c) => c.type === 'text')
-            .map((c) => (c as TextContent).text)
-            .join('\n')}</pre>
-        {#if generatedImage}
-          <div class="tool-result-image">
-            <img
-              src="data:{generatedImage.mimeType};base64,{generatedImage.imageData}"
-              alt={generatedImage.prompt}
-              class="generated-image"
-            />
-            <div class="generated-image-footer">
-              <p class="generated-image-meta">{generatedImage.aspectRatio} · {generatedImage.imageSize}</p>
-              <a
-                href="data:{generatedImage.mimeType};base64,{generatedImage.imageData}"
-                download="generated-{toolResultMsg?.timestamp ?? Date.now()}.{generatedImage.mimeType.split('/')[1] ?? 'png'}"
-                class="download-link"
-                title="下载图片"
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-                  <polyline points="7 10 12 15 17 10"/>
-                  <line x1="12" y1="15" x2="12" y2="3"/>
-                </svg>
-                保存图片
-              </a>
-            </div>
-          </div>
-        {/if}
-        {#if openFilePath}
-          <div class="tool-result-open">
-            <a
-              href="/files?path={encodeURIComponent(openFilePath)}"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="open-file-link"
-            >
-              <svg
-                width="11"
-                height="11"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z" />
-                <polyline points="13 2 13 9 20 9" />
-              </svg>
-              {openFilePath}
-              <svg
-                width="10"
-                height="10"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
-                <polyline points="15 3 21 3 21 9" />
-                <line x1="10" y1="14" x2="21" y2="3" />
-              </svg>
-            </a>
-          </div>
-        {/if}
-      </div>
+      <!-- Tool results are rendered inside ToolCard (within the AssistantMessage above).
+           Nothing to render here. -->
     {/if}
   </div>
 </div>
@@ -368,7 +232,7 @@
   }
 
   .message.tool-result {
-    padding: 4px 0 4px 42px; /* indent under assistant */
+    display: none; /* ToolResultMessages are now rendered inside ToolCard */
   }
 
   .avatar {
@@ -397,10 +261,6 @@
     flex: 1;
     min-width: 0;
     padding-top: 3px;
-  }
-
-  .content-tool {
-    padding-top: 0;
   }
 
   /* User text */
@@ -491,155 +351,6 @@
     font-family: inherit;
     line-height: 1.5;
     margin: 0;
-  }
-
-  /* Tool call card */
-  .tool-call-card {
-    background: var(--surface-elevated);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    margin-bottom: 8px;
-    overflow: hidden;
-  }
-
-  .tool-call-header {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 7px 10px;
-    border-bottom: 1px solid var(--border);
-    color: var(--text-secondary);
-    font-size: 0.8rem;
-  }
-
-  .tool-name {
-    font-weight: 500;
-    font-family: monospace;
-    flex: 1;
-  }
-
-  .tool-status-badge {
-    font-size: 0.7rem;
-    background: var(--surface-hover);
-    border-radius: 4px;
-    padding: 2px 6px;
-    color: var(--text-muted);
-  }
-
-  .tool-args {
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-    padding: 8px 10px;
-    margin: 0;
-    white-space: pre-wrap;
-    word-break: break-all;
-    max-height: 120px;
-    overflow-y: auto;
-    font-family: monospace;
-  }
-
-  /* Tool result card */
-  .tool-result-card {
-    background: var(--surface-elevated);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    overflow: hidden;
-    font-size: 0.8rem;
-  }
-
-  .tool-result-card.error {
-    border-color: var(--error);
-  }
-
-  .tool-result-header {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 10px;
-    border-bottom: 1px solid var(--border);
-    color: var(--text-secondary);
-    background: var(--surface-hover);
-  }
-
-  .tool-result-card.error .tool-result-header {
-    color: var(--error);
-    background: var(--error-bg);
-  }
-
-  .tool-result-text {
-    margin: 0;
-    padding: 8px 10px;
-    color: var(--text-secondary);
-    white-space: pre-wrap;
-    word-break: break-word;
-    font-family: monospace;
-    max-height: 200px;
-    overflow-y: auto;
-  }
-
-  .tool-result-text.hidden {
-    display: none;
-  }
-
-  .tool-result-image {
-    padding: 10px;
-    border-top: 1px solid var(--border);
-  }
-
-  .generated-image {
-    display: block;
-    max-width: 100%;
-    border-radius: 6px;
-    border: 1px solid var(--border);
-  }
-
-  .generated-image-footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-top: 6px;
-  }
-
-  .generated-image-meta {
-    margin: 0;
-    font-size: 0.72rem;
-    color: var(--text-muted);
-    font-family: monospace;
-  }
-
-  .download-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 0.75rem;
-    color: var(--accent);
-    text-decoration: none;
-    padding: 2px 6px;
-    border-radius: 4px;
-    transition: background 0.1s;
-  }
-  .download-link:hover {
-    background: var(--surface-active);
-  }
-
-  .tool-result-open {    padding: 6px 10px;
-    border-top: 1px solid var(--border);
-  }
-
-  .open-file-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 0.78rem;
-    color: var(--accent);
-    text-decoration: none;
-    font-family: monospace;
-    border-radius: 4px;
-    padding: 2px 4px;
-    transition: background 0.1s;
-  }
-  .open-file-link:hover {
-    background: var(--surface-active);
   }
 
   /* Error inline */

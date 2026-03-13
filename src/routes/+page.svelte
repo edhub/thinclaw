@@ -26,6 +26,7 @@
   import { get } from 'svelte/store'
   import { nanoid } from '$lib/utils/nanoid'
   import type { AgentMessage } from '@mariozechner/pi-agent-core'
+  import type { ToolResultMessage } from '@mariozechner/pi-ai'
 
   // Assign a stable random key to each message object on first encounter.
   // Using WeakMap avoids memory leaks — keys are GC'd with their message objects.
@@ -38,6 +39,15 @@
     }
     return k
   }
+
+  // Build toolCallId → ToolResultMessage map so ChatMessage can pair calls with results.
+  const toolResultMap = $derived(
+    new Map(
+      ($activeMessages as AgentMessage[])
+        .filter((m): m is ToolResultMessage => m.role === 'toolResult')
+        .map((m) => [m.toolCallId, m]),
+    ),
+  )
   import type { ImageContent } from '@mariozechner/pi-ai'
   import { memories } from '$lib/stores/memory'
 
@@ -224,12 +234,12 @@
 
           <!-- Persisted messages -->
           {#each $activeMessages as msg, i (keyOf(msg))}
-            <ChatMessage message={msg} isStreaming={false} />
+            <ChatMessage message={msg} isStreaming={false} {toolResultMap} />
           {/each}
 
           <!-- Optimistic user message shown immediately on send -->
           {#if $pendingUserMessage}
-            <ChatMessage message={$pendingUserMessage} isStreaming={false} />
+            <ChatMessage message={$pendingUserMessage} isStreaming={false} {toolResultMap} />
           {/if}
 
           <!-- Loading placeholder: request is in-flight but no streaming chunk yet -->
@@ -250,7 +260,7 @@
 
           <!-- In-flight streaming message -->
           {#if $streamingMessage}
-            <ChatMessage message={$streamingMessage} isStreaming={true} />
+            <ChatMessage message={$streamingMessage} isStreaming={true} {toolResultMap} />
           {/if}
 
           {#if $streamError}
