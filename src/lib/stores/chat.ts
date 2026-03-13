@@ -91,11 +91,9 @@ function getAgent(): Agent {
       convertToLlm,
     })
     // Resolve api key dynamically so runtime changes are picked up.
-    // Routes to the correct key based on the model's provider.
-    _agent.getApiKey = async (provider: string) => {
+    _agent.getApiKey = async (_provider: string) => {
       const s = get(settings)
-      if (provider === 'laozhang') return s.laozhangApiKey || undefined
-      return s.apiKey || undefined
+      return s.laozhangApiKey || undefined
     }
     _agent.subscribe(handleAgentEvent)
   }
@@ -430,7 +428,7 @@ export async function sendMessage(content: string, images: ImageContent[] = []):
 
   const s = get(settings)
   const activeModel = getModelByKey(s.model)
-  const requiredKey = activeModel.provider === 'laozhang' ? s.laozhangApiKey : s.apiKey
+  const requiredKey = s.laozhangApiKey
   if (!requiredKey) {
     streamError.set('API key is not set. Please add it in Settings.')
     return

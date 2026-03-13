@@ -213,7 +213,7 @@
         <div class="welcome-icon">🦀</div>
         <h1>ThinClaw</h1>
         <p>一款完全在浏览器中运行的轻量级 AI 聊天应用。</p>
-        {#if !$settings.apiKey}
+        {#if !$settings.laozhangApiKey}
           <p class="warn">
             未设置 API 密钥。
             <a href="/settings">打开设置</a>

@@ -2,7 +2,6 @@
  * Settings store — persisted to localStorage.
  *
  * Fields:
- *   apiKey           — bianxie.ai API key
  *   laozhangApiKey   — laozhang.ai API key
  *   enabledModelKeys — explicit list of enabled model keys ([] = all models whose provider has a key)
  *   model            — active conversation model key (`${provider}:${modelId}`)
@@ -20,7 +19,6 @@ export { MODELS, modelKey, getModelByKey }
 export type Theme = 'light' | 'dark' | 'system'
 
 export interface Settings {
-  apiKey: string
   laozhangApiKey: string
   enabledModelKeys: string[]   // [] means all models of providers with keys
   model: string                // active model key: `${provider}:${modelId}`
@@ -32,7 +30,6 @@ export interface Settings {
 const STORAGE_KEY = 'thinclaw:settings'
 
 const DEFAULTS: Settings = {
-  apiKey: '',
   laozhangApiKey: '',
   enabledModelKeys: [],
   model: DEFAULT_MODEL_KEY,
@@ -45,9 +42,7 @@ const DEFAULTS: Settings = {
 
 /** All models whose provider currently has a key configured (ignores enabledModelKeys). */
 export function getKeyedModels(s: Settings): Model<any>[] {
-  return MODELS.filter((m) =>
-    m.provider === 'laozhang' ? !!s.laozhangApiKey : !!s.apiKey,
-  )
+  return s.laozhangApiKey ? [...MODELS] : []
 }
 
 /**
@@ -56,8 +51,7 @@ export function getKeyedModels(s: Settings): Model<any>[] {
  */
 export function getAvailableModels(s: Settings): Model<any>[] {
   return MODELS.filter((m) => {
-    const hasKey = m.provider === 'laozhang' ? !!s.laozhangApiKey : !!s.apiKey
-    if (!hasKey) return false
+    if (!s.laozhangApiKey) return false
     if (s.enabledModelKeys.length === 0) return true
     return s.enabledModelKeys.includes(modelKey(m))
   })
@@ -68,8 +62,7 @@ export function getAvailableModels(s: Settings): Model<any>[] {
  * A model is enabled if it has a key AND is in enabledModelKeys (or list is empty).
  */
 export function isModelEnabled(m: Model<any>, s: Settings): boolean {
-  const hasKey = m.provider === 'laozhang' ? !!s.laozhangApiKey : !!s.apiKey
-  if (!hasKey) return false
+  if (!s.laozhangApiKey) return false
   if (s.enabledModelKeys.length === 0) return true
   return s.enabledModelKeys.includes(modelKey(m))
 }

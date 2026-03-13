@@ -40,21 +40,15 @@
 
   // ── Key inputs ────────────────────────────────────────────────────────────
 
-  let bianxieKey = $state($settings.apiKey)
   let laozhangKey = $state($settings.laozhangApiKey)
-  let showBianxie = $state(false)
   let showLaozhang = $state(false)
 
-  function saveBianxieKey() {
-    updateSettings({ apiKey: bianxieKey })
-  }
   function saveLaozhangKey() {
     updateSettings({ laozhangApiKey: laozhangKey })
   }
 
   // ── Model toggles ─────────────────────────────────────────────────────────
 
-  const bianxieModels = $derived(MODELS.filter((m) => m.provider === 'bianxie'))
   const laozhangModels = $derived(MODELS.filter((m) => m.provider === 'laozhang'))
 
   function toggleModel(key: string): void {
@@ -196,59 +190,6 @@
           {/if}
 
           <div class="section-divider"></div>
-
-          <!-- bianxie -->
-          <div class="provider-card">
-            <div class="provider-header">
-              <div class="provider-name">
-                bianxie.ai
-                <span class="provider-status" class:ok={!!$settings.apiKey}>
-                  {$settings.apiKey ? '✓ 已配置' : '未配置'}
-                </span>
-              </div>
-            </div>
-            <div class="field">
-              <label for="bianxie-key">API 密钥</label>
-              <div class="key-wrap">
-                <input
-                  id="bianxie-key"
-                  type={showBianxie ? 'text' : 'password'}
-                  bind:value={bianxieKey}
-                  placeholder="sk-..."
-                  autocomplete="off"
-                  spellcheck="false"
-                  onblur={saveBianxieKey}
-                />
-                <button class="btn-toggle" type="button" onclick={() => (showBianxie = !showBianxie)}>
-                  {showBianxie ? '隐藏' : '显示'}
-                </button>
-              </div>
-              <p class="hint">密钥仅存储在您的浏览器本地，直接发送至 api.bianxie.ai。</p>
-            </div>
-
-            <div class="model-list-label">模型</div>
-            <ul class="model-list">
-              {#each bianxieModels as m (modelKey(m))}
-                {@const enabled = isModelEnabled(m, $settings)}
-                {@const hasKey = !!$settings.apiKey}
-                <li class="model-row" class:disabled={!hasKey}>
-                  <label class="model-label">
-                    <input
-                      type="checkbox"
-                      checked={enabled}
-                      disabled={!hasKey}
-                      onchange={() => toggleModel(modelKey(m))}
-                    />
-                    <span class="model-name">{m.name}</span>
-                    <span class="model-meta">
-                      {#if m.reasoning}<span class="tag tag-reason">reasoning</span>{/if}
-                      <span class="tag">{(m.contextWindow / 1000).toFixed(0)}K ctx</span>
-                    </span>
-                  </label>
-                </li>
-              {/each}
-            </ul>
-          </div>
 
           <!-- laozhang -->
           <div class="provider-card">
