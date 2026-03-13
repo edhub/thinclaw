@@ -14,6 +14,8 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         // Don't precache highlight.js language chunks — they're huge and lazily loaded.
         globIgnores: ['**/highlight.js/**'],
+        // SPA fallback: all navigation requests that miss the cache serve index.html.
+        navigateFallback: '/index.html',
       },
       manifest: {
         name: 'ThinClaw',
