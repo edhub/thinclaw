@@ -37,6 +37,21 @@
   // Tool result
   const toolResultMsg = $derived(isToolResult ? (message as ToolResultMessage) : null);
 
+  // For fs_write / fs_edit / fs_move results: extract a file path to offer "Open" link
+  const openFilePath = $derived((() => {
+    if (!toolResultMsg || toolResultMsg.isError) return null;
+    const text = toolResultMsg.content
+      .filter((c) => c.type === 'text')
+      .map((c) => (c as TextContent).text)
+      .join('');
+    switch (toolResultMsg.toolName) {
+      case 'fs_write': { const m = text.match(/^Written: (.+?) \(/); return m?.[1] ?? null; }
+      case 'fs_edit':  { const m = text.match(/^Edited: (.+)$/m);    return m?.[1]?.trim() ?? null; }
+      case 'fs_move':  { const m = text.match(/→ (.+)$/m);           return m?.[1]?.trim() ?? null; }
+      default: return null;
+    }
+  })());
+
   // User message content
   const userText = $derived(
     message.role === 'user'
@@ -193,6 +208,27 @@
           .filter((c) => c.type === 'text')
           .map((c) => (c as TextContent).text)
           .join('\n')}</pre>
+        {#if openFilePath}
+          <div class="tool-result-open">
+            <a
+              href="/files?path={encodeURIComponent(openFilePath)}"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="open-file-link"
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/>
+                <polyline points="13 2 13 9 20 9"/>
+              </svg>
+              {openFilePath}
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
+                <polyline points="15 3 21 3 21 9"/>
+                <line x1="10" y1="14" x2="21" y2="3"/>
+              </svg>
+            </a>
+          </div>
+        {/if}
       </div>
     {/if}
   </div>
@@ -405,6 +441,27 @@
     font-family: monospace;
     max-height: 200px;
     overflow-y: auto;
+  }
+
+  .tool-result-open {
+    padding: 6px 10px;
+    border-top: 1px solid var(--border);
+  }
+
+  .open-file-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.78rem;
+    color: var(--accent);
+    text-decoration: none;
+    font-family: monospace;
+    border-radius: 4px;
+    padding: 2px 4px;
+    transition: background 0.1s;
+  }
+  .open-file-link:hover {
+    background: var(--surface-active);
   }
 
   /* Error inline */

@@ -1,6 +1,6 @@
 /**
  * Browser-safe tools for the AI agent.
- * All tools run entirely in the browser — no network calls, no file system.
+ * All tools run entirely in the browser — no network calls, no file system access beyond OPFS.
  *
  * Tools:
  *   calculate       — evaluate JS math expressions
@@ -10,11 +10,21 @@
  *   memory_save     — persist a memory across conversations
  *   memory_recall   — keyword search over saved memories
  *   memory_delete   — remove a specific memory by id
+ *
+ * File system tools (OPFS /workspace):
+ *   fs_read         — read file content (with optional line pagination)
+ *   fs_write        — create or overwrite a file
+ *   fs_edit         — precise find-and-replace within a file
+ *   fs_list         — list directory contents
+ *   fs_search       — full-text search across files
+ *   fs_move         — move or rename a file
+ *   fs_delete       — delete a file or directory
  */
 import { Type } from '@mariozechner/pi-ai';
 import type { AgentTool } from '@mariozechner/pi-agent-core';
 import { soul } from '$lib/agent/soul';
 import { memories } from '$lib/stores/memory';
+import { fsTools } from '$lib/fs/tools';
 
 // ─── calculate ────────────────────────────────────────────────────────────────
 
@@ -214,4 +224,5 @@ export const browserTools: AgentTool[] = [
   memorySaveTool as unknown as AgentTool,
   memoryRecallTool as unknown as AgentTool,
   memoryDeleteTool as unknown as AgentTool,
+  ...fsTools,
 ];
