@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { isStreaming } from '$lib/stores/chat';
+  import { isStreaming, queueLength } from '$lib/stores/chat';
   import type { ImageContent } from '@mariozechner/pi-ai';
 
   interface Props {
@@ -62,7 +62,7 @@
   function submit() {
     const trimmed = value.trim();
     // Allow sending images without text, but not completely empty
-    if ((!trimmed && images.length === 0) || $isStreaming) return;
+    if (!trimmed && images.length === 0) return;
     // $state.snapshot() strips Svelte 5 Proxy wrappers so ImageContent objects
     // are plain serializable values — required for IndexedDB structured clone.
     const snapshot = $state.snapshot(images) as ImageContent[];
@@ -70,6 +70,8 @@
     images = [];
     onSend(trimmed, snapshot);
     if (textareaEl) textareaEl.style.height = 'auto';
+    // Keep focus in the textarea so the user can keep typing.
+    textareaEl?.focus();
   }
 
   function autoResize(e: Event) {
@@ -126,7 +128,7 @@
     return `data:${img.mimeType};base64,${img.data}`;
   }
 
-  const canSend = $derived((value.trim().length > 0 || images.length > 0) && !$isStreaming);
+  const canSend = $derived(value.trim().length > 0 || images.length > 0);
 </script>
 
 <!-- Hidden file input -->
@@ -168,17 +170,18 @@
     </div>
   {/if}
 
-  <div class="input-box" class:disabled={$isStreaming} class:drag-over={isDraggingOver}>
+  <div class="input-box" class:drag-over={isDraggingOver}>
     <textarea
       bind:this={textareaEl}
       bind:value
       placeholder={$isStreaming
-        ? '等待响应中…'
+        ? $queueLength > 0
+          ? `AI 正在回复，已排队 ${$queueLength} 条…`
+          : 'AI 正在回复，可继续输入（Enter 排队）…'
         : isMobile
           ? '发消息…'
           : '输入消息（Enter 发送，Shift+Enter 换行）'}
       rows="1"
-      disabled={$isStreaming}
       onkeydown={handleKeydown}
       oninput={autoResize}
       onpaste={handlePaste}
@@ -188,7 +191,6 @@
     <button
       class="attach-btn"
       type="button"
-      disabled={$isStreaming}
       onclick={openFilePicker}
       title="附加图片"
     >
@@ -197,22 +199,30 @@
       </svg>
     </button>
 
-    <!-- Send / Stop button -->
-    <button
-      class="send-btn"
-      disabled={!canSend}
-      onclick={$isStreaming ? onAbort : submit}
-      title={$isStreaming ? '停止' : '发送'}
-    >
-      {#if $isStreaming}
+    <!-- Stop button — only visible while streaming -->
+    {#if $isStreaming}
+      <button
+        class="stop-btn"
+        onclick={onAbort}
+        title="停止"
+        type="button"
+      >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
           <rect x="6" y="6" width="12" height="12" rx="2"/>
         </svg>
-      {:else}
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-        </svg>
-      {/if}
+      </button>
+    {/if}
+
+    <!-- Send button — queues when streaming -->
+    <button
+      class="send-btn"
+      disabled={!canSend}
+      onclick={submit}
+      title={$isStreaming ? '排队发送' : '发送'}
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+      </svg>
     </button>
   </div>
 
@@ -292,10 +302,6 @@
     border-color: var(--accent);
   }
 
-  .input-box.disabled {
-    opacity: 0.6;
-  }
-
   .input-box.drag-over {
     border-color: var(--accent);
     background: var(--surface-hover);
@@ -335,14 +341,31 @@
     transition: color 0.1s, background 0.1s;
   }
 
-  .attach-btn:not(:disabled):hover {
+  .attach-btn:hover {
     color: var(--text-secondary);
     background: var(--surface-hover);
   }
 
-  .attach-btn:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
+  /* Stop button */
+  .stop-btn {
+    background: none;
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    width: 34px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+    transition: color 0.1s, background 0.1s, border-color 0.1s;
+  }
+
+  .stop-btn:hover {
+    color: var(--error);
+    border-color: var(--error);
+    background: var(--error-bg);
   }
 
   /* Send button */

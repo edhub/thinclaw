@@ -103,6 +103,8 @@ export const activeMessages = writable<AgentMessage[]>([]);
 export const streamingMessage = writable<AgentMessage | null>(null);
 export const isStreaming = writable(false);
 export const streamError = writable<string | null>(null);
+/** Number of follow-up messages queued via agent.followUp() waiting to be processed. */
+export const queueLength = writable(0);
 /**
  * Optimistic user message shown immediately after sendMessage() is called,
  * before the first message_end event confirms it's in agent.state.messages.
@@ -139,6 +141,10 @@ function handleAgentEvent(event: AgentEvent) {
       activeMessages.set([...getAgent().state.messages]);
       // User message is now in agent.state.messages — clear the optimistic placeholder.
       pendingUserMessage.set(null);
+      // If this was a queued follow-up user message, decrement the counter.
+      if ((event.message as any).role === 'user') {
+        queueLength.update((n) => (n > 0 ? n - 1 : 0));
+      }
       break;
 
     case 'turn_end': {
@@ -153,6 +159,7 @@ function handleAgentEvent(event: AgentEvent) {
       isStreaming.set(false);
       streamingMessage.set(null);
       activeMessages.set([...getAgent().state.messages]);
+      queueLength.set(0); // safety reset — all follow-ups have been processed
       // Fire-and-forget: persist → auto-compact (order matters).
       // Catch here so IDB / compaction errors surface to the user instead of
       // becoming silent unhandled rejections.
@@ -322,11 +329,26 @@ export async function renameConversation(id: string, title: string): Promise<voi
 
 export async function sendMessage(content: string, images: ImageContent[] = []): Promise<void> {
   const agent = getAgent();
-  if (agent.state.isStreaming) return;
 
   const s = get(settings);
   if (!s.apiKey) {
     streamError.set('API key is not set. Please add it in Settings.');
+    return;
+  }
+
+  // If the agent is already running, queue this message as a follow-up.
+  // The SDK's agent loop will process it automatically after the current turn.
+  if (agent.state.isStreaming) {
+    const userMsg: AgentMessage = {
+      role: 'user',
+      content:
+        images.length > 0
+          ? [{ type: 'text', text: content }, ...images]
+          : [{ type: 'text', text: content }],
+      timestamp: Date.now(),
+    } as AgentMessage;
+    agent.followUp(userMsg);
+    queueLength.update((n) => n + 1);
     return;
   }
 
@@ -365,7 +387,12 @@ export async function sendMessage(content: string, images: ImageContent[] = []):
 }
 
 export function abortStreaming(): void {
-  getAgent().abort();
+  const agent = getAgent();
+  // Clear queued follow-ups before aborting so stale messages don't resurface
+  // on the next prompt() call.
+  agent.clearFollowUpQueue();
+  queueLength.set(0);
+  agent.abort();
 }
 
 // ─── AI title generation ──────────────────────────────────────────────────────
