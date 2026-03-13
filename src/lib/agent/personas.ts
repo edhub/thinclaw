@@ -10,12 +10,12 @@
  */
 
 export interface Persona {
-  id: string;
-  name: string;
+  id: string
+  name: string
   /** One-liner shown in the PersonaPicker UI. */
-  description: string;
+  description: string
   /** Full prompt content injected into the system prompt. */
-  content: string;
+  content: string
 }
 
 export const BUILTIN_PERSONAS: Persona[] = [
@@ -216,8 +216,8 @@ export const BUILTIN_PERSONAS: Persona[] = [
 - 如果小朋友直接要求你帮他写，温柔地拒绝："我可以帮你想，但写要你自己来哦，这样才是你自己的作文呀！"
 - 用小朋友能理解的词，避免复杂的术语。`,
   },
-];
+]
 
 export function getPersonaById(id: string): Persona | undefined {
-  return BUILTIN_PERSONAS.find((p) => p.id === id);
+  return BUILTIN_PERSONAS.find((p) => p.id === id)
 }

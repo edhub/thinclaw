@@ -12,34 +12,34 @@
  *  4. On subsequent compactions the previous summary is updated, not replaced.
  */
 
-import { completeSimple, type Message, type Model, type Usage } from '@mariozechner/pi-ai';
-import type { AgentMessage } from '@mariozechner/pi-agent-core';
+import { completeSimple, type Message, type Model, type Usage } from '@mariozechner/pi-ai'
+import type { AgentMessage } from '@mariozechner/pi-agent-core'
 
 // ─── Custom message type ──────────────────────────────────────────────────────
 
 export interface CompactionSummaryMessage {
-  role: 'compactionSummary';
+  role: 'compactionSummary'
   /** Structured markdown summary of the compacted conversation. */
-  summary: string;
+  summary: string
   /** Context token count right before this compaction ran. */
-  tokensBefore: number;
-  timestamp: number;
+  tokensBefore: number
+  timestamp: number
 }
 
 // Extend pi-agent-core's union type so AgentMessage includes our custom message.
 declare module '@mariozechner/pi-agent-core' {
   interface CustomAgentMessages {
-    compactionSummary: CompactionSummaryMessage;
+    compactionSummary: CompactionSummaryMessage
   }
 }
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 /** Tokens reserved for the LLM's own response (not sent as context). */
-export const RESERVE_TOKENS = 16_384;
+export const RESERVE_TOKENS = 16_384
 
 /** Recent tokens to keep verbatim (not summarized). */
-export const KEEP_RECENT_TOKENS = 50_000;
+export const KEEP_RECENT_TOKENS = 50_000
 
 // ─── Token estimation ─────────────────────────────────────────────────────────
 
@@ -47,65 +47,65 @@ export const KEEP_RECENT_TOKENS = 50_000;
 // Each CJK character typically maps to 1–2 tokens; we use 1.5 as a middle estimate.
 // Latin/ASCII characters use the standard ~4 chars per token heuristic.
 const CJK_RE =
-  /[\u2E80-\u2FFF\u3000-\u303F\u3040-\u30FF\u3100-\u312F\u3200-\u32FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFFEF]/;
+  /[\u2E80-\u2FFF\u3000-\u303F\u3040-\u30FF\u3100-\u312F\u3200-\u32FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFFEF]/
 
 /** Estimate token count for a string, accounting for CJK characters. */
 export function estimateStringTokens(str: string): number {
-  let cjkChars = 0;
-  let otherChars = 0;
+  let cjkChars = 0
+  let otherChars = 0
   for (let i = 0; i < str.length; i++) {
-    if (CJK_RE.test(str[i])) cjkChars++;
-    else otherChars++;
+    if (CJK_RE.test(str[i])) cjkChars++
+    else otherChars++
   }
-  return Math.ceil(cjkChars * 1.5 + otherChars / 4);
+  return Math.ceil(cjkChars * 1.5 + otherChars / 4)
 }
 
 /** Estimate token count for one message, with CJK-aware string estimation. */
 export function estimateTokens(message: AgentMessage): number {
-  const msg = message as any;
+  const msg = message as any
 
   switch (msg.role as string) {
     case 'user': {
-      const c = msg.content;
-      if (typeof c === 'string') return estimateStringTokens(c);
+      const c = msg.content
+      if (typeof c === 'string') return estimateStringTokens(c)
       if (Array.isArray(c)) {
-        let tokens = 0;
+        let tokens = 0
         for (const b of c) {
-          if (b.type === 'text' && b.text) tokens += estimateStringTokens(b.text as string);
-          else if (b.type === 'image') tokens += 4_800; // ~1024×1024 image estimate
+          if (b.type === 'text' && b.text) tokens += estimateStringTokens(b.text as string)
+          else if (b.type === 'image') tokens += 4_800 // ~1024×1024 image estimate
         }
-        return tokens;
+        return tokens
       }
-      return 0;
+      return 0
     }
     case 'assistant': {
-      let tokens = 0;
+      let tokens = 0
       for (const b of msg.content ?? []) {
-        if (b.type === 'text') tokens += estimateStringTokens(b.text as string);
-        else if (b.type === 'thinking') tokens += estimateStringTokens(b.thinking as string);
+        if (b.type === 'text') tokens += estimateStringTokens(b.text as string)
+        else if (b.type === 'thinking') tokens += estimateStringTokens(b.thinking as string)
         else if (b.type === 'toolCall')
-          tokens += estimateStringTokens((b.name as string) + JSON.stringify(b.arguments));
+          tokens += estimateStringTokens((b.name as string) + JSON.stringify(b.arguments))
       }
-      return tokens;
+      return tokens
     }
     case 'toolResult': {
-      const c = msg.content;
-      if (typeof c === 'string') return estimateStringTokens(c);
+      const c = msg.content
+      if (typeof c === 'string') return estimateStringTokens(c)
       if (Array.isArray(c)) {
-        let tokens = 0;
+        let tokens = 0
         for (const b of c) {
-          if (b.type === 'text' && b.text) tokens += estimateStringTokens(b.text as string);
-          if (b.type === 'image') tokens += 4_800;
+          if (b.type === 'text' && b.text) tokens += estimateStringTokens(b.text as string)
+          if (b.type === 'image') tokens += 4_800
         }
-        return tokens;
+        return tokens
       }
-      return 0;
+      return 0
     }
     case 'compactionSummary':
-      return estimateStringTokens((msg as CompactionSummaryMessage).summary);
+      return estimateStringTokens((msg as CompactionSummaryMessage).summary)
 
     default:
-      return 0;
+      return 0
   }
 }
 
@@ -116,26 +116,26 @@ export function estimateTokens(message: AgentMessage): number {
  */
 export function estimateContextTokens(messages: AgentMessage[]): number {
   for (let i = messages.length - 1; i >= 0; i--) {
-    const msg = messages[i] as any;
+    const msg = messages[i] as any
     if (
       msg.role === 'assistant' &&
       msg.usage &&
       msg.stopReason !== 'aborted' &&
       msg.stopReason !== 'error'
     ) {
-      const u: Usage = msg.usage;
-      const base = u.totalTokens || u.input + u.output + u.cacheRead + u.cacheWrite;
-      let trailing = 0;
-      for (let j = i + 1; j < messages.length; j++) trailing += estimateTokens(messages[j]);
-      return base + trailing;
+      const u: Usage = msg.usage
+      const base = u.totalTokens || u.input + u.output + u.cacheRead + u.cacheWrite
+      let trailing = 0
+      for (let j = i + 1; j < messages.length; j++) trailing += estimateTokens(messages[j])
+      return base + trailing
     }
   }
-  return messages.reduce((s, m) => s + estimateTokens(m), 0);
+  return messages.reduce((s, m) => s + estimateTokens(m), 0)
 }
 
 /** Return true when compaction should trigger. */
 export function shouldCompact(contextTokens: number, model: Model<any>): boolean {
-  return contextTokens > model.contextWindow - RESERVE_TOKENS;
+  return contextTokens > model.contextWindow - RESERVE_TOKENS
 }
 
 // ─── Cut-point detection ──────────────────────────────────────────────────────
@@ -147,25 +147,25 @@ export function shouldCompact(contextTokens: number, model: Model<any>): boolean
  */
 function validCutPoints(messages: AgentMessage[]): number[] {
   return messages.reduce<number[]>((acc, m, i) => {
-    const r = (m as any).role as string;
-    if (r === 'user' || r === 'assistant' || r === 'compactionSummary') acc.push(i);
-    return acc;
-  }, []);
+    const r = (m as any).role as string
+    if (r === 'user' || r === 'assistant' || r === 'compactionSummary') acc.push(i)
+    return acc
+  }, [])
 }
 
 /** Walk backwards from `from` to find the user/compactionSummary that started the turn. */
 function findTurnStart(messages: AgentMessage[], from: number): number {
   for (let i = from; i >= 0; i--) {
-    const r = (messages[i] as any).role as string;
-    if (r === 'user' || r === 'compactionSummary') return i;
+    const r = (messages[i] as any).role as string
+    if (r === 'user' || r === 'compactionSummary') return i
   }
-  return -1;
+  return -1
 }
 
 interface CutResult {
-  firstKeptIndex: number;
-  turnStartIndex: number; // -1 if not a split turn
-  isSplitTurn: boolean;
+  firstKeptIndex: number
+  turnStartIndex: number // -1 if not a split turn
+  isSplitTurn: boolean
 }
 
 /**
@@ -173,49 +173,49 @@ interface CutResult {
  * Walks backwards accumulating tokens, then snaps to the nearest valid cut point.
  */
 function findCutPoint(messages: AgentMessage[], keepRecentTokens: number): CutResult {
-  const cuts = validCutPoints(messages);
-  if (cuts.length === 0) return { firstKeptIndex: 0, turnStartIndex: -1, isSplitTurn: false };
+  const cuts = validCutPoints(messages)
+  if (cuts.length === 0) return { firstKeptIndex: 0, turnStartIndex: -1, isSplitTurn: false }
 
-  let accumulated = 0;
-  let cutIndex = cuts[0]; // default: keep everything
+  let accumulated = 0
+  let cutIndex = cuts[0] // default: keep everything
 
   for (let i = messages.length - 1; i >= 0; i--) {
-    accumulated += estimateTokens(messages[i]);
+    accumulated += estimateTokens(messages[i])
     if (accumulated >= keepRecentTokens) {
       for (const c of cuts) {
         if (c >= i) {
-          cutIndex = c;
-          break;
+          cutIndex = c
+          break
         }
       }
-      break;
+      break
     }
   }
 
-  const role = (messages[cutIndex] as any).role as string;
-  const isUserLike = role === 'user' || role === 'compactionSummary';
-  const turnStartIndex = isUserLike ? -1 : findTurnStart(messages, cutIndex);
+  const role = (messages[cutIndex] as any).role as string
+  const isUserLike = role === 'user' || role === 'compactionSummary'
+  const turnStartIndex = isUserLike ? -1 : findTurnStart(messages, cutIndex)
 
   return {
     firstKeptIndex: cutIndex,
     turnStartIndex,
     isSplitTurn: !isUserLike && turnStartIndex !== -1,
-  };
+  }
 }
 
 // ─── Serialization ────────────────────────────────────────────────────────────
 
-const TOOL_RESULT_MAX_CHARS = 2_000;
+const TOOL_RESULT_MAX_CHARS = 2_000
 
 function truncate(text: string, max: number): string {
-  if (text.length <= max) return text;
-  return `${text.slice(0, max)}\n\n[... ${text.length - max} more characters truncated]`;
+  if (text.length <= max) return text
+  return `${text.slice(0, max)}\n\n[... ${text.length - max} more characters truncated]`
 }
 
 /** Convert AgentMessage[] → Message[] for the summarization prompt. */
 function toSummaryMessages(messages: AgentMessage[]): Message[] {
   return messages.flatMap((m) => {
-    const msg = m as any;
+    const msg = m as any
     switch (msg.role as string) {
       case 'compactionSummary':
         return [
@@ -226,20 +226,20 @@ function toSummaryMessages(messages: AgentMessage[]): Message[] {
             ],
             timestamp: msg.timestamp as number,
           },
-        ];
+        ]
       case 'user':
       case 'assistant':
       case 'toolResult':
-        return [msg as Message];
+        return [msg as Message]
       default:
-        return [];
+        return []
     }
-  });
+  })
 }
 
 /** Serialize Message[] to plain text (prevents the summarizer from continuing the chat). */
 function serialize(messages: Message[]): string {
-  const parts: string[] = [];
+  const parts: string[] = []
   for (const msg of messages) {
     if (msg.role === 'user') {
       const text =
@@ -248,43 +248,43 @@ function serialize(messages: Message[]): string {
           : (msg.content as any[])
               .filter((b: any) => b.type === 'text')
               .map((b: any) => b.text as string)
-              .join('');
-      if (text) parts.push(`[User]: ${text}`);
+              .join('')
+      if (text) parts.push(`[User]: ${text}`)
     } else if (msg.role === 'assistant') {
-      const texts: string[] = [];
-      const thinks: string[] = [];
-      const calls: string[] = [];
+      const texts: string[] = []
+      const thinks: string[] = []
+      const calls: string[] = []
       for (const b of msg.content as any[]) {
-        if (b.type === 'text') texts.push(b.text);
-        else if (b.type === 'thinking') thinks.push(b.thinking);
+        if (b.type === 'text') texts.push(b.text)
+        else if (b.type === 'thinking') thinks.push(b.thinking)
         else if (b.type === 'toolCall') {
-          const args = b.arguments as Record<string, unknown>;
+          const args = b.arguments as Record<string, unknown>
           calls.push(
             `${b.name as string}(${Object.entries(args)
               .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
               .join(', ')})`,
-          );
+          )
         }
       }
-      if (thinks.length) parts.push(`[Assistant thinking]: ${thinks.join('\n')}`);
-      if (texts.length) parts.push(`[Assistant]: ${texts.join('\n')}`);
-      if (calls.length) parts.push(`[Assistant tool calls]: ${calls.join('; ')}`);
+      if (thinks.length) parts.push(`[Assistant thinking]: ${thinks.join('\n')}`)
+      if (texts.length) parts.push(`[Assistant]: ${texts.join('\n')}`)
+      if (calls.length) parts.push(`[Assistant tool calls]: ${calls.join('; ')}`)
     } else if (msg.role === 'toolResult') {
       const text = (msg.content as any[])
         .filter((b: any) => b.type === 'text')
         .map((b: any) => b.text as string)
-        .join('');
-      if (text) parts.push(`[Tool result]: ${truncate(text, TOOL_RESULT_MAX_CHARS)}`);
+        .join('')
+      if (text) parts.push(`[Tool result]: ${truncate(text, TOOL_RESULT_MAX_CHARS)}`)
     }
   }
-  return parts.join('\n\n');
+  return parts.join('\n\n')
 }
 
 // ─── Prompts ──────────────────────────────────────────────────────────────────
 
 const SYSTEM_PROMPT = `You are a context summarization assistant. Your task is to read a conversation between a user and an AI assistant, then produce a structured summary following the exact format specified.
 
-Do NOT continue the conversation. Do NOT respond to any questions in the conversation. ONLY output the structured summary.`;
+Do NOT continue the conversation. Do NOT respond to any questions in the conversation. ONLY output the structured summary.`
 
 const SUMMARIZE_PROMPT = `The messages above are a conversation to summarize. Create a structured context checkpoint summary that another LLM will use to continue the work.
 
@@ -317,7 +317,7 @@ Use this EXACT format:
 - [Any data, examples, or references needed to continue]
 - [Or "(none)" if not applicable]
 
-Keep each section concise. Preserve exact file paths, function names, and error messages.`;
+Keep each section concise. Preserve exact file paths, function names, and error messages.`
 
 const UPDATE_PROMPT = `The messages above are NEW conversation messages to incorporate into the existing summary provided in <previous-summary> tags.
 
@@ -355,7 +355,7 @@ Use this EXACT format:
 ## Critical Context
 - [Preserve important context, add new if needed]
 
-Keep each section concise. Preserve exact file paths, function names, and error messages.`;
+Keep each section concise. Preserve exact file paths, function names, and error messages.`
 
 const TURN_PREFIX_PROMPT = `This is the PREFIX of a turn that was too large to keep. The SUFFIX (recent work) is retained.
 
@@ -370,7 +370,7 @@ Summarize the prefix to provide context for the retained suffix:
 ## Context for Suffix
 - [Information needed to understand the retained recent work]
 
-Be concise. Focus on what's needed to understand the kept suffix.`;
+Be concise. Focus on what's needed to understand the kept suffix.`
 
 // ─── Summary generation ───────────────────────────────────────────────────────
 
@@ -381,37 +381,39 @@ async function generateSummary(
   signal?: AbortSignal,
   previousSummary?: string,
 ): Promise<string> {
-  const maxTokens = Math.floor(0.8 * RESERVE_TOKENS);
-  const basePrompt = previousSummary ? UPDATE_PROMPT : SUMMARIZE_PROMPT;
+  const maxTokens = Math.floor(0.8 * RESERVE_TOKENS)
+  const basePrompt = previousSummary ? UPDATE_PROMPT : SUMMARIZE_PROMPT
 
-  const conversationText = serialize(toSummaryMessages(messages));
-  let promptText = `<conversation>\n${conversationText}\n</conversation>\n\n`;
+  const conversationText = serialize(toSummaryMessages(messages))
+  let promptText = `<conversation>\n${conversationText}\n</conversation>\n\n`
   if (previousSummary) {
-    promptText += `<previous-summary>\n${previousSummary}\n</previous-summary>\n\n`;
+    promptText += `<previous-summary>\n${previousSummary}\n</previous-summary>\n\n`
   }
-  promptText += basePrompt;
+  promptText += basePrompt
 
   const opts = model.reasoning
     ? { maxTokens, signal, apiKey, reasoning: 'high' as const }
-    : { maxTokens, signal, apiKey };
+    : { maxTokens, signal, apiKey }
 
   const response = await completeSimple(
     model,
     {
       systemPrompt: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: [{ type: 'text', text: promptText }], timestamp: Date.now() }],
+      messages: [
+        { role: 'user', content: [{ type: 'text', text: promptText }], timestamp: Date.now() },
+      ],
     },
     opts,
-  );
+  )
 
   if (response.stopReason === 'error') {
-    throw new Error(`Summarization failed: ${response.errorMessage ?? 'Unknown error'}`);
+    throw new Error(`Summarization failed: ${response.errorMessage ?? 'Unknown error'}`)
   }
 
   return response.content
     .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
     .map((c) => c.text)
-    .join('\n');
+    .join('\n')
 }
 
 async function generateTurnPrefixSummary(
@@ -420,35 +422,37 @@ async function generateTurnPrefixSummary(
   apiKey: string,
   signal?: AbortSignal,
 ): Promise<string> {
-  const maxTokens = Math.floor(0.5 * RESERVE_TOKENS);
-  const conversationText = serialize(toSummaryMessages(messages));
-  const promptText = `<conversation>\n${conversationText}\n</conversation>\n\n${TURN_PREFIX_PROMPT}`;
+  const maxTokens = Math.floor(0.5 * RESERVE_TOKENS)
+  const conversationText = serialize(toSummaryMessages(messages))
+  const promptText = `<conversation>\n${conversationText}\n</conversation>\n\n${TURN_PREFIX_PROMPT}`
 
   const response = await completeSimple(
     model,
     {
       systemPrompt: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: [{ type: 'text', text: promptText }], timestamp: Date.now() }],
+      messages: [
+        { role: 'user', content: [{ type: 'text', text: promptText }], timestamp: Date.now() },
+      ],
     },
     { maxTokens, signal, apiKey },
-  );
+  )
 
   if (response.stopReason === 'error') {
-    throw new Error(`Turn prefix summarization failed: ${response.errorMessage ?? 'Unknown error'}`);
+    throw new Error(`Turn prefix summarization failed: ${response.errorMessage ?? 'Unknown error'}`)
   }
 
   return response.content
     .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
     .map((c) => c.text)
-    .join('\n');
+    .join('\n')
 }
 
 // ─── Main entry point ─────────────────────────────────────────────────────────
 
 export interface CompactionResult {
-  messages: AgentMessage[];
-  summary: string;
-  tokensBefore: number;
+  messages: AgentMessage[]
+  summary: string
+  tokensBefore: number
 }
 
 /**
@@ -466,28 +470,28 @@ export async function compactMessages(
   apiKey: string,
   signal?: AbortSignal,
 ): Promise<CompactionResult> {
-  const tokensBefore = estimateContextTokens(messages);
+  const tokensBefore = estimateContextTokens(messages)
 
   // Check for existing compaction summary (iterative compaction)
-  let startIndex = 0;
-  let previousSummary: string | undefined;
+  let startIndex = 0
+  let previousSummary: string | undefined
   if ((messages[0] as any)?.role === 'compactionSummary') {
-    startIndex = 1;
-    previousSummary = (messages[0] as CompactionSummaryMessage).summary;
+    startIndex = 1
+    previousSummary = (messages[0] as CompactionSummaryMessage).summary
   }
 
-  const slice = messages.slice(startIndex);
-  const cut = findCutPoint(slice, KEEP_RECENT_TOKENS);
+  const slice = messages.slice(startIndex)
+  const cut = findCutPoint(slice, KEEP_RECENT_TOKENS)
 
-  const absFirstKept = startIndex + cut.firstKeptIndex;
-  const absTurnStart = cut.isSplitTurn ? startIndex + cut.turnStartIndex : -1;
+  const absFirstKept = startIndex + cut.firstKeptIndex
+  const absTurnStart = cut.isSplitTurn ? startIndex + cut.turnStartIndex : -1
 
-  const historyEnd = cut.isSplitTurn ? absTurnStart : absFirstKept;
-  const messagesToSummarize = messages.slice(startIndex, historyEnd);
-  const turnPrefixMessages = cut.isSplitTurn ? messages.slice(absTurnStart, absFirstKept) : [];
-  const keptMessages = messages.slice(absFirstKept);
+  const historyEnd = cut.isSplitTurn ? absTurnStart : absFirstKept
+  const messagesToSummarize = messages.slice(startIndex, historyEnd)
+  const turnPrefixMessages = cut.isSplitTurn ? messages.slice(absTurnStart, absFirstKept) : []
+  const keptMessages = messages.slice(absFirstKept)
 
-  let summary: string;
+  let summary: string
 
   if (cut.isSplitTurn && turnPrefixMessages.length > 0) {
     // Generate both summaries in parallel
@@ -496,16 +500,10 @@ export async function compactMessages(
         ? generateSummary(messagesToSummarize, model, apiKey, signal, previousSummary)
         : Promise.resolve('No prior history.'),
       generateTurnPrefixSummary(turnPrefixMessages, model, apiKey, signal),
-    ]);
-    summary = `${historyResult}\n\n---\n\n**Turn Context (split turn):**\n\n${prefixResult}`;
+    ])
+    summary = `${historyResult}\n\n---\n\n**Turn Context (split turn):**\n\n${prefixResult}`
   } else {
-    summary = await generateSummary(
-      messagesToSummarize,
-      model,
-      apiKey,
-      signal,
-      previousSummary,
-    );
+    summary = await generateSummary(messagesToSummarize, model, apiKey, signal, previousSummary)
   }
 
   const compactionMsg: CompactionSummaryMessage = {
@@ -513,11 +511,11 @@ export async function compactMessages(
     summary,
     tokensBefore,
     timestamp: Date.now(),
-  };
+  }
 
   return {
     messages: [compactionMsg as AgentMessage, ...keptMessages],
     summary,
     tokensBefore,
-  };
+  }
 }

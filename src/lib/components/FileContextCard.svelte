@@ -4,30 +4,28 @@
    * Collapsed by default to keep chat history clean.
    */
   export interface FileContext {
-    path: string;
+    path: string
     /** "1-20" when truncated, undefined when full file was shown. */
-    lines?: string;
+    lines?: string
     /** Total line count of the file, present when truncated. */
-    total?: number;
-    truncated: boolean;
-    error: boolean;
-    content: string;
+    total?: number
+    truncated: boolean
+    error: boolean
+    content: string
   }
 
   interface Props {
-    file: FileContext;
+    file: FileContext
   }
-  let { file }: Props = $props();
+  let { file }: Props = $props()
 
-  let expanded = $state(false);
+  let expanded = $state(false)
 
   const metaLabel = $derived(
-    file.truncated && file.lines && file.total
-      ? `第 ${file.lines} 行 / 共 ${file.total} 行`
-      : null,
-  );
+    file.truncated && file.lines && file.total ? `第 ${file.lines} 行 / 共 ${file.total} 行` : null,
+  )
 
-  const fileName = $derived(file.path.split('/').pop() ?? file.path);
+  const fileName = $derived(file.path.split('/').pop() ?? file.path)
 </script>
 
 <div class="fc-card" class:fc-error={file.error}>
@@ -38,13 +36,27 @@
     aria-expanded={expanded}
   >
     <!-- File icon -->
-    <svg class="fc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <svg
+      class="fc-icon"
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    >
       {#if file.error}
-        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+        <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line
+          x1="12"
+          y1="16"
+          x2="12.01"
+          y2="16"
+        />
       {:else}
-        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-        <polyline points="14 2 14 8 20 8"/>
+        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
       {/if}
     </svg>
 
@@ -65,10 +77,14 @@
     <svg
       class="fc-chevron"
       class:open={expanded}
-      width="11" height="11" viewBox="0 0 24 24"
-      fill="none" stroke="currentColor" stroke-width="2.5"
+      width="11"
+      height="11"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2.5"
     >
-      <polyline points="9 18 15 12 9 6"/>
+      <polyline points="9 18 15 12 9 6" />
     </svg>
   </button>
 

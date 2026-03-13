@@ -8,10 +8,10 @@
  * conversation it is injected into the system prompt. The AI can update it
  * via the `soul_update` tool — effectively letting it evolve its own identity.
  */
-import { writable, get } from 'svelte/store';
-import { browser } from '$app/environment';
+import { writable, get } from 'svelte/store'
+import { browser } from '$app/environment'
 
-const SOUL_KEY = 'thinclaw:soul';
+const SOUL_KEY = 'thinclaw:soul'
 
 /** The default soul — modelled directly after openclaw's SOUL.md template. */
 export const DEFAULT_SOUL = `# Soul
@@ -48,35 +48,35 @@ If you update this soul, tell the user what changed and why. It's your identity,
 
 ---
 
-_This soul is yours to evolve. Update it as you learn who you are._`;
+_This soul is yours to evolve. Update it as you learn who you are._`
 
 function loadSoul(): string {
-  if (!browser) return DEFAULT_SOUL;
-  return localStorage.getItem(SOUL_KEY) ?? DEFAULT_SOUL;
+  if (!browser) return DEFAULT_SOUL
+  return localStorage.getItem(SOUL_KEY) ?? DEFAULT_SOUL
 }
 
 function createSoulStore() {
-  const inner = writable<string>(loadSoul());
+  const inner = writable<string>(loadSoul())
 
   return {
     subscribe: inner.subscribe,
 
     /** Overwrite the soul content and persist to localStorage. */
     set(content: string): void {
-      inner.set(content);
-      if (browser) localStorage.setItem(SOUL_KEY, content);
+      inner.set(content)
+      if (browser) localStorage.setItem(SOUL_KEY, content)
     },
 
     /** Reset to the built-in SOUL.md template. */
     reset(): void {
-      this.set(DEFAULT_SOUL);
+      this.set(DEFAULT_SOUL)
     },
 
     /** Synchronously read the current value (safe to call anywhere). */
     current(): string {
-      return get(inner);
+      return get(inner)
     },
-  };
+  }
 }
 
-export const soul = createSoulStore();
+export const soul = createSoulStore()

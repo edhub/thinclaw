@@ -1,51 +1,51 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
-  import { readFile, writeFile, listDir } from '$lib/fs/opfs';
-  import type { ListEntry } from '$lib/fs/opfs';
-  import { renderMarkdown } from '$lib/utils/markdown';
+  import { onMount, onDestroy } from 'svelte'
+  import { readFile, writeFile, listDir } from '$lib/fs/opfs'
+  import type { ListEntry } from '$lib/fs/opfs'
+  import { renderMarkdown } from '$lib/utils/markdown'
   import {
     listSessions,
     readSessionFile,
     parseSessionJsonl,
     type SessionListItem,
     type SessionEntry,
-  } from '$lib/fs/session-recorder';
-  import SessionViewer from '$lib/components/SessionViewer.svelte';
+  } from '$lib/fs/session-recorder'
+  import SessionViewer from '$lib/components/SessionViewer.svelte'
 
   // ─── Types ────────────────────────────────────────────────────────────────
 
   interface TreeNode {
-    name: string;
-    path: string;         // as used by OPFS: 'notes/daily.md' or 'tmp/foo.md'
-    kind: 'file' | 'directory';
-    children?: TreeNode[] | null; // undefined = file (n/a), null = dir not yet loaded, array = loaded
-    expanded: boolean;
+    name: string
+    path: string // as used by OPFS: 'notes/daily.md' or 'tmp/foo.md'
+    kind: 'file' | 'directory'
+    children?: TreeNode[] | null // undefined = file (n/a), null = dir not yet loaded, array = loaded
+    expanded: boolean
   }
 
   // ─── State ────────────────────────────────────────────────────────────────
 
-  let workspaceTree = $state<TreeNode[]>([]);
-  let tmpTree       = $state<TreeNode[]>([]);
-  let sessionsList  = $state<SessionListItem[]>([]);
+  let workspaceTree = $state<TreeNode[]>([])
+  let tmpTree = $state<TreeNode[]>([])
+  let sessionsList = $state<SessionListItem[]>([])
 
-  let selectedPath  = $state<string | null>(null);
+  let selectedPath = $state<string | null>(null)
   // For session files: the parsed entries (null = not a session)
-  let sessionEntries = $state<SessionEntry[] | null>(null);
-  let sessionLoading = $state(false);
+  let sessionEntries = $state<SessionEntry[] | null>(null)
+  let sessionLoading = $state(false)
 
-  let fileContent   = $state('');
-  let editContent   = $state('');
-  let renderedHtml  = $state('');
+  let fileContent = $state('')
+  let editContent = $state('')
+  let renderedHtml = $state('')
 
-  let mode    = $state<'preview' | 'edit'>('preview');
-  let dirty   = $state(false);
-  let saving  = $state(false);
-  let loading = $state(false);
-  let loadError = $state<string | null>(null);
+  let mode = $state<'preview' | 'edit'>('preview')
+  let dirty = $state(false)
+  let saving = $state(false)
+  let loading = $state(false)
+  let loadError = $state<string | null>(null)
 
-  const fileName   = $derived(selectedPath?.split('/').pop() ?? '');
-  const isMarkdown = $derived(!!selectedPath?.match(/\.(md|markdown)$/i));
-  const isSession  = $derived(sessionEntries !== null);
+  const fileName = $derived(selectedPath?.split('/').pop() ?? '')
+  const isMarkdown = $derived(!!selectedPath?.match(/\.(md|markdown)$/i))
+  const isSession = $derived(sessionEntries !== null)
 
   // ─── Tree helpers ─────────────────────────────────────────────────────────
 
@@ -56,115 +56,115 @@
       kind: e.kind,
       children: e.kind === 'directory' ? null : undefined,
       expanded: false,
-    }));
+    }))
     // directories first, then files, both alphabetical
     return nodes.sort((a, b) => {
-      if (a.kind !== b.kind) return a.kind === 'directory' ? -1 : 1;
-      return a.name.localeCompare(b.name);
-    });
+      if (a.kind !== b.kind) return a.kind === 'directory' ? -1 : 1
+      return a.name.localeCompare(b.name)
+    })
   }
 
   async function expandDir(node: TreeNode): Promise<void> {
-    if (node.kind !== 'directory') return;
+    if (node.kind !== 'directory') return
     if (node.children === null || node.children === undefined) {
-      const entries = await listDir(node.path);
-      node.children = toNodes(entries, node.path);
+      const entries = await listDir(node.path)
+      node.children = toNodes(entries, node.path)
     }
-    node.expanded = !node.expanded;
+    node.expanded = !node.expanded
   }
 
   /** Expand all ancestor directories of `path` so the file is visible in the tree. */
   async function expandToPath(path: string): Promise<void> {
-    const isTmp  = path.startsWith('tmp/') || path === 'tmp';
-    const parts  = isTmp ? path.split('/').slice(1) : path.split('/');
-    let   nodes  = isTmp ? tmpTree : workspaceTree;
+    const isTmp = path.startsWith('tmp/') || path === 'tmp'
+    const parts = isTmp ? path.split('/').slice(1) : path.split('/')
+    let nodes = isTmp ? tmpTree : workspaceTree
 
     for (let i = 0; i < parts.length - 1; i++) {
-      const node = nodes.find((n) => n.name === parts[i] && n.kind === 'directory');
-      if (!node) break;
+      const node = nodes.find((n) => n.name === parts[i] && n.kind === 'directory')
+      if (!node) break
       if (node.children === null || node.children === undefined) {
-        const entries = await listDir(node.path);
-        node.children = toNodes(entries, node.path);
+        const entries = await listDir(node.path)
+        node.children = toNodes(entries, node.path)
       }
-      node.expanded = true;
-      nodes = node.children ?? [];
+      node.expanded = true
+      nodes = node.children ?? []
     }
   }
 
   // ─── File operations ──────────────────────────────────────────────────────
 
   async function openFile(path: string): Promise<void> {
-    selectedPath = path;
-    sessionEntries = null;
-    loading      = true;
-    loadError    = null;
-    mode         = 'preview';
-    dirty        = false;
+    selectedPath = path
+    sessionEntries = null
+    loading = true
+    loadError = null
+    mode = 'preview'
+    dirty = false
     try {
-      const result = await readFile(path);
-      fileContent  = result.content;
-      editContent  = result.content;
-      renderedHtml = isMarkdown ? await renderMarkdown(fileContent) : '';
+      const result = await readFile(path)
+      fileContent = result.content
+      editContent = result.content
+      renderedHtml = isMarkdown ? await renderMarkdown(fileContent) : ''
       // Update URL without reloading
-      history.replaceState(null, '', `/files?path=${encodeURIComponent(path)}`);
+      history.replaceState(null, '', `/files?path=${encodeURIComponent(path)}`)
     } catch (e) {
-      loadError   = e instanceof Error ? e.message : String(e);
-      fileContent = '';
+      loadError = e instanceof Error ? e.message : String(e)
+      fileContent = ''
     } finally {
-      loading = false;
+      loading = false
     }
   }
 
   async function openSession(item: SessionListItem): Promise<void> {
-    selectedPath   = `sessions/${item.convId}`;
-    sessionEntries = null;
-    sessionLoading = true;
-    loadError      = null;
-    history.replaceState(null, '', `/files?session=${encodeURIComponent(item.convId)}`);
+    selectedPath = `sessions/${item.convId}`
+    sessionEntries = null
+    sessionLoading = true
+    loadError = null
+    history.replaceState(null, '', `/files?session=${encodeURIComponent(item.convId)}`)
     try {
-      const raw      = await readSessionFile(item.convId);
-      sessionEntries = parseSessionJsonl(raw);
+      const raw = await readSessionFile(item.convId)
+      sessionEntries = parseSessionJsonl(raw)
     } catch (e) {
-      loadError      = e instanceof Error ? e.message : String(e);
-      sessionEntries = null;
+      loadError = e instanceof Error ? e.message : String(e)
+      sessionEntries = null
     } finally {
-      sessionLoading = false;
+      sessionLoading = false
     }
   }
 
   async function saveFile(): Promise<void> {
-    if (!selectedPath || !dirty) return;
-    saving = true;
+    if (!selectedPath || !dirty) return
+    saving = true
     try {
-      await writeFile(selectedPath, editContent);
-      fileContent  = editContent;
-      dirty        = false;
-      renderedHtml = isMarkdown ? await renderMarkdown(fileContent) : '';
+      await writeFile(selectedPath, editContent)
+      fileContent = editContent
+      dirty = false
+      renderedHtml = isMarkdown ? await renderMarkdown(fileContent) : ''
     } catch (e) {
-      loadError = e instanceof Error ? e.message : String(e);
+      loadError = e instanceof Error ? e.message : String(e)
     } finally {
-      saving = false;
+      saving = false
     }
   }
 
   function downloadFile(): void {
-    if (!selectedPath) return;
-    const blob = new Blob([fileContent], { type: 'text/plain;charset=utf-8' });
-    const url  = URL.createObjectURL(blob);
-    const a    = Object.assign(document.createElement('a'), { href: url, download: fileName });
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 100);
+    if (!selectedPath) return
+    const blob = new Blob([fileContent], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = Object.assign(document.createElement('a'), { href: url, download: fileName })
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(url), 100)
   }
 
   function handleEditInput(e: Event): void {
-    editContent = (e.target as HTMLTextAreaElement).value;
-    dirty = editContent !== fileContent;
+    editContent = (e.target as HTMLTextAreaElement).value
+    dirty = editContent !== fileContent
   }
 
   function handleKeydown(e: KeyboardEvent): void {
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-      e.preventDefault();
-      saveFile();
+      e.preventDefault()
+      saveFile()
     }
   }
 
@@ -173,61 +173,67 @@
       listDir(''),
       listDir('tmp'),
       listSessions(),
-    ]);
-    if (wsEntries.status  === 'fulfilled') workspaceTree = toNodes(wsEntries.value,  '');
-    if (tmpEntries.status === 'fulfilled') tmpTree       = toNodes(tmpEntries.value, 'tmp');
-    if (sessions.status   === 'fulfilled') sessionsList  = sessions.value;
+    ])
+    if (wsEntries.status === 'fulfilled') workspaceTree = toNodes(wsEntries.value, '')
+    if (tmpEntries.status === 'fulfilled') tmpTree = toNodes(tmpEntries.value, 'tmp')
+    if (sessions.status === 'fulfilled') sessionsList = sessions.value
   }
 
   async function switchMode(next: 'preview' | 'edit'): Promise<void> {
     if (mode === 'edit' && next === 'preview' && isMarkdown) {
-      renderedHtml = await renderMarkdown(editContent);
+      renderedHtml = await renderMarkdown(editContent)
     }
-    mode = next;
+    mode = next
   }
 
   // ─── Init ─────────────────────────────────────────────────────────────────
 
   onMount(async () => {
-    document.title = 'Files — ThinClaw';
-    document.addEventListener('keydown', handleKeydown);
+    document.title = 'Files — ThinClaw'
+    document.addEventListener('keydown', handleKeydown)
 
     // Load tree roots and sessions list in parallel
     const [wsEntries, tmpEntries, sessions] = await Promise.allSettled([
       listDir(''),
       listDir('tmp'),
       listSessions(),
-    ]);
-    if (wsEntries.status  === 'fulfilled') workspaceTree = toNodes(wsEntries.value,  '');
-    if (tmpEntries.status === 'fulfilled') tmpTree       = toNodes(tmpEntries.value, 'tmp');
-    if (sessions.status   === 'fulfilled') sessionsList  = sessions.value;
+    ])
+    if (wsEntries.status === 'fulfilled') workspaceTree = toNodes(wsEntries.value, '')
+    if (tmpEntries.status === 'fulfilled') tmpTree = toNodes(tmpEntries.value, 'tmp')
+    if (sessions.status === 'fulfilled') sessionsList = sessions.value
 
     // Open file from ?path= URL param, or session from ?session= param
-    const params    = new URLSearchParams(location.search);
-    const pathParam = params.get('path');
-    const sessParam = params.get('session');
+    const params = new URLSearchParams(location.search)
+    const pathParam = params.get('path')
+    const sessParam = params.get('session')
     if (pathParam) {
-      await expandToPath(pathParam);
-      await openFile(pathParam);
+      await expandToPath(pathParam)
+      await openFile(pathParam)
     } else if (sessParam) {
-      const item = sessionsList.find((s) => s.convId === sessParam);
-      if (item) await openSession(item);
+      const item = sessionsList.find((s) => s.convId === sessParam)
+      if (item) await openSession(item)
     }
-  });
+  })
 
-  onDestroy(() => document.removeEventListener('keydown', handleKeydown));
+  onDestroy(() => document.removeEventListener('keydown', handleKeydown))
 </script>
 
 <div class="layout">
-
   <!-- ── Sidebar ─────────────────────────────────────────────────────── -->
   <aside class="sidebar">
     <div class="sidebar-header">
       <span class="sidebar-title">Files</span>
       <button class="refresh-btn" onclick={refreshTree} title="Refresh tree">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <polyline points="23 4 23 10 17 10"/>
-          <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+        >
+          <polyline points="23 4 23 10 17 10" />
+          <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" />
         </svg>
       </button>
     </div>
@@ -264,12 +270,22 @@
             class:selected={selectedPath === `sessions/${item.convId}`}
             onclick={() => openSession(item)}
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" opacity="0.5">
-              <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              opacity="0.5"
+            >
+              <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
             </svg>
             <span class="session-item-inner">
               <span class="session-item-title">{item.title}</span>
-              <span class="session-item-date">{new Date(item.lastModified).toLocaleDateString()}</span>
+              <span class="session-item-date"
+                >{new Date(item.lastModified).toLocaleDateString()}</span
+              >
             </span>
           </button>
         {/each}
@@ -281,27 +297,31 @@
   <main class="main">
     {#if !selectedPath}
       <div class="empty-state">
-        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.3">
-          <path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/>
-          <polyline points="13 2 13 9 20 9"/>
+        <svg
+          width="40"
+          height="40"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.2"
+          opacity="0.3"
+        >
+          <path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z" />
+          <polyline points="13 2 13 9 20 9" />
         </svg>
         <p>Select a file to view</p>
       </div>
-
     {:else if loading || sessionLoading}
       <div class="empty-state">
         <p style="color: var(--text-muted)">Loading…</p>
       </div>
-
     {:else if loadError}
       <div class="empty-state">
         <p style="color: var(--error)">{loadError}</p>
       </div>
-
     {:else if isSession && sessionEntries}
       <!-- Session viewer: renders JSONL as a data inspector -->
       <SessionViewer entries={sessionEntries} />
-
     {:else}
       <!-- Toolbar -->
       <div class="toolbar">
@@ -312,13 +332,13 @@
               <button
                 class="mode-btn"
                 class:active={mode === 'preview'}
-                onclick={() => switchMode('preview')}
-              >Preview</button>
+                onclick={() => switchMode('preview')}>Preview</button
+              >
               <button
                 class="mode-btn"
                 class:active={mode === 'edit'}
-                onclick={() => switchMode('edit')}
-              >Edit</button>
+                onclick={() => switchMode('edit')}>Edit</button
+              >
             </div>
           {/if}
           {#if dirty}
@@ -327,10 +347,17 @@
             </button>
           {/if}
           <button class="btn-icon" onclick={downloadFile} title="Download">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/>
-              <line x1="12" y1="15" x2="12" y2="3"/>
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
             </svg>
           </button>
         </div>
@@ -364,14 +391,19 @@
       onclick={() => expandDir(node)}
     >
       <svg
-        class="chevron" class:open={node.expanded}
-        width="10" height="10" viewBox="0 0 24 24"
-        fill="none" stroke="currentColor" stroke-width="2.5"
+        class="chevron"
+        class:open={node.expanded}
+        width="10"
+        height="10"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2.5"
       >
-        <polyline points="9 18 15 12 9 6"/>
+        <polyline points="9 18 15 12 9 6" />
       </svg>
       <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" opacity="0.5">
-        <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
+        <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
       </svg>
       <span>{node.name}</span>
     </button>
@@ -380,7 +412,6 @@
         {@render treeNode(child, depth + 1)}
       {/each}
     {/if}
-
   {:else}
     <button
       class="tree-item tree-file"
@@ -388,9 +419,17 @@
       style="padding-left: {12 + depth * 14}px"
       onclick={() => openFile(node.path)}
     >
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" opacity="0.5">
-        <path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/>
-        <polyline points="13 2 13 9 20 9"/>
+      <svg
+        width="12"
+        height="12"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        opacity="0.5"
+      >
+        <path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z" />
+        <polyline points="13 2 13 9 20 9" />
       </svg>
       <span>{node.name}</span>
     </button>
@@ -437,9 +476,14 @@
     cursor: pointer;
     color: var(--text-muted);
     border-radius: 4px;
-    transition: color 0.1s, background 0.1s;
+    transition:
+      color 0.1s,
+      background 0.1s;
   }
-  .refresh-btn:hover { color: var(--text-primary); background: var(--surface-hover); }
+  .refresh-btn:hover {
+    color: var(--text-primary);
+    background: var(--surface-hover);
+  }
 
   .sidebar-title {
     font-size: 0.75rem;
@@ -494,11 +538,19 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    transition: background 0.1s, color 0.1s;
+    transition:
+      background 0.1s,
+      color 0.1s;
   }
 
-  .tree-item:hover { background: var(--surface-hover); color: var(--text-primary); }
-  .tree-item.selected { background: var(--surface-active); color: var(--accent); }
+  .tree-item:hover {
+    background: var(--surface-hover);
+    color: var(--text-primary);
+  }
+  .tree-item.selected {
+    background: var(--surface-active);
+    color: var(--accent);
+  }
 
   .tree-item span {
     overflow: hidden;
@@ -550,7 +602,9 @@
     flex-shrink: 0;
     transition: transform 0.15s;
   }
-  .chevron.open { transform: rotate(90deg); }
+  .chevron.open {
+    transform: rotate(90deg);
+  }
 
   /* ── Main ── */
   .main {
@@ -614,10 +668,18 @@
     border: none;
     cursor: pointer;
     color: var(--text-secondary);
-    transition: background 0.1s, color 0.1s;
+    transition:
+      background 0.1s,
+      color 0.1s;
   }
-  .mode-btn:hover    { background: var(--surface-hover); }
-  .mode-btn.active   { background: var(--surface-active); color: var(--accent); font-weight: 500; }
+  .mode-btn:hover {
+    background: var(--surface-hover);
+  }
+  .mode-btn.active {
+    background: var(--surface-active);
+    color: var(--accent);
+    font-weight: 500;
+  }
 
   .btn-primary {
     padding: 4px 12px;
@@ -630,7 +692,10 @@
     font-weight: 500;
     transition: opacity 0.1s;
   }
-  .btn-primary:disabled { opacity: 0.6; cursor: default; }
+  .btn-primary:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
 
   .btn-icon {
     width: 30px;
@@ -643,9 +708,14 @@
     border-radius: 6px;
     cursor: pointer;
     color: var(--text-secondary);
-    transition: background 0.1s, color 0.1s;
+    transition:
+      background 0.1s,
+      color 0.1s;
   }
-  .btn-icon:hover { background: var(--surface-hover); color: var(--text-primary); }
+  .btn-icon:hover {
+    background: var(--surface-hover);
+    color: var(--text-primary);
+  }
 
   /* File content */
   .file-content {
@@ -685,36 +755,79 @@
   }
 
   /* Markdown styles (mirrors ChatMessage.svelte) */
-  :global(.markdown-body p)             { margin: 0 0 0.75em; }
-  :global(.markdown-body p:last-child)  { margin-bottom: 0; }
-  :global(.markdown-body h1, .markdown-body h2, .markdown-body h3) {
-    font-weight: 600; margin: 1.25em 0 0.5em; line-height: 1.3;
+  :global(.markdown-body p) {
+    margin: 0 0 0.75em;
   }
-  :global(.markdown-body h1) { font-size: 1.5em; }
-  :global(.markdown-body h2) { font-size: 1.25em; }
-  :global(.markdown-body h3) { font-size: 1.05em; }
-  :global(.markdown-body ul, .markdown-body ol) { padding-left: 1.5em; margin: 0.5em 0; }
-  :global(.markdown-body li)  { margin: 0.25em 0; }
+  :global(.markdown-body p:last-child) {
+    margin-bottom: 0;
+  }
+  :global(.markdown-body h1, .markdown-body h2, .markdown-body h3) {
+    font-weight: 600;
+    margin: 1.25em 0 0.5em;
+    line-height: 1.3;
+  }
+  :global(.markdown-body h1) {
+    font-size: 1.5em;
+  }
+  :global(.markdown-body h2) {
+    font-size: 1.25em;
+  }
+  :global(.markdown-body h3) {
+    font-size: 1.05em;
+  }
+  :global(.markdown-body ul, .markdown-body ol) {
+    padding-left: 1.5em;
+    margin: 0.5em 0;
+  }
+  :global(.markdown-body li) {
+    margin: 0.25em 0;
+  }
   :global(.markdown-body pre) {
-    background: var(--code-bg); border-radius: 8px; padding: 12px 16px;
-    overflow-x: auto; margin: 0.75em 0; font-size: 0.875em; border: 1px solid var(--border);
+    background: var(--code-bg);
+    border-radius: 8px;
+    padding: 12px 16px;
+    overflow-x: auto;
+    margin: 0.75em 0;
+    font-size: 0.875em;
+    border: 1px solid var(--border);
   }
   :global(.markdown-body code) {
-    font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace; font-size: 0.875em;
+    font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace;
+    font-size: 0.875em;
   }
   :global(.markdown-body p code, .markdown-body li code) {
-    background: var(--code-inline-bg); padding: 2px 5px; border-radius: 4px;
+    background: var(--code-inline-bg);
+    padding: 2px 5px;
+    border-radius: 4px;
     color: var(--code-inline-color);
   }
   :global(.markdown-body blockquote) {
-    border-left: 3px solid var(--accent); padding-left: 1em;
-    margin: 0.75em 0; color: var(--text-secondary);
+    border-left: 3px solid var(--accent);
+    padding-left: 1em;
+    margin: 0.75em 0;
+    color: var(--text-secondary);
   }
-  :global(.markdown-body table) { border-collapse: collapse; width: 100%; margin: 0.75em 0; }
+  :global(.markdown-body table) {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 0.75em 0;
+  }
   :global(.markdown-body th, .markdown-body td) {
-    border: 1px solid var(--border); padding: 6px 12px; text-align: left;
+    border: 1px solid var(--border);
+    padding: 6px 12px;
+    text-align: left;
   }
-  :global(.markdown-body th) { background: var(--surface-elevated); font-weight: 600; }
-  :global(.markdown-body a)  { color: var(--accent); text-decoration: underline; }
-  :global(.markdown-body hr) { border: none; border-top: 1px solid var(--border); margin: 1em 0; }
+  :global(.markdown-body th) {
+    background: var(--surface-elevated);
+    font-weight: 600;
+  }
+  :global(.markdown-body a) {
+    color: var(--accent);
+    text-decoration: underline;
+  }
+  :global(.markdown-body hr) {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 1em 0;
+  }
 </style>

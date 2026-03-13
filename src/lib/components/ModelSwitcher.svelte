@@ -1,28 +1,28 @@
 <script lang="ts">
-  import { settings, MODELS } from '$lib/stores/settings';
+  import { settings, MODELS } from '$lib/stores/settings'
 
-  let open = $state(false);
-  let btnEl = $state<HTMLButtonElement | undefined>(undefined);
+  let open = $state(false)
+  let btnEl = $state<HTMLButtonElement | undefined>(undefined)
 
-  const currentModel = $derived(MODELS.find((m) => m.id === $settings.model) ?? MODELS[0]);
+  const currentModel = $derived(MODELS.find((m) => m.id === $settings.model) ?? MODELS[0])
 
   function select(id: string) {
-    settings.update((s) => ({ ...s, model: id }));
-    open = false;
+    settings.update((s) => ({ ...s, model: id }))
+    open = false
   }
 
   function handleDocClick(e: MouseEvent) {
     if (btnEl && !btnEl.closest('.model-switcher-wrap')?.contains(e.target as Node)) {
-      open = false;
+      open = false
     }
   }
 
   $effect(() => {
     if (open) {
-      document.addEventListener('click', handleDocClick);
-      return () => document.removeEventListener('click', handleDocClick);
+      document.addEventListener('click', handleDocClick)
+      return () => document.removeEventListener('click', handleDocClick)
     }
-  });
+  })
 </script>
 
 <div class="model-switcher-wrap">
@@ -34,8 +34,17 @@
     aria-label="切换模型：{currentModel.name}"
     title={currentModel.name}
   >
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/>
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+    >
+      <path
+        d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"
+      />
     </svg>
   </button>
 
@@ -50,8 +59,15 @@
         >
           {model.name}
           {#if model.id === $settings.model}
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <polyline points="20 6 9 17 4 12"/>
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+            >
+              <polyline points="20 6 9 17 4 12" />
             </svg>
           {/if}
         </button>

@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { renderMarkdown } from '$lib/utils/markdown';
-  import type { AgentMessage } from '$lib/db';
+  import { renderMarkdown } from '$lib/utils/markdown'
+  import type { AgentMessage } from '$lib/db'
   import type {
     AssistantMessage,
     ToolResultMessage,
@@ -8,51 +8,63 @@
     ThinkingContent,
     ToolCall,
     ImageContent,
-  } from '@mariozechner/pi-ai';
-  import FileContextCard from '$lib/components/FileContextCard.svelte';
-  import type { FileContext } from '$lib/components/FileContextCard.svelte';
+  } from '@mariozechner/pi-ai'
+  import FileContextCard from '$lib/components/FileContextCard.svelte'
+  import type { FileContext } from '$lib/components/FileContextCard.svelte'
 
   interface Props {
-    message: AgentMessage;
-    isStreaming?: boolean;
+    message: AgentMessage
+    isStreaming?: boolean
   }
-  let { message, isStreaming = false }: Props = $props();
+  let { message, isStreaming = false }: Props = $props()
 
   // --- Derived helpers ---
 
-  const isUser = $derived(message.role === 'user');
-  const isAssistant = $derived(message.role === 'assistant');
-  const isToolResult = $derived(message.role === 'toolResult');
+  const isUser = $derived(message.role === 'user')
+  const isAssistant = $derived(message.role === 'assistant')
+  const isToolResult = $derived(message.role === 'toolResult')
 
   // Assistant message content blocks
-  const assistantMsg = $derived(isAssistant ? (message as AssistantMessage) : null);
+  const assistantMsg = $derived(isAssistant ? (message as AssistantMessage) : null)
   const textBlocks = $derived(
     assistantMsg?.content.filter((b): b is TextContent => b.type === 'text') ?? [],
-  );
+  )
   const thinkingBlocks = $derived(
     assistantMsg?.content.filter((b): b is ThinkingContent => b.type === 'thinking') ?? [],
-  );
+  )
   const toolCallBlocks = $derived(
     assistantMsg?.content.filter((b): b is ToolCall => b.type === 'toolCall') ?? [],
-  );
+  )
 
   // Tool result
-  const toolResultMsg = $derived(isToolResult ? (message as ToolResultMessage) : null);
+  const toolResultMsg = $derived(isToolResult ? (message as ToolResultMessage) : null)
 
   // For fs_write / fs_edit / fs_move results: extract a file path to offer "Open" link
-  const openFilePath = $derived((() => {
-    if (!toolResultMsg || toolResultMsg.isError) return null;
-    const text = toolResultMsg.content
-      .filter((c) => c.type === 'text')
-      .map((c) => (c as TextContent).text)
-      .join('');
-    switch (toolResultMsg.toolName) {
-      case 'fs_write': { const m = text.match(/^Written: (.+?) \(/); return m?.[1] ?? null; }
-      case 'fs_edit':  { const m = text.match(/^Edited: (.+)$/m);    return m?.[1]?.trim() ?? null; }
-      case 'fs_move':  { const m = text.match(/→ (.+)$/m);           return m?.[1]?.trim() ?? null; }
-      default: return null;
-    }
-  })());
+  const openFilePath = $derived(
+    (() => {
+      if (!toolResultMsg || toolResultMsg.isError) return null
+      const text = toolResultMsg.content
+        .filter((c) => c.type === 'text')
+        .map((c) => (c as TextContent).text)
+        .join('')
+      switch (toolResultMsg.toolName) {
+        case 'fs_write': {
+          const m = text.match(/^Written: (.+?) \(/)
+          return m?.[1] ?? null
+        }
+        case 'fs_edit': {
+          const m = text.match(/^Edited: (.+)$/m)
+          return m?.[1]?.trim() ?? null
+        }
+        case 'fs_move': {
+          const m = text.match(/→ (.+)$/m)
+          return m?.[1]?.trim() ?? null
+        }
+        default:
+          return null
+      }
+    })(),
+  )
 
   // User message content
   const userText = $derived(
@@ -64,7 +76,7 @@
             .map((b) => (b as TextContent).text)
             .join('')
       : '',
-  );
+  )
 
   // User message images (only present when content is an array)
   const userImages = $derived(
@@ -73,22 +85,27 @@
           (b): b is ImageContent => b.type === 'image',
         )
       : [],
-  );
+  )
 
   // Render markdown for assistant text
-  let renderedHtml = $state('');
-  let thinkingOpen = $state(false);
+  let renderedHtml = $state('')
+  let thinkingOpen = $state(false)
 
   $effect(() => {
-    const combined = textBlocks.map((b) => b.text).join('');
-    if (!combined) { renderedHtml = ''; return; }
-    renderMarkdown(combined).then((html) => { renderedHtml = html; });
-  });
+    const combined = textBlocks.map((b) => b.text).join('')
+    if (!combined) {
+      renderedHtml = ''
+      return
+    }
+    renderMarkdown(combined).then((html) => {
+      renderedHtml = html
+    })
+  })
 
   // Error state
   const hasError = $derived(
     isAssistant && (assistantMsg?.stopReason === 'error' || !!assistantMsg?.errorMessage),
-  );
+  )
 
   // ── File context parsing ──────────────────────────────────────────────────
 
@@ -102,25 +119,25 @@
    *   </file-context>
    */
   function parseUserMessage(raw: string): { files: FileContext[]; text: string } {
-    const files: FileContext[] = [];
+    const files: FileContext[] = []
     const cleaned = raw.replace(
       /<file-context([^>]*)>([\s\S]*?)<\/file-context>/g,
       (_, attrs: string, body: string) => {
         files.push({
-          path:      /path="([^"]*)"/.exec(attrs)?.[1] ?? '',
-          lines:     /lines="([^"]*)"/.exec(attrs)?.[1],
-          total:     parseInt(/total="(\d+)"/.exec(attrs)?.[1] ?? '0', 10) || undefined,
+          path: /path="([^"]*)"/.exec(attrs)?.[1] ?? '',
+          lines: /lines="([^"]*)"/.exec(attrs)?.[1],
+          total: parseInt(/total="(\d+)"/.exec(attrs)?.[1] ?? '0', 10) || undefined,
           truncated: /truncated="true"/.test(attrs),
-          error:     /error="true"/.test(attrs),
-          content:   body.trim(),
-        });
-        return '';
+          error: /error="true"/.test(attrs),
+          content: body.trim(),
+        })
+        return ''
       },
-    );
-    return { files, text: cleaned.trim() };
+    )
+    return { files, text: cleaned.trim() }
   }
 
-  const parsedUser = $derived(isUser ? parseUserMessage(userText) : { files: [], text: userText });
+  const parsedUser = $derived(isUser ? parseUserMessage(userText) : { files: [], text: userText })
 </script>
 
 <div
@@ -134,11 +151,15 @@
     <div class="avatar">
       {#if isUser}
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/>
+          <path
+            d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"
+          />
         </svg>
       {:else}
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
+          <path
+            d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"
+          />
         </svg>
       {/if}
     </div>
@@ -146,17 +167,12 @@
 
   <!-- Content -->
   <div class="content" class:content-tool={isToolResult}>
-
     {#if isUser}
       <!-- User message -->
       {#if userImages.length > 0}
         <div class="user-images">
           {#each userImages as img}
-            <img
-              src="data:{img.mimeType};base64,{img.data}"
-              alt=""
-              class="user-image"
-            />
+            <img src="data:{img.mimeType};base64,{img.data}" alt="" class="user-image" />
           {/each}
         </div>
       {/if}
@@ -168,7 +184,6 @@
       {#if parsedUser.text}
         <p class="user-text">{parsedUser.text}</p>
       {/if}
-
     {:else if isAssistant}
       <!-- Thinking block (collapsible) -->
       {#if thinkingBlocks.length > 0}
@@ -181,10 +196,14 @@
             <svg
               class="chevron"
               class:open={thinkingOpen}
-              width="12" height="12" viewBox="0 0 24 24"
-              fill="none" stroke="currentColor" stroke-width="2.5"
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
             >
-              <polyline points="9 18 15 12 9 6"/>
+              <polyline points="9 18 15 12 9 6" />
             </svg>
             <span>思考过程</span>
             {#if isStreaming && textBlocks.length === 0}
@@ -205,8 +224,17 @@
       {#each toolCallBlocks as call}
         <div class="tool-call-card">
           <div class="tool-call-header">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/>
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"
+              />
             </svg>
             <span class="tool-name">{call.name}</span>
             <span class="tool-status-badge">调用中…</span>
@@ -229,24 +257,35 @@
           {assistantMsg?.errorMessage ?? '发生错误。'}
         </div>
       {/if}
-
     {:else if isToolResult}
       <!-- Tool result card -->
       <div class="tool-result-card" class:error={toolResultMsg?.isError}>
         <div class="tool-result-header">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg
+            width="11"
+            height="11"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
             {#if toolResultMsg?.isError}
-              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+              <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line
+                x1="12"
+                y1="16"
+                x2="12.01"
+                y2="16"
+              />
             {:else}
-              <polyline points="20 6 9 17 4 12"/>
+              <polyline points="20 6 9 17 4 12" />
             {/if}
           </svg>
           <span class="tool-name">{toolResultMsg?.toolName ?? 'tool'}</span>
         </div>
         <pre class="tool-result-text">{toolResultMsg?.content
-          .filter((c) => c.type === 'text')
-          .map((c) => (c as TextContent).text)
-          .join('\n')}</pre>
+            .filter((c) => c.type === 'text')
+            .map((c) => (c as TextContent).text)
+            .join('\n')}</pre>
         {#if openFilePath}
           <div class="tool-result-open">
             <a
@@ -255,15 +294,29 @@
               rel="noopener noreferrer"
               class="open-file-link"
             >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/>
-                <polyline points="13 2 13 9 20 9"/>
+              <svg
+                width="11"
+                height="11"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z" />
+                <polyline points="13 2 13 9 20 9" />
               </svg>
               {openFilePath}
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
-                <polyline points="15 3 21 3 21 9"/>
-                <line x1="10" y1="14" x2="21" y2="3"/>
+              <svg
+                width="10"
+                height="10"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
+                <polyline points="15 3 21 3 21 9" />
+                <line x1="10" y1="14" x2="21" y2="3" />
               </svg>
             </a>
           </div>
@@ -363,13 +416,17 @@
     transition: color 0.1s;
   }
 
-  .thinking-toggle:hover { color: var(--text-secondary); }
+  .thinking-toggle:hover {
+    color: var(--text-secondary);
+  }
 
   .chevron {
     transition: transform 0.2s;
     flex-shrink: 0;
   }
-  .chevron.open { transform: rotate(90deg); }
+  .chevron.open {
+    transform: rotate(90deg);
+  }
 
   .thinking-indicator {
     color: var(--accent);
@@ -378,8 +435,13 @@
   }
 
   @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.3; }
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.3;
+    }
   }
 
   .thinking-body {
@@ -521,38 +583,83 @@
     word-break: break-word;
   }
 
-  :global(.markdown-body p) { margin: 0 0 0.75em; }
-  :global(.markdown-body p:last-child) { margin-bottom: 0; }
-  :global(.markdown-body h1, .markdown-body h2, .markdown-body h3) {
-    font-weight: 600; margin: 1.25em 0 0.5em; line-height: 1.3; color: var(--text-primary);
+  :global(.markdown-body p) {
+    margin: 0 0 0.75em;
   }
-  :global(.markdown-body h1) { font-size: 1.4em; }
-  :global(.markdown-body h2) { font-size: 1.2em; }
-  :global(.markdown-body h3) { font-size: 1.05em; }
-  :global(.markdown-body ul, .markdown-body ol) { padding-left: 1.5em; margin: 0.5em 0; }
-  :global(.markdown-body li) { margin: 0.25em 0; }
+  :global(.markdown-body p:last-child) {
+    margin-bottom: 0;
+  }
+  :global(.markdown-body h1, .markdown-body h2, .markdown-body h3) {
+    font-weight: 600;
+    margin: 1.25em 0 0.5em;
+    line-height: 1.3;
+    color: var(--text-primary);
+  }
+  :global(.markdown-body h1) {
+    font-size: 1.4em;
+  }
+  :global(.markdown-body h2) {
+    font-size: 1.2em;
+  }
+  :global(.markdown-body h3) {
+    font-size: 1.05em;
+  }
+  :global(.markdown-body ul, .markdown-body ol) {
+    padding-left: 1.5em;
+    margin: 0.5em 0;
+  }
+  :global(.markdown-body li) {
+    margin: 0.25em 0;
+  }
   :global(.markdown-body pre) {
-    background: var(--code-bg); border-radius: 8px; padding: 12px 16px;
-    overflow-x: auto; margin: 0.75em 0; font-size: 0.875em; border: 1px solid var(--border);
+    background: var(--code-bg);
+    border-radius: 8px;
+    padding: 12px 16px;
+    overflow-x: auto;
+    margin: 0.75em 0;
+    font-size: 0.875em;
+    border: 1px solid var(--border);
   }
   :global(.markdown-body code) {
-    font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace; font-size: 0.875em;
+    font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace;
+    font-size: 0.875em;
   }
   :global(.markdown-body p code, .markdown-body li code) {
-    background: var(--code-inline-bg); padding: 2px 5px; border-radius: 4px;
+    background: var(--code-inline-bg);
+    padding: 2px 5px;
+    border-radius: 4px;
     color: var(--code-inline-color);
   }
   :global(.markdown-body blockquote) {
-    border-left: 3px solid var(--accent); padding-left: 1em;
-    margin: 0.75em 0; color: var(--text-secondary);
+    border-left: 3px solid var(--accent);
+    padding-left: 1em;
+    margin: 0.75em 0;
+    color: var(--text-secondary);
   }
-  :global(.markdown-body table) { border-collapse: collapse; width: 100%; margin: 0.75em 0; font-size: 0.9em; }
+  :global(.markdown-body table) {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 0.75em 0;
+    font-size: 0.9em;
+  }
   :global(.markdown-body th, .markdown-body td) {
-    border: 1px solid var(--border); padding: 6px 12px; text-align: left;
+    border: 1px solid var(--border);
+    padding: 6px 12px;
+    text-align: left;
   }
-  :global(.markdown-body th) { background: var(--surface-elevated); font-weight: 600; }
-  :global(.markdown-body a) { color: var(--accent); text-decoration: underline; }
-  :global(.markdown-body hr) { border: none; border-top: 1px solid var(--border); margin: 1em 0; }
+  :global(.markdown-body th) {
+    background: var(--surface-elevated);
+    font-weight: 600;
+  }
+  :global(.markdown-body a) {
+    color: var(--accent);
+    text-decoration: underline;
+  }
+  :global(.markdown-body hr) {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 1em 0;
+  }
 
   .cursor-blink {
     display: inline-block;
@@ -561,7 +668,12 @@
   }
 
   @keyframes blink {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0; }
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0;
+    }
   }
 </style>

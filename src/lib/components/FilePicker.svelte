@@ -1,21 +1,21 @@
 <script lang="ts">
-  import type { FileEntry } from '$lib/fs/mention';
+  import type { FileEntry } from '$lib/fs/mention'
 
   interface Props {
-    files: FileEntry[];
-    selectedIndex: number;
-    onSelect: (file: FileEntry) => void;
+    files: FileEntry[]
+    selectedIndex: number
+    onSelect: (file: FileEntry) => void
   }
-  let { files, selectedIndex, onSelect }: Props = $props();
+  let { files, selectedIndex, onSelect }: Props = $props()
 
-  let listEl = $state<HTMLDivElement | undefined>(undefined);
+  let listEl = $state<HTMLDivElement | undefined>(undefined)
 
   // Keep the active item visible when keyboard-navigating.
   $effect(() => {
-    void selectedIndex;
-    const active = listEl?.querySelector<HTMLElement>('.item.active');
-    active?.scrollIntoView({ block: 'nearest' });
-  });
+    void selectedIndex
+    const active = listEl?.querySelector<HTMLElement>('.item.active')
+    active?.scrollIntoView({ block: 'nearest' })
+  })
 </script>
 
 <div class="picker" bind:this={listEl} role="listbox" aria-label="选择文件">
@@ -34,14 +34,23 @@
         tabindex="-1"
         onmousedown={(e) => {
           // Prevent textarea blur before the click fires.
-          e.preventDefault();
-          onSelect(file);
+          e.preventDefault()
+          onSelect(file)
         }}
       >
-        <svg class="icon" width="13" height="13" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-          <polyline points="14 2 14 8 20 8"/>
+        <svg
+          class="icon"
+          width="13"
+          height="13"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+          <polyline points="14 2 14 8 20 8" />
         </svg>
         <span class="name">{file.name}</span>
         {#if file.path !== file.name}

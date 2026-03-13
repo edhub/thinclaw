@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { onMount, onDestroy, tick } from 'svelte';
-  import Sidebar from '$lib/components/Sidebar.svelte';
-  import ChatMessage from '$lib/components/ChatMessage.svelte';
-  import ChatInput from '$lib/components/ChatInput.svelte';
-  import Settings from '$lib/components/Settings.svelte';
-  import ModelSwitcher from '$lib/components/ModelSwitcher.svelte';
-  import PersonaPicker from '$lib/components/PersonaPicker.svelte';
+  import { onMount, onDestroy, tick } from 'svelte'
+  import Sidebar from '$lib/components/Sidebar.svelte'
+  import ChatMessage from '$lib/components/ChatMessage.svelte'
+  import ChatInput from '$lib/components/ChatInput.svelte'
+  import Settings from '$lib/components/Settings.svelte'
+  import ModelSwitcher from '$lib/components/ModelSwitcher.svelte'
+  import PersonaPicker from '$lib/components/PersonaPicker.svelte'
   import {
     loadConversations,
     selectConversation,
@@ -21,82 +21,85 @@
     streamError,
     abortStreaming,
     compactionStatus,
-  } from '$lib/stores/chat';
-  import { get } from 'svelte/store';
-  import { nanoid } from '$lib/utils/nanoid';
-  import type { AgentMessage } from '@mariozechner/pi-agent-core';
+  } from '$lib/stores/chat'
+  import { get } from 'svelte/store'
+  import { nanoid } from '$lib/utils/nanoid'
+  import type { AgentMessage } from '@mariozechner/pi-agent-core'
 
   // Assign a stable random key to each message object on first encounter.
   // Using WeakMap avoids memory leaks — keys are GC'd with their message objects.
-  const msgKeys = new WeakMap<AgentMessage, string>();
+  const msgKeys = new WeakMap<AgentMessage, string>()
   function keyOf(msg: AgentMessage): string {
-    let k = msgKeys.get(msg);
-    if (!k) { k = nanoid(); msgKeys.set(msg, k); }
-    return k;
+    let k = msgKeys.get(msg)
+    if (!k) {
+      k = nanoid()
+      msgKeys.set(msg, k)
+    }
+    return k
   }
-  import type { ImageContent } from '@mariozechner/pi-ai';
-  import { memories } from '$lib/stores/memory';
+  import type { ImageContent } from '@mariozechner/pi-ai'
+  import { memories } from '$lib/stores/memory'
 
-  import { settings } from '$lib/stores/settings';
-  import { sweepSessions } from '$lib/fs/session-recorder';
+  import { settings } from '$lib/stores/settings'
+  import { sweepSessions } from '$lib/fs/session-recorder'
 
-  let showSettings = $state(false);
-  let sidebarOpen = $state(false);
-  let chatEndEl = $state<HTMLDivElement | undefined>(undefined);
-  let chatInputRef = $state<{ focus: () => void } | undefined>(undefined);
+  let showSettings = $state(false)
+  let sidebarOpen = $state(false)
+  let chatEndEl = $state<HTMLDivElement | undefined>(undefined)
+  let chatInputRef = $state<{ focus: () => void } | undefined>(undefined)
 
   function handleGlobalKeydown(e: KeyboardEvent) {
     if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-      e.preventDefault();
+      e.preventDefault()
       if ($activeConversationId) {
-        chatInputRef?.focus();
+        chatInputRef?.focus()
       } else {
-        createConversation();
-        tick().then(() => chatInputRef?.focus());
+        createConversation()
+        tick().then(() => chatInputRef?.focus())
       }
     }
   }
 
   onMount(async () => {
-    document.addEventListener('keydown', handleGlobalKeydown);
+    document.addEventListener('keydown', handleGlobalKeydown)
 
     // Sweep expired session files once per browser session (non-blocking).
-    sweepSessions().catch(() => {});
+    sweepSessions().catch(() => {})
     // Load memories once at startup. The memory_save / memory_delete tools
     // keep the store in sync incrementally — no need to reload on every agent turn.
-    await memories.load();
-    await loadConversations();
+    await memories.load()
+    await loadConversations()
     // Auto-open the most recent conversation on startup.
-    const list = get(conversations);
-    if (list.length > 0) await selectConversation(list[0].id);
-  });
+    const list = get(conversations)
+    if (list.length > 0) await selectConversation(list[0].id)
+  })
 
-  onDestroy(() => document.removeEventListener('keydown', handleGlobalKeydown));
+  onDestroy(() => document.removeEventListener('keydown', handleGlobalKeydown))
 
   // Auto-scroll when messages or streaming message change
   $effect(() => {
-    const _a = $activeMessages.length;
-    const _b = $streamingMessage;
-    const _c = $pendingUserMessage;
-    void _a; void _b; void _c;
-    const behavior = $streamingMessage ? 'instant' : 'smooth';
-    chatEndEl?.scrollIntoView({ behavior, block: 'end' });
-  });
+    const _a = $activeMessages.length
+    const _b = $streamingMessage
+    const _c = $pendingUserMessage
+    void _a
+    void _b
+    void _c
+    const behavior = $streamingMessage ? 'instant' : 'smooth'
+    chatEndEl?.scrollIntoView({ behavior, block: 'end' })
+  })
 
   async function handleSend(content: string, images: ImageContent[]) {
-    await sendMessage(content, images);
+    await sendMessage(content, images)
   }
 
   // Apply theme
   $effect(() => {
-    const theme = $settings.theme;
-    const root = document.documentElement;
-    if (theme === 'dark') root.setAttribute('data-theme', 'dark');
-    else if (theme === 'light') root.setAttribute('data-theme', 'light');
-    else root.removeAttribute('data-theme');
-  });
-
-
+    const theme = $settings.theme
+    const root = document.documentElement
+    if (theme === 'dark') root.setAttribute('data-theme', 'dark')
+    else if (theme === 'light') root.setAttribute('data-theme', 'light')
+    else root.removeAttribute('data-theme')
+  })
 </script>
 
 <svelte:head>
@@ -107,11 +110,7 @@
   <!-- Mobile backdrop (shown when sidebar is open) -->
   {#if sidebarOpen}
     <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <div
-      class="mobile-backdrop"
-      role="presentation"
-      onclick={() => (sidebarOpen = false)}
-    ></div>
+    <div class="mobile-backdrop" role="presentation" onclick={() => (sidebarOpen = false)}></div>
   {/if}
 
   <Sidebar
@@ -124,10 +123,17 @@
     <!-- Mobile-only top bar -->
     <header class="mobile-header">
       <button class="btn-hamburger" onclick={() => (sidebarOpen = true)} aria-label="打开侧边栏">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="3" y1="6" x2="21" y2="6"/>
-          <line x1="3" y1="12" x2="21" y2="12"/>
-          <line x1="3" y1="18" x2="21" y2="18"/>
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <line x1="3" y1="6" x2="21" y2="6" />
+          <line x1="3" y1="12" x2="21" y2="12" />
+          <line x1="3" y1="18" x2="21" y2="18" />
         </svg>
       </button>
       <span class="mobile-title">
@@ -135,9 +141,18 @@
       </span>
       <ModelSwitcher />
       <button class="btn-mobile-settings" onclick={() => (showSettings = true)} aria-label="设置">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="3"/>
-          <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+        <svg
+          width="17"
+          height="17"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <circle cx="12" cy="12" r="3" />
+          <path
+            d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"
+          />
         </svg>
       </button>
     </header>
@@ -146,9 +161,18 @@
     <div class="chat-controls">
       <ModelSwitcher />
       <button class="btn-settings" onclick={() => (showSettings = true)} aria-label="设置">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="3"/>
-          <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <circle cx="12" cy="12" r="3" />
+          <path
+            d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"
+          />
         </svg>
       </button>
     </div>
@@ -166,9 +190,7 @@
             以添加您的密钥。
           </p>
         {:else}
-          <button class="btn-start" onclick={() => createConversation()}>
-            开始对话
-          </button>
+          <button class="btn-start" onclick={() => createConversation()}> 开始对话 </button>
         {/if}
       </div>
     {:else}
@@ -195,7 +217,9 @@
             <div class="ai-loading">
               <div class="ai-loading-avatar">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
+                  <path
+                    d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"
+                  />
                 </svg>
               </div>
               <div class="ai-loading-dots">
@@ -211,10 +235,17 @@
 
           {#if $streamError}
             <div class="error-banner">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"/>
-                <line x1="12" y1="8" x2="12" y2="12"/>
-                <line x1="12" y1="16" x2="12.01" y2="16"/>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
               </svg>
               {$streamError}
             </div>
@@ -270,7 +301,9 @@
     color: var(--text-primary);
   }
 
-  .welcome-icon { font-size: 3rem; }
+  .welcome-icon {
+    font-size: 3rem;
+  }
 
   .welcome h1 {
     font-size: 1.75rem;
@@ -279,7 +312,11 @@
     letter-spacing: -0.02em;
   }
 
-  .welcome p { color: var(--text-secondary); margin: 0; font-size: 1rem; }
+  .welcome p {
+    color: var(--text-secondary);
+    margin: 0;
+    font-size: 1rem;
+  }
 
   .warn {
     background: var(--warn-bg, var(--error-bg));
@@ -314,7 +351,9 @@
     margin-top: 8px;
     transition: opacity 0.1s;
   }
-  .btn-start:hover { opacity: 0.85; }
+  .btn-start:hover {
+    opacity: 0.85;
+  }
 
   /* Messages */
   .messages {
@@ -379,12 +418,24 @@
     animation: ai-dot-bounce 1.2s ease-in-out infinite;
   }
 
-  .ai-loading-dots span:nth-child(2) { animation-delay: 0.2s; }
-  .ai-loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+  .ai-loading-dots span:nth-child(2) {
+    animation-delay: 0.2s;
+  }
+  .ai-loading-dots span:nth-child(3) {
+    animation-delay: 0.4s;
+  }
 
   @keyframes ai-dot-bounce {
-    0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
-    40% { transform: translateY(-5px); opacity: 1; }
+    0%,
+    80%,
+    100% {
+      transform: translateY(0);
+      opacity: 0.4;
+    }
+    40% {
+      transform: translateY(-5px);
+      opacity: 1;
+    }
   }
 
   .compaction-banner {
@@ -411,7 +462,9 @@
   }
 
   @keyframes spin {
-    to { transform: rotate(360deg); }
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   /* ── Mobile backdrop ── */

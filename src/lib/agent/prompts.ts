@@ -7,20 +7,20 @@
  *   3. Memory     — persistent facts saved across conversations (IndexedDB)
  *   4. Custom     — optional extra instructions from the user (Settings)
  */
-import type { Memory } from '$lib/db';
+import type { Memory } from '$lib/db'
 
 /**
  * Format a memory list into the block injected into the system prompt.
  * Returns an empty string when there are no memories.
  */
 export function formatMemoriesForPrompt(mems: Memory[]): string {
-  if (mems.length === 0) return '';
+  if (mems.length === 0) return ''
   return mems
     .map((m) => {
-      const date = new Date(m.createdAt).toLocaleDateString('en-CA'); // YYYY-MM-DD
-      return `- [${date}] ${m.content}`;
+      const date = new Date(m.createdAt).toLocaleDateString('en-CA') // YYYY-MM-DD
+      return `- [${date}] ${m.content}`
     })
-    .join('\n');
+    .join('\n')
 }
 
 /**
@@ -37,22 +37,22 @@ export function buildSystemPrompt(
   customInstructions?: string,
   personaContent?: string,
 ): string {
-  const parts: string[] = [];
+  const parts: string[] = []
 
   // Layer 1: Soul
-  parts.push(`## Your Soul\n${soulContent}`);
+  parts.push(`## Your Soul\n${soulContent}`)
 
   // Layer 2: Active Persona (omit if none selected)
   if (personaContent?.trim()) {
     parts.push(
       `## Active Persona\n\nYou are temporarily playing the following role in this conversation. ` +
         `Your soul and core identity remain unchanged — this persona shapes *how* you behave here, not *who* you are.\n\n---\n\n${personaContent.trim()}`,
-    );
+    )
   }
 
   // Layer 3: Memory (omit section if empty)
   if (memoriesText) {
-    parts.push(`## Your Memory\n${memoriesText}`);
+    parts.push(`## Your Memory\n${memoriesText}`)
   }
 
   // Layer 4: How to operate (tool guidance)
@@ -62,12 +62,12 @@ export function buildSystemPrompt(
 - When the user shares something worth keeping (name, preferences, projects, context), call \`memory_save\`. Don't rely on conversation context alone; write it down.
 - Use \`memory_recall\` to search past memories when you need context from earlier conversations.
 - Use \`memory_delete\` to remove stale or wrong memories.
-- Available tools: \`calculate\`, \`get_datetime\`, \`soul_update\`, \`soul_read\`, \`memory_save\`, \`memory_recall\`, \`memory_delete\``);
+- Available tools: \`calculate\`, \`get_datetime\`, \`soul_update\`, \`soul_read\`, \`memory_save\`, \`memory_recall\`, \`memory_delete\``)
 
   // Layer 5: Custom instructions (omit if empty)
   if (customInstructions?.trim()) {
-    parts.push(`## Custom Instructions\n${customInstructions.trim()}`);
+    parts.push(`## Custom Instructions\n${customInstructions.trim()}`)
   }
 
-  return parts.join('\n\n');
+  return parts.join('\n\n')
 }

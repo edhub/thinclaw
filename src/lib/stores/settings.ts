@@ -5,61 +5,61 @@
  * The persona concept has been removed — the AI's identity is managed
  * entirely through the soul (see src/lib/soul.ts).
  */
-import { writable, get } from 'svelte/store';
-import { browser } from '$app/environment';
-import { MODELS, DEFAULT_MODEL_ID } from '$lib/agent/models';
+import { writable, get } from 'svelte/store'
+import { browser } from '$app/environment'
+import { MODELS, DEFAULT_MODEL_ID } from '$lib/agent/models'
 
-export { MODELS };
+export { MODELS }
 
-export type Theme = 'light' | 'dark' | 'system';
+export type Theme = 'light' | 'dark' | 'system'
 
 export interface Settings {
-  apiKey: string;
-  model: string;           // Model id for the main conversation
-  theme: Theme;
-  systemPrompt: string;    // Optional extra instructions appended to the system prompt
+  apiKey: string
+  model: string // Model id for the main conversation
+  theme: Theme
+  systemPrompt: string // Optional extra instructions appended to the system prompt
 }
 
-const STORAGE_KEY = 'thinclaw:settings';
+const STORAGE_KEY = 'thinclaw:settings'
 
 const DEFAULTS: Settings = {
   apiKey: '',
   model: DEFAULT_MODEL_ID,
   theme: 'system',
   systemPrompt: '',
-};
+}
 
 function loadFromStorage(): Settings {
-  if (!browser) return DEFAULTS;
+  if (!browser) return DEFAULTS
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULTS;
-    const parsed: Settings = { ...DEFAULTS, ...JSON.parse(raw) };
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return DEFAULTS
+    const parsed: Settings = { ...DEFAULTS, ...JSON.parse(raw) }
     // If the stored model no longer exists (e.g. after an app update), fall back to default.
     if (!MODELS.find((m) => m.id === parsed.model)) {
-      parsed.model = DEFAULT_MODEL_ID;
+      parsed.model = DEFAULT_MODEL_ID
     }
-    return parsed;
+    return parsed
   } catch {
-    return DEFAULTS;
+    return DEFAULTS
   }
 }
 
 function createSettingsStore() {
-  const store = writable<Settings>(loadFromStorage());
+  const store = writable<Settings>(loadFromStorage())
 
   return {
     subscribe: store.subscribe,
     set(value: Settings) {
-      store.set(value);
-      if (browser) localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
+      store.set(value)
+      if (browser) localStorage.setItem(STORAGE_KEY, JSON.stringify(value))
     },
     update(fn: (s: Settings) => Settings) {
-      const next = fn(get(store));
-      store.set(next);
-      if (browser) localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      const next = fn(get(store))
+      store.set(next)
+      if (browser) localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
     },
-  };
+  }
 }
 
-export const settings = createSettingsStore();
+export const settings = createSettingsStore()

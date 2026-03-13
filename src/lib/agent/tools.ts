@@ -20,11 +20,11 @@
  *   fs_move         — move or rename a file
  *   fs_delete       — delete a file or directory
  */
-import { Type } from '@mariozechner/pi-ai';
-import type { AgentTool } from '@mariozechner/pi-agent-core';
-import { soul } from '$lib/agent/soul';
-import { memories } from '$lib/stores/memory';
-import { fsTools } from '$lib/fs/tools';
+import { Type } from '@mariozechner/pi-ai'
+import type { AgentTool } from '@mariozechner/pi-agent-core'
+import { soul } from '$lib/agent/soul'
+import { memories } from '$lib/stores/memory'
+import { fsTools } from '$lib/fs/tools'
 
 // ─── calculate ────────────────────────────────────────────────────────────────
 
@@ -32,7 +32,7 @@ const calculateParams = Type.Object({
   expression: Type.String({
     description: 'JS math expression to evaluate, e.g. "2 + 2 * 3" or "Math.sqrt(144)"',
   }),
-});
+})
 
 export const calculateTool: AgentTool<typeof calculateParams> = {
   name: 'calculate',
@@ -43,28 +43,28 @@ export const calculateTool: AgentTool<typeof calculateParams> = {
   execute: async (_id, { expression }) => {
     try {
       // eslint-disable-next-line no-new-func
-      const result = new Function(`"use strict"; return (${expression})`)();
+      const result = new Function(`"use strict"; return (${expression})`)()
       const text =
         typeof result === 'number' && !isFinite(result)
           ? `Error: result is ${result}`
-          : `${expression} = ${result}`;
+          : `${expression} = ${result}`
       return {
         content: [{ type: 'text' as const, text }],
         details: { expression, result },
-      };
+      }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = e instanceof Error ? e.message : String(e)
       return {
         content: [{ type: 'text' as const, text: `Error evaluating "${expression}": ${msg}` }],
         details: { expression, error: msg },
-      };
+      }
     }
   },
-};
+}
 
 // ─── get_datetime ─────────────────────────────────────────────────────────────
 
-const datetimeParams = Type.Object({});
+const datetimeParams = Type.Object({})
 
 export const datetimeTool: AgentTool<typeof datetimeParams> = {
   name: 'get_datetime',
@@ -72,20 +72,20 @@ export const datetimeTool: AgentTool<typeof datetimeParams> = {
   description: "Get the current date and time in the user's local timezone.",
   parameters: datetimeParams,
   execute: async () => {
-    const now = new Date();
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const now = new Date()
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
     const local = now.toLocaleString(undefined, {
       timeZone: tz,
       dateStyle: 'full',
       timeStyle: 'long',
-    });
-    const iso = now.toISOString();
+    })
+    const iso = now.toISOString()
     return {
       content: [{ type: 'text' as const, text: `${local} (${tz})` }],
       details: { iso, local, timezone: tz },
-    };
+    }
   },
-};
+}
 
 // ─── soul_update ──────────────────────────────────────────────────────────────
 
@@ -94,16 +94,16 @@ const soulUpdateParams = Type.Object({
     description:
       'The new soul content (full replacement, Markdown). Write the complete soul — not just a diff.',
   }),
-});
+})
 
 export const soulUpdateTool: AgentTool<typeof soulUpdateParams> = {
   name: 'soul_update',
   label: 'Update Soul',
   description:
-    "Update your soul — your core identity, values, and operating principles. Use when something about who you are needs to evolve. Always tell the user what changed and why after calling this tool.",
+    'Update your soul — your core identity, values, and operating principles. Use when something about who you are needs to evolve. Always tell the user what changed and why after calling this tool.',
   parameters: soulUpdateParams,
   execute: async (_id, { content }) => {
-    soul.set(content);
+    soul.set(content)
     return {
       content: [
         {
@@ -112,13 +112,13 @@ export const soulUpdateTool: AgentTool<typeof soulUpdateParams> = {
         },
       ],
       details: { length: content.length },
-    };
+    }
   },
-};
+}
 
 // ─── soul_read ────────────────────────────────────────────────────────────────
 
-const soulReadParams = Type.Object({});
+const soulReadParams = Type.Object({})
 
 export const soulReadTool: AgentTool<typeof soulReadParams> = {
   name: 'soul_read',
@@ -127,22 +127,22 @@ export const soulReadTool: AgentTool<typeof soulReadParams> = {
     'Read your current soul. Useful mid-conversation when you want to reference or reflect on your identity before deciding whether to update it.',
   parameters: soulReadParams,
   execute: async () => {
-    const content = soul.current();
+    const content = soul.current()
     return {
       content: [{ type: 'text' as const, text: content }],
       details: { length: content.length },
-    };
+    }
   },
-};
+}
 
 // ─── memory_save ─────────────────────────────────────────────────────────────
 
 const memorySaveParams = Type.Object({
   content: Type.String({
     description:
-      "The memory to save. Be concise and specific — one fact or note per entry. E.g. \"User's name is Alice\", \"Prefers TypeScript over JavaScript\", \"Working on a SvelteKit project called ThinClaw\".",
+      'The memory to save. Be concise and specific — one fact or note per entry. E.g. "User\'s name is Alice", "Prefers TypeScript over JavaScript", "Working on a SvelteKit project called ThinClaw".',
   }),
-});
+})
 
 export const memorySaveTool: AgentTool<typeof memorySaveParams> = {
   name: 'memory_save',
@@ -151,13 +151,13 @@ export const memorySaveTool: AgentTool<typeof memorySaveParams> = {
     "Persist a memory that should survive across conversations: the user's name, preferences, ongoing projects, important facts. If someone says 'remember this' — write it down.",
   parameters: memorySaveParams,
   execute: async (_id, { content }) => {
-    const mem = await memories.add(content);
+    const mem = await memories.add(content)
     return {
       content: [{ type: 'text' as const, text: `Memory saved (id: ${mem.id})` }],
       details: { id: mem.id, content },
-    };
+    }
   },
-};
+}
 
 // ─── memory_recall ────────────────────────────────────────────────────────────
 
@@ -165,7 +165,7 @@ const memoryRecallParams = Type.Object({
   query: Type.String({
     description: 'Keywords to search for. All tokens must match (case-insensitive).',
   }),
-});
+})
 
 export const memoryRecallTool: AgentTool<typeof memoryRecallParams> = {
   name: 'memory_recall',
@@ -174,31 +174,31 @@ export const memoryRecallTool: AgentTool<typeof memoryRecallParams> = {
     'Search your saved memories by keywords. Use to retrieve context that was stored in a previous conversation.',
   parameters: memoryRecallParams,
   execute: async (_id, { query }) => {
-    const results = await memories.search(query);
+    const results = await memories.search(query)
     if (results.length === 0) {
       return {
         content: [{ type: 'text' as const, text: `No memories found for: "${query}"` }],
         details: { query, count: 0 },
-      };
+      }
     }
     const text = results
       .map((m) => {
-        const date = new Date(m.createdAt).toLocaleDateString('en-CA');
-        return `[${m.id}] [${date}] ${m.content}`;
+        const date = new Date(m.createdAt).toLocaleDateString('en-CA')
+        return `[${m.id}] [${date}] ${m.content}`
       })
-      .join('\n');
+      .join('\n')
     return {
       content: [{ type: 'text' as const, text }],
       details: { query, count: results.length },
-    };
+    }
   },
-};
+}
 
 // ─── memory_delete ────────────────────────────────────────────────────────────
 
 const memoryDeleteParams = Type.Object({
   id: Type.String({ description: 'ID of the memory to delete (from memory_recall results).' }),
-});
+})
 
 export const memoryDeleteTool: AgentTool<typeof memoryDeleteParams> = {
   name: 'memory_delete',
@@ -206,13 +206,13 @@ export const memoryDeleteTool: AgentTool<typeof memoryDeleteParams> = {
   description: 'Delete a specific memory by its ID. Use to remove stale or incorrect entries.',
   parameters: memoryDeleteParams,
   execute: async (_id, { id }) => {
-    await memories.remove(id);
+    await memories.remove(id)
     return {
       content: [{ type: 'text' as const, text: `Memory ${id} deleted.` }],
       details: { id },
-    };
+    }
   },
-};
+}
 
 // ─── export ───────────────────────────────────────────────────────────────────
 
@@ -225,4 +225,4 @@ export const browserTools: AgentTool[] = [
   memoryRecallTool as unknown as AgentTool,
   memoryDeleteTool as unknown as AgentTool,
   ...fsTools,
-];
+]

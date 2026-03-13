@@ -5,48 +5,48 @@
   Goal: readable at a glance, full data accessible on demand.
 -->
 <script lang="ts">
-  import type { SessionEntry } from '$lib/fs/session-recorder';
+  import type { SessionEntry } from '$lib/fs/session-recorder'
 
   interface Props {
-    entries: SessionEntry[];
+    entries: SessionEntry[]
   }
-  let { entries }: Props = $props();
+  let { entries }: Props = $props()
 
   // Track which entries are expanded (by index)
-  let expanded = $state<Set<number>>(new Set());
+  let expanded = $state<Set<number>>(new Set())
 
   function toggle(i: number) {
-    const next = new Set(expanded);
-    if (next.has(i)) next.delete(i);
-    else next.add(i);
-    expanded = next;
+    const next = new Set(expanded)
+    if (next.has(i)) next.delete(i)
+    else next.add(i)
+    expanded = next
   }
 
   // ── Type badge config ────────────────────────────────────────────────────
 
-  type BadgeKind = 'session' | 'user' | 'assistant' | 'tool-result' | 'compaction' | 'other';
+  type BadgeKind = 'session' | 'user' | 'assistant' | 'tool-result' | 'compaction' | 'other'
 
   function badgeKind(entry: SessionEntry): BadgeKind {
-    if (entry.type === 'session') return 'session';
+    if (entry.type === 'session') return 'session'
     if (entry.type === 'message') {
-      const role = (entry as any).message?.role;
-      if (role === 'user') return 'user';
-      if (role === 'assistant') return 'assistant';
-      if (role === 'toolResult') return 'tool-result';
-      if (role === 'compactionSummary') return 'compaction';
+      const role = (entry as any).message?.role
+      if (role === 'user') return 'user'
+      if (role === 'assistant') return 'assistant'
+      if (role === 'toolResult') return 'tool-result'
+      if (role === 'compactionSummary') return 'compaction'
     }
-    return 'other';
+    return 'other'
   }
 
   function badgeLabel(entry: SessionEntry): string {
-    if (entry.type === 'session') return 'session';
+    if (entry.type === 'session') return 'session'
     if (entry.type === 'message') {
-      const role = (entry as any).message?.role ?? '?';
-      if (role === 'toolResult') return 'tool-result';
-      if (role === 'compactionSummary') return 'compaction';
-      return role;
+      const role = (entry as any).message?.role ?? '?'
+      if (role === 'toolResult') return 'tool-result'
+      if (role === 'compactionSummary') return 'compaction'
+      return role
     }
-    return (entry as { type: string }).type;
+    return (entry as { type: string }).type
   }
 
   // ── Summary extraction (one-liner per entry) ──────────────────────────────
@@ -54,8 +54,8 @@
   function summarize(entry: SessionEntry): string {
     try {
       if (entry.type === 'session') {
-        const h = entry as any;
-        const spLen = (h.systemPrompt as string | undefined)?.length ?? 0;
+        const h = entry as any
+        const spLen = (h.systemPrompt as string | undefined)?.length ?? 0
         const parts = [
           `"${h.conversationTitle}"`,
           h.model,
@@ -63,77 +63,83 @@
           ...(h.personaId ? [`persona: ${h.personaId}`] : []),
           `created ${fmtDate(new Date(h.createdAt).toISOString())}`,
           ...(spLen > 0 ? [`system prompt ${spLen.toLocaleString()} chars`] : []),
-        ];
-        return parts.join('  ·  ');
+        ]
+        return parts.join('  ·  ')
       }
       if (entry.type === 'message') {
-        const msg = (entry as any).message;
-        const role: string = msg?.role ?? '?';
+        const msg = (entry as any).message
+        const role: string = msg?.role ?? '?'
 
         if (role === 'user') {
-          return snippet(textOf(msg.content));
+          return snippet(textOf(msg.content))
         }
         if (role === 'assistant') {
           const texts = (msg.content ?? [])
             .filter((b: any) => b.type === 'text')
-            .map((b: any) => b.text as string);
-          const thinking = (msg.content ?? []).filter((b: any) => b.type === 'thinking');
-          const tools = (msg.content ?? []).filter((b: any) => b.type === 'toolCall');
-          const parts: string[] = [];
-          if (thinking.length) parts.push(`💭 ${thinking.length} thinking block${thinking.length > 1 ? 's' : ''}`);
-          if (tools.length)    parts.push(`🔧 ${tools.map((t: any) => t.name).join(', ')}`);
-          if (texts.length)    parts.push(snippet(texts.join('')));
-          if (msg.usage?.totalTokens) parts.push(`[${msg.usage.totalTokens.toLocaleString()} tokens]`);
-          return parts.join('  ·  ') || '(empty)';
+            .map((b: any) => b.text as string)
+          const thinking = (msg.content ?? []).filter((b: any) => b.type === 'thinking')
+          const tools = (msg.content ?? []).filter((b: any) => b.type === 'toolCall')
+          const parts: string[] = []
+          if (thinking.length)
+            parts.push(`💭 ${thinking.length} thinking block${thinking.length > 1 ? 's' : ''}`)
+          if (tools.length) parts.push(`🔧 ${tools.map((t: any) => t.name).join(', ')}`)
+          if (texts.length) parts.push(snippet(texts.join('')))
+          if (msg.usage?.totalTokens)
+            parts.push(`[${msg.usage.totalTokens.toLocaleString()} tokens]`)
+          return parts.join('  ·  ') || '(empty)'
         }
         if (role === 'toolResult') {
           const resultText = (msg.content ?? [])
             .filter((b: any) => b.type === 'text')
             .map((b: any) => b.text as string)
-            .join('');
-          const err = msg.isError ? '❌ error  ·  ' : '';
-          return `${msg.toolName}  ·  ${err}${snippet(resultText)}`;
+            .join('')
+          const err = msg.isError ? '❌ error  ·  ' : ''
+          return `${msg.toolName}  ·  ${err}${snippet(resultText)}`
         }
         if (role === 'compactionSummary') {
-          return `~${msg.tokensBefore?.toLocaleString() ?? '?'} tokens → ${snippet(msg.summary ?? '')}`;
+          return `~${msg.tokensBefore?.toLocaleString() ?? '?'} tokens → ${snippet(msg.summary ?? '')}`
         }
-        return snippet(JSON.stringify(msg));
+        return snippet(JSON.stringify(msg))
       }
     } catch {
       // fall through
     }
-    return '';
+    return ''
   }
 
   function textOf(content: unknown): string {
-    if (typeof content === 'string') return content;
+    if (typeof content === 'string') return content
     if (Array.isArray(content)) {
       return content
         .filter((b: any) => b.type === 'text')
         .map((b: any) => b.text as string)
-        .join('');
+        .join('')
     }
-    return '';
+    return ''
   }
 
   function snippet(s: string, max = 120): string {
-    const flat = s.replace(/\s+/g, ' ').trim();
-    return flat.length > max ? flat.slice(0, max) + '…' : flat;
+    const flat = s.replace(/\s+/g, ' ').trim()
+    return flat.length > max ? flat.slice(0, max) + '…' : flat
   }
 
   function fmtDate(iso: string): string {
     try {
       return new Date(iso).toLocaleString(undefined, {
-        month: 'short', day: 'numeric',
-        hour: '2-digit', minute: '2-digit',
-      });
-    } catch { return iso; }
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    } catch {
+      return iso
+    }
   }
 
   // ── Pretty-print JSON ─────────────────────────────────────────────────────
 
   function prettyJson(entry: SessionEntry): string {
-    return JSON.stringify(entry, null, 2);
+    return JSON.stringify(entry, null, 2)
   }
 </script>
 
@@ -152,11 +158,16 @@
         <span class="badge badge-{kind}">{label}</span>
         <span class="summary">{summary}</span>
         <svg
-          class="chevron" class:open
-          width="10" height="10" viewBox="0 0 24 24"
-          fill="none" stroke="currentColor" stroke-width="2.5"
+          class="chevron"
+          class:open
+          width="10"
+          height="10"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
         >
-          <polyline points="9 18 15 12 9 6"/>
+          <polyline points="9 18 15 12 9 6" />
         </svg>
       </button>
 
@@ -167,16 +178,20 @@
           {@const h = entry as any}
           <div class="session-expanded">
             <div class="meta-block">
-              <pre class="raw-json no-border">{JSON.stringify({
-                type: h.type,
-                conversationId: h.conversationId,
-                conversationTitle: h.conversationTitle,
-                createdAt: h.createdAt,
-                timestamp: h.timestamp,
-                model: h.model,
-                thinkingLevel: h.thinkingLevel,
-                ...(h.personaId ? { personaId: h.personaId } : {}),
-              }, null, 2)}</pre>
+              <pre class="raw-json no-border">{JSON.stringify(
+                  {
+                    type: h.type,
+                    conversationId: h.conversationId,
+                    conversationTitle: h.conversationTitle,
+                    createdAt: h.createdAt,
+                    timestamp: h.timestamp,
+                    model: h.model,
+                    thinkingLevel: h.thinkingLevel,
+                    ...(h.personaId ? { personaId: h.personaId } : {}),
+                  },
+                  null,
+                  2,
+                )}</pre>
             </div>
             {#if h.systemPrompt}
               <div class="sysprompt-block">
@@ -263,12 +278,30 @@
     text-transform: lowercase;
   }
 
-  .badge-session     { background: var(--badge-session-bg);    color: var(--badge-session-fg); }
-  .badge-user        { background: var(--badge-user-bg);       color: var(--badge-user-fg); }
-  .badge-assistant   { background: var(--badge-assistant-bg);  color: var(--badge-assistant-fg); }
-  .badge-tool-result { background: var(--badge-tool-bg);       color: var(--badge-tool-fg); }
-  .badge-compaction  { background: var(--badge-compaction-bg); color: var(--badge-compaction-fg); }
-  .badge-other       { background: var(--surface-elevated);    color: var(--text-muted); }
+  .badge-session {
+    background: var(--badge-session-bg);
+    color: var(--badge-session-fg);
+  }
+  .badge-user {
+    background: var(--badge-user-bg);
+    color: var(--badge-user-fg);
+  }
+  .badge-assistant {
+    background: var(--badge-assistant-bg);
+    color: var(--badge-assistant-fg);
+  }
+  .badge-tool-result {
+    background: var(--badge-tool-bg);
+    color: var(--badge-tool-fg);
+  }
+  .badge-compaction {
+    background: var(--badge-compaction-bg);
+    color: var(--badge-compaction-fg);
+  }
+  .badge-other {
+    background: var(--surface-elevated);
+    color: var(--text-muted);
+  }
 
   /* ── Summary text ── */
   .summary {

@@ -28,16 +28,16 @@
   --warn-bg: #fffbeb;
 
   /* ── Badge tokens (session viewer, etc.) ── */
-  --badge-session-bg:     #dbeafe;
-  --badge-session-fg:     #1d4ed8;
-  --badge-user-bg:        #d1fae5;
-  --badge-user-fg:        #065f46;
-  --badge-assistant-bg:   #ede9fe;
-  --badge-assistant-fg:   #5b21b6;
-  --badge-tool-bg:        #fef3c7;
-  --badge-tool-fg:        #92400e;
-  --badge-compaction-bg:  #f3f4f6;
-  --badge-compaction-fg:  #4b5563;
+  --badge-session-bg: #dbeafe;
+  --badge-session-fg: #1d4ed8;
+  --badge-user-bg: #d1fae5;
+  --badge-user-fg: #065f46;
+  --badge-assistant-bg: #ede9fe;
+  --badge-assistant-fg: #5b21b6;
+  --badge-tool-bg: #fef3c7;
+  --badge-tool-fg: #92400e;
+  --badge-compaction-bg: #f3f4f6;
+  --badge-compaction-fg: #4b5563;
 }
 
 /* ─── Dark theme (explicit attribute) ─── */
@@ -65,16 +65,16 @@
   --warn-bg: #1c1505;
 
   /* ── Badge tokens ── */
-  --badge-session-bg:     #1e3a5f;
-  --badge-session-fg:     #93c5fd;
-  --badge-user-bg:        #064e3b;
-  --badge-user-fg:        #6ee7b7;
-  --badge-assistant-bg:   #2e1065;
-  --badge-assistant-fg:   #c4b5fd;
-  --badge-tool-bg:        #451a03;
-  --badge-tool-fg:        #fcd34d;
-  --badge-compaction-bg:  #1f2937;
-  --badge-compaction-fg:  #d1d5db;
+  --badge-session-bg: #1e3a5f;
+  --badge-session-fg: #93c5fd;
+  --badge-user-bg: #064e3b;
+  --badge-user-fg: #6ee7b7;
+  --badge-assistant-bg: #2e1065;
+  --badge-assistant-fg: #c4b5fd;
+  --badge-tool-bg: #451a03;
+  --badge-tool-fg: #fcd34d;
+  --badge-compaction-bg: #1f2937;
+  --badge-compaction-fg: #d1d5db;
 }
 
 /* ─── Dark theme (system preference, when not forced to light) ─── */
@@ -103,23 +103,28 @@
     --warn-bg: #1c1505;
 
     /* ── Badge tokens ── */
-    --badge-session-bg:     #1e3a5f;
-    --badge-session-fg:     #93c5fd;
-    --badge-user-bg:        #064e3b;
-    --badge-user-fg:        #6ee7b7;
-    --badge-assistant-bg:   #2e1065;
-    --badge-assistant-fg:   #c4b5fd;
-    --badge-tool-bg:        #451a03;
-    --badge-tool-fg:        #fcd34d;
-    --badge-compaction-bg:  #1f2937;
-    --badge-compaction-fg:  #d1d5db;
+    --badge-session-bg: #1e3a5f;
+    --badge-session-fg: #93c5fd;
+    --badge-user-bg: #064e3b;
+    --badge-user-fg: #6ee7b7;
+    --badge-assistant-bg: #2e1065;
+    --badge-assistant-fg: #c4b5fd;
+    --badge-tool-bg: #451a03;
+    --badge-tool-fg: #fcd34d;
+    --badge-compaction-bg: #1f2937;
+    --badge-compaction-fg: #d1d5db;
   }
 }
 
 /* ─── Reset & base ─── */
-*, *::before, *::after { box-sizing: border-box; }
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
 
-html, body {
+html,
+body {
   height: 100%;
   margin: 0;
   padding: 0;
@@ -135,7 +140,11 @@ body {
 }
 
 /* Disable double-tap zoom on all interactive elements */
-a, button, [role="button"], label, select {
+a,
+button,
+[role='button'],
+label,
+select {
   touch-action: manipulation;
 }
 
@@ -144,16 +153,28 @@ a, button, [role="button"], label, select {
 /* We bump inputs to 16px on mobile; visual size stays controlled by  */
 /* each component's padding/line-height rather than font-size alone.  */
 @media (max-width: 639px) {
-  input, textarea, select {
+  input,
+  textarea,
+  select {
     font-size: 16px !important;
   }
 }
 
 /* ─── Scrollbar ─── */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
 
 /* ─── Highlight.js overrides ─── */
 .hljs {

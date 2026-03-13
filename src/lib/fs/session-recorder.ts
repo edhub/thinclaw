@@ -12,66 +12,66 @@
  *      that conversation). Sweep runs once per browser session on first access.
  */
 
-import type { AgentMessage } from '@mariozechner/pi-agent-core';
+import type { AgentMessage } from '@mariozechner/pi-agent-core'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const SESSIONS_DIR = 'sessions';
-export const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const SESSIONS_DIR = 'sessions'
+export const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
 
 // ─── Entry types ──────────────────────────────────────────────────────────────
 
 export interface SessionHeader {
-  type: 'session';
-  conversationId: string;
-  conversationTitle: string;
+  type: 'session'
+  conversationId: string
+  conversationTitle: string
   /** Unix ms — when the conversation was first created. */
-  createdAt: number;
+  createdAt: number
   /** ISO timestamp — updated on every write (= last agent_end time). */
-  timestamp: string;
-  model: string;
+  timestamp: string
+  model: string
   /** Thinking/reasoning level active at last agent_end. */
-  thinkingLevel: string;
+  thinkingLevel: string
   /** Persona ID if one was selected for this conversation. */
-  personaId?: string;
+  personaId?: string
   /** Full system prompt active at the time of the last agent_end. */
-  systemPrompt: string;
+  systemPrompt: string
 }
 
 export interface SessionMessageEntry {
-  type: 'message';
-  message: AgentMessage;
+  type: 'message'
+  message: AgentMessage
 }
 
-export type SessionEntry = SessionHeader | SessionMessageEntry;
+export type SessionEntry = SessionHeader | SessionMessageEntry
 
 // ─── OPFS helpers ─────────────────────────────────────────────────────────────
 
 async function getSessionsDir(): Promise<FileSystemDirectoryHandle> {
-  const root = await navigator.storage.getDirectory();
-  return root.getDirectoryHandle(SESSIONS_DIR, { create: true });
+  const root = await navigator.storage.getDirectory()
+  return root.getDirectoryHandle(SESSIONS_DIR, { create: true })
 }
 
 // ─── TTL sweep ────────────────────────────────────────────────────────────────
 
-let sweptThisSession = false;
+let sweptThisSession = false
 
 /**
  * Delete session files whose lastModified is older than SESSION_TTL_MS.
  * No-ops after the first call per browser session.
  */
 export async function sweepSessions(): Promise<void> {
-  if (sweptThisSession) return;
-  sweptThisSession = true;
+  if (sweptThisSession) return
+  sweptThisSession = true
   try {
-    const dir = await getSessionsDir();
-    const cutoff = Date.now() - SESSION_TTL_MS;
+    const dir = await getSessionsDir()
+    const cutoff = Date.now() - SESSION_TTL_MS
     for await (const [name, handle] of dir.entries()) {
-      if (handle.kind !== 'file') continue;
-      const file = await (handle as FileSystemFileHandle).getFile();
+      if (handle.kind !== 'file') continue
+      const file = await (handle as FileSystemFileHandle).getFile()
       if (file.lastModified < cutoff) {
         try {
-          await dir.removeEntry(name);
+          await dir.removeEntry(name)
         } catch {
           // Ignore individual delete failures.
         }
@@ -99,7 +99,7 @@ export async function recordSession(
   systemPrompt: string,
   messages: AgentMessage[],
 ): Promise<void> {
-  await sweepSessions(); // lazy sweep before first write
+  await sweepSessions() // lazy sweep before first write
 
   const header: SessionHeader = {
     type: 'session',
@@ -111,20 +111,20 @@ export async function recordSession(
     thinkingLevel,
     ...(personaId ? { personaId } : {}),
     systemPrompt,
-  };
+  }
 
   const lines = [
     JSON.stringify(header),
     ...messages.map((msg) =>
       JSON.stringify({ type: 'message', message: msg } satisfies SessionMessageEntry),
     ),
-  ];
+  ]
 
-  const dir = await getSessionsDir();
-  const fileHandle = await dir.getFileHandle(`${convId}.jsonl`, { create: true });
-  const writable = await fileHandle.createWritable();
-  await writable.write(lines.join('\n'));
-  await writable.close();
+  const dir = await getSessionsDir()
+  const fileHandle = await dir.getFileHandle(`${convId}.jsonl`, { create: true })
+  const writable = await fileHandle.createWritable()
+  await writable.write(lines.join('\n'))
+  await writable.close()
 }
 
 /**
@@ -134,32 +134,32 @@ export async function recordSession(
  */
 export async function updateSessionTitle(convId: string, title: string): Promise<void> {
   try {
-    const dir = await getSessionsDir();
-    let fileHandle: FileSystemFileHandle;
+    const dir = await getSessionsDir()
+    let fileHandle: FileSystemFileHandle
     try {
-      fileHandle = await dir.getFileHandle(`${convId}.jsonl`);
+      fileHandle = await dir.getFileHandle(`${convId}.jsonl`)
     } catch {
-      return; // No session file yet — nothing to update.
+      return // No session file yet — nothing to update.
     }
 
-    const file = await fileHandle.getFile();
-    const text = await file.text();
-    const lines = text.split('\n');
-    if (lines.length === 0) return;
+    const file = await fileHandle.getFile()
+    const text = await file.text()
+    const lines = text.split('\n')
+    if (lines.length === 0) return
 
     // Parse and patch the header line (line 0).
-    let header: Record<string, unknown>;
+    let header: Record<string, unknown>
     try {
-      header = JSON.parse(lines[0]);
+      header = JSON.parse(lines[0])
     } catch {
-      return; // Malformed header — leave file untouched.
+      return // Malformed header — leave file untouched.
     }
-    header.conversationTitle = title;
-    lines[0] = JSON.stringify(header);
+    header.conversationTitle = title
+    lines[0] = JSON.stringify(header)
 
-    const writable = await fileHandle.createWritable();
-    await writable.write(lines.join('\n'));
-    await writable.close();
+    const writable = await fileHandle.createWritable()
+    await writable.write(lines.join('\n'))
+    await writable.close()
   } catch {
     // Non-fatal — title update failures are silently ignored.
   }
@@ -168,11 +168,11 @@ export async function updateSessionTitle(convId: string, title: string): Promise
 // ─── List ─────────────────────────────────────────────────────────────────────
 
 export interface SessionListItem {
-  convId: string;
+  convId: string
   /** Conversation title read from the header line of the JSONL file. */
-  title: string;
-  lastModified: number;
-  size: number;
+  title: string
+  lastModified: number
+  size: number
 }
 
 /**
@@ -181,19 +181,19 @@ export interface SessionListItem {
  */
 export async function listSessions(): Promise<SessionListItem[]> {
   try {
-    await sweepSessions();
-    const dir = await getSessionsDir();
-    const result: SessionListItem[] = [];
+    await sweepSessions()
+    const dir = await getSessionsDir()
+    const result: SessionListItem[] = []
 
     for await (const [name, handle] of dir.entries()) {
-      if (handle.kind !== 'file' || !name.endsWith('.jsonl')) continue;
-      const file = await (handle as FileSystemFileHandle).getFile();
-      const text = await file.text();
-      const firstLine = text.split('\n')[0] ?? '';
-      let title = name.replace(/\.jsonl$/, '');
+      if (handle.kind !== 'file' || !name.endsWith('.jsonl')) continue
+      const file = await (handle as FileSystemFileHandle).getFile()
+      const text = await file.text()
+      const firstLine = text.split('\n')[0] ?? ''
+      let title = name.replace(/\.jsonl$/, '')
       try {
-        const hdr = JSON.parse(firstLine) as Partial<SessionHeader>;
-        if (hdr.conversationTitle) title = hdr.conversationTitle;
+        const hdr = JSON.parse(firstLine) as Partial<SessionHeader>
+        if (hdr.conversationTitle) title = hdr.conversationTitle
       } catch {
         // Malformed header — fall back to filename.
       }
@@ -202,12 +202,12 @@ export async function listSessions(): Promise<SessionListItem[]> {
         title,
         lastModified: file.lastModified,
         size: file.size,
-      });
+      })
     }
 
-    return result.sort((a, b) => b.lastModified - a.lastModified);
+    return result.sort((a, b) => b.lastModified - a.lastModified)
   } catch {
-    return [];
+    return []
   }
 }
 
@@ -215,23 +215,23 @@ export async function listSessions(): Promise<SessionListItem[]> {
 
 /** Read the raw JSONL text for a session by conversation ID. */
 export async function readSessionFile(convId: string): Promise<string> {
-  const dir = await getSessionsDir();
-  const fileHandle = await dir.getFileHandle(`${convId}.jsonl`);
-  const file = await fileHandle.getFile();
-  return file.text();
+  const dir = await getSessionsDir()
+  const fileHandle = await dir.getFileHandle(`${convId}.jsonl`)
+  const file = await fileHandle.getFile()
+  return file.text()
 }
 
 /** Parse raw JSONL text into an array of typed session entries. */
 export function parseSessionJsonl(content: string): SessionEntry[] {
-  const entries: SessionEntry[] = [];
+  const entries: SessionEntry[] = []
   for (const line of content.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
+    const trimmed = line.trim()
+    if (!trimmed) continue
     try {
-      entries.push(JSON.parse(trimmed) as SessionEntry);
+      entries.push(JSON.parse(trimmed) as SessionEntry)
     } catch {
       // Skip malformed lines silently.
     }
   }
-  return entries;
+  return entries
 }
