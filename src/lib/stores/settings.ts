@@ -34,8 +34,12 @@ function loadFromStorage(): Settings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULTS;
-    // Spread over defaults so new fields added later get their default value
-    return { ...DEFAULTS, ...JSON.parse(raw) };
+    const parsed: Settings = { ...DEFAULTS, ...JSON.parse(raw) };
+    // If the stored model no longer exists (e.g. after an app update), fall back to default.
+    if (!MODELS.find((m) => m.id === parsed.model)) {
+      parsed.model = DEFAULT_MODEL_ID;
+    }
+    return parsed;
   } catch {
     return DEFAULTS;
   }

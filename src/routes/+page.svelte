@@ -4,6 +4,7 @@
   import ChatMessage from '$lib/components/ChatMessage.svelte';
   import ChatInput from '$lib/components/ChatInput.svelte';
   import Settings from '$lib/components/Settings.svelte';
+  import ModelSwitcher from '$lib/components/ModelSwitcher.svelte';
   import {
     loadConversations,
     sendMessage,
@@ -105,12 +106,26 @@
       <span class="mobile-title">
         {$activeConversation?.title ?? 'ThinClaw'}
       </span>
+      <ModelSwitcher />
       <button class="btn-mobile-settings" onclick={() => (showSettings = true)} aria-label="设置">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="3"/>
           <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
         </svg>
       </button>
+    </header>
+
+    <!-- Desktop chat header -->
+    <header class="chat-header">
+      <div class="chat-header-right">
+        <ModelSwitcher />
+        <button class="btn-settings" onclick={() => (showSettings = true)} aria-label="设置">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+          </svg>
+        </button>
+      </div>
     </header>
 
     {#if !$activeConversationId}
@@ -397,6 +412,41 @@
     display: none;
   }
 
+  /* ── Desktop chat header ── */
+  .chat-header {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    height: 48px;
+    padding: 0 20px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    gap: 8px;
+  }
+
+  .chat-header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .btn-settings {
+    background: none;
+    border: none;
+    padding: 6px;
+    border-radius: 8px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    transition: all 0.1s;
+    flex-shrink: 0;
+  }
+  .btn-settings:hover {
+    background: var(--surface-hover);
+    color: var(--text-primary);
+  }
+
   /* ── Mobile header (hidden on desktop) ── */
   .mobile-header {
     display: none;
@@ -412,13 +462,18 @@
       z-index: 40;
     }
 
+    /* Hide desktop header on mobile */
+    .chat-header {
+      display: none;
+    }
+
     /* Top bar replaces the sidebar brand on mobile */
     .mobile-header {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
       height: 52px;
-      padding: 0 12px;
+      padding: 0 8px 0 12px;
       border-bottom: 1px solid var(--border);
       background: var(--surface-main);
       flex-shrink: 0;

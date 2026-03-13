@@ -273,7 +273,7 @@ export async function selectConversation(id: string): Promise<void> {
   const conv = get(conversations).find((c) => c.id === id);
 
   agent.setSystemPrompt(assembleSystemPrompt());
-  const selectedModel = getModelById(conv?.model ?? get(settings).model);
+  const selectedModel = getModelById(get(settings).model);
   agent.setModel(selectedModel);
   agent.setThinkingLevel(selectedModel.reasoning ? 'medium' : 'off');
   agent.replaceMessages(msgs);
@@ -358,8 +358,7 @@ export async function sendMessage(content: string, images: ImageContent[] = []):
   }
 
   // Rebuild system prompt before every message so soul/memory changes take effect
-  const conv = get(conversations).find((c) => c.id === convId);
-  const selectedModel = getModelById(conv?.model ?? s.model);
+  const selectedModel = getModelById(s.model);
   agent.setSystemPrompt(assembleSystemPrompt());
   agent.setModel(selectedModel);
   agent.setThinkingLevel(selectedModel.reasoning ? 'medium' : 'off');
