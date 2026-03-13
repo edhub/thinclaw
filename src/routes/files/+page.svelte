@@ -3,6 +3,14 @@
   import { readFile, writeFile, listDir } from '$lib/fs/opfs';
   import type { ListEntry } from '$lib/fs/opfs';
   import { renderMarkdown } from '$lib/utils/markdown';
+  import {
+    listSessions,
+    readSessionFile,
+    parseSessionJsonl,
+    type SessionListItem,
+    type SessionEntry,
+  } from '$lib/fs/session-recorder';
+  import SessionViewer from '$lib/components/SessionViewer.svelte';
 
   // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -18,8 +26,13 @@
 
   let workspaceTree = $state<TreeNode[]>([]);
   let tmpTree       = $state<TreeNode[]>([]);
+  let sessionsList  = $state<SessionListItem[]>([]);
 
   let selectedPath  = $state<string | null>(null);
+  // For session files: the parsed entries (null = not a session)
+  let sessionEntries = $state<SessionEntry[] | null>(null);
+  let sessionLoading = $state(false);
+
   let fileContent   = $state('');
   let editContent   = $state('');
   let renderedHtml  = $state('');
@@ -32,6 +45,7 @@
 
   const fileName   = $derived(selectedPath?.split('/').pop() ?? '');
   const isMarkdown = $derived(!!selectedPath?.match(/\.(md|markdown)$/i));
+  const isSession  = $derived(sessionEntries !== null);
 
   // ─── Tree helpers ─────────────────────────────────────────────────────────
 
@@ -81,6 +95,7 @@
 
   async function openFile(path: string): Promise<void> {
     selectedPath = path;
+    sessionEntries = null;
     loading      = true;
     loadError    = null;
     mode         = 'preview';
@@ -97,6 +112,23 @@
       fileContent = '';
     } finally {
       loading = false;
+    }
+  }
+
+  async function openSession(item: SessionListItem): Promise<void> {
+    selectedPath   = `sessions/${item.convId}`;
+    sessionEntries = null;
+    sessionLoading = true;
+    loadError      = null;
+    history.replaceState(null, '', `/files?session=${encodeURIComponent(item.convId)}`);
+    try {
+      const raw      = await readSessionFile(item.convId);
+      sessionEntries = parseSessionJsonl(raw);
+    } catch (e) {
+      loadError      = e instanceof Error ? e.message : String(e);
+      sessionEntries = null;
+    } finally {
+      sessionLoading = false;
     }
   }
 
@@ -137,12 +169,14 @@
   }
 
   async function refreshTree(): Promise<void> {
-    const [wsEntries, tmpEntries] = await Promise.allSettled([
+    const [wsEntries, tmpEntries, sessions] = await Promise.allSettled([
       listDir(''),
       listDir('tmp'),
+      listSessions(),
     ]);
     if (wsEntries.status  === 'fulfilled') workspaceTree = toNodes(wsEntries.value,  '');
     if (tmpEntries.status === 'fulfilled') tmpTree       = toNodes(tmpEntries.value, 'tmp');
+    if (sessions.status   === 'fulfilled') sessionsList  = sessions.value;
   }
 
   async function switchMode(next: 'preview' | 'edit'): Promise<void> {
@@ -158,19 +192,26 @@
     document.title = 'Files — ThinClaw';
     document.addEventListener('keydown', handleKeydown);
 
-    // Load tree roots in parallel
-    const [wsEntries, tmpEntries] = await Promise.allSettled([
+    // Load tree roots and sessions list in parallel
+    const [wsEntries, tmpEntries, sessions] = await Promise.allSettled([
       listDir(''),
       listDir('tmp'),
+      listSessions(),
     ]);
     if (wsEntries.status  === 'fulfilled') workspaceTree = toNodes(wsEntries.value,  '');
     if (tmpEntries.status === 'fulfilled') tmpTree       = toNodes(tmpEntries.value, 'tmp');
+    if (sessions.status   === 'fulfilled') sessionsList  = sessions.value;
 
-    // Open file from ?path= URL param
-    const pathParam = new URLSearchParams(location.search).get('path');
+    // Open file from ?path= URL param, or session from ?session= param
+    const params    = new URLSearchParams(location.search);
+    const pathParam = params.get('path');
+    const sessParam = params.get('session');
     if (pathParam) {
       await expandToPath(pathParam);
       await openFile(pathParam);
+    } else if (sessParam) {
+      const item = sessionsList.find((s) => s.convId === sessParam);
+      if (item) await openSession(item);
     }
   });
 
@@ -203,12 +244,34 @@
       {/if}
 
       <!-- Tmp section -->
-      <div class="tree-section-label" style="margin-top: 16px;">tmp</div>
+      <div class="tree-section-label sessions-label">tmp</div>
       {#if tmpTree.length === 0}
         <div class="tree-empty">empty</div>
       {:else}
         {#each tmpTree as node}
           {@render treeNode(node, 0)}
+        {/each}
+      {/if}
+
+      <!-- Sessions section -->
+      <div class="tree-section-label sessions-label">sessions</div>
+      {#if sessionsList.length === 0}
+        <div class="tree-empty">no sessions yet</div>
+      {:else}
+        {#each sessionsList as item (item.convId)}
+          <button
+            class="tree-item tree-file session-item"
+            class:selected={selectedPath === `sessions/${item.convId}`}
+            onclick={() => openSession(item)}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" opacity="0.5">
+              <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+            </svg>
+            <span class="session-item-inner">
+              <span class="session-item-title">{item.title}</span>
+              <span class="session-item-date">{new Date(item.lastModified).toLocaleDateString()}</span>
+            </span>
+          </button>
         {/each}
       {/if}
     </div>
@@ -225,7 +288,7 @@
         <p>Select a file to view</p>
       </div>
 
-    {:else if loading}
+    {:else if loading || sessionLoading}
       <div class="empty-state">
         <p style="color: var(--text-muted)">Loading…</p>
       </div>
@@ -234,6 +297,10 @@
       <div class="empty-state">
         <p style="color: var(--error)">{loadError}</p>
       </div>
+
+    {:else if isSession && sessionEntries}
+      <!-- Session viewer: renders JSONL as a data inspector -->
+      <SessionViewer entries={sessionEntries} />
 
     {:else}
       <!-- Toolbar -->
@@ -398,6 +465,10 @@
     margin-bottom: 2px;
   }
 
+  .sessions-label {
+    margin-top: 16px;
+  }
+
   .tree-empty {
     font-size: 0.78rem;
     color: var(--text-muted);
@@ -433,6 +504,46 @@
     overflow: hidden;
     text-overflow: ellipsis;
     flex: 1;
+  }
+
+  /* Session list items have a two-line layout (title + date) */
+  .session-item {
+    align-items: flex-start;
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+
+  .session-item svg {
+    margin-top: 2px;
+    flex-shrink: 0;
+  }
+
+  .session-item-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .session-item-title {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: block;
+  }
+
+  .session-item-date {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    display: block;
+  }
+
+  .session-item:hover .session-item-title,
+  .session-item.selected .session-item-title {
+    color: inherit;
   }
 
   .chevron {

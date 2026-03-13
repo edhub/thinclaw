@@ -15,9 +15,9 @@ export type Theme = 'light' | 'dark' | 'system';
 
 export interface Settings {
   apiKey: string;
-  model: string;        // Model id from MODELS
+  model: string;           // Model id for the main conversation
   theme: Theme;
-  systemPrompt: string; // Optional extra instructions appended to the system prompt
+  systemPrompt: string;    // Optional extra instructions appended to the system prompt
 }
 
 const STORAGE_KEY = 'thinclaw:settings';

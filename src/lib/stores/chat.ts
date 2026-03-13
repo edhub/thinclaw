@@ -14,7 +14,7 @@ import { Agent } from '@mariozechner/pi-agent-core';
 import type { AgentEvent, AgentMessage } from '@mariozechner/pi-agent-core';
 import type { ImageContent, Message } from '@mariozechner/pi-ai';
 import { nanoid } from '$lib/utils/nanoid';
-import { getModelById } from '$lib/agent/models';
+import { getModelById, DEFAULT_UTILITY_MODEL_ID } from '$lib/agent/models';
 import { buildSystemPrompt, formatMemoriesForPrompt } from '$lib/agent/prompts';
 import { getPersonaById } from '$lib/agent/personas';
 import { soul } from '$lib/agent/soul';
@@ -37,8 +37,14 @@ import {
   shouldCompact,
   type CompactionSummaryMessage,
 } from '$lib/agent/compaction';
+import { recordSession, updateSessionTitle, sweepSessions } from '$lib/fs/session-recorder';
 
 // ─── Singleton agent ──────────────────────────────────────────────────────────
+
+/** Return the utility model used for background tasks (compaction, auto-title). */
+function getUtilityModel() {
+  return getModelById(DEFAULT_UTILITY_MODEL_ID);
+}
 
 /**
  * Convert AgentMessage[] → Message[] for the LLM.
@@ -179,9 +185,29 @@ async function onAgentEnd(): Promise<void> {
   await persistNewMessages();
   await loadConversations();
   await maybeCompact();
+  // Record session snapshot after compaction so the file reflects the final state.
+  persistSessionSnapshot().catch((err: unknown) => {
+    console.warn('[session] Failed to record session:', err);
+  });
   // Auto-title after 5 rounds (fire-and-forget, non-blocking).
   const convId = get(activeConversationId);
   if (convId) maybeGenerateTitle(convId, 5).catch(() => {});
+}
+
+/** Write the current conversation to OPFS sessions/{convId}.jsonl. */
+async function persistSessionSnapshot(): Promise<void> {
+  const convId = get(activeConversationId);
+  if (!convId) return;
+  const conv = get(conversations).find((c) => c.id === convId);
+  const title = conv?.title ?? '新对话';
+  const createdAt = conv?.createdAt ?? Date.now();
+  const agent = getAgent();
+  const model = agent.state.model?.id ?? '';
+  const thinkingLevel = (agent.state as any).thinkingLevel ?? 'off';
+  const systemPrompt = agent.state.systemPrompt ?? '';
+  const messages = agent.state.messages;
+  if (messages.length === 0) return;
+  await recordSession(convId, title, createdAt, model, thinkingLevel, conv?.personaId, systemPrompt, messages);
 }
 
 async function persistNewMessages(): Promise<void> {
@@ -213,20 +239,23 @@ async function persistNewMessages(): Promise<void> {
  */
 async function maybeCompact(): Promise<void> {
   const agent = getAgent();
-  const model = agent.state.model;
-  if (!model) return;
+  const mainModel = agent.state.model;
+  if (!mainModel) return;
 
   const messages = agent.state.messages;
   const contextTokens = estimateContextTokens(messages);
-  if (!shouldCompact(contextTokens, model)) return;
+  // Decide whether to compact based on the main model's context window.
+  if (!shouldCompact(contextTokens, mainModel)) return;
 
   const convId = get(activeConversationId);
-  const apiKey = (await agent.getApiKey?.(model.provider)) ?? '';
+  // Use the utility model to perform the actual summarisation.
+  const utilityModel = getUtilityModel();
+  const apiKey = (await agent.getApiKey?.(utilityModel.provider)) ?? '';
   if (!apiKey) return; // no key → skip silently
 
   compactionStatus.set('compacting');
   try {
-    const result = await compactMessages(messages, model, apiKey);
+    const result = await compactMessages(messages, utilityModel, apiKey);
 
     // Always write the compacted history to IDB for the originating conversation.
     if (convId) await replaceAllMessages(convId, result.messages);
@@ -349,6 +378,8 @@ export async function renameConversation(id: string, title: string): Promise<voi
   // Read back from the already-updated store — no extra IDB round-trip needed.
   const conv = get(conversations).find((c) => c.id === id);
   if (conv) await saveConversation(conv);
+  // Keep the session file header in sync (fire-and-forget — non-fatal).
+  updateSessionTitle(id, title).catch(() => {});
 }
 
 export async function sendMessage(content: string, images: ImageContent[] = []): Promise<void> {
@@ -511,13 +542,12 @@ async function maybeGenerateTitle(convId: string, minRounds: number): Promise<vo
   const messages = agent.state.messages;
   if (countUserMessages(messages) < minRounds) return;
 
-  const model = agent.state.model;
-  if (!model) return;
-  const apiKey = (await agent.getApiKey?.(model.provider)) ?? '';
+  const utilityModel = getUtilityModel();
+  const apiKey = (await agent.getApiKey?.(utilityModel.provider)) ?? '';
   if (!apiKey) return;
 
   try {
-    const title = await generateAiTitle(messages, model, apiKey);
+    const title = await generateAiTitle(messages, utilityModel, apiKey);
     if (title) await renameConversation(convId, title);
   } catch (err) {
     console.warn('[auto-title] Failed to generate title:', err instanceof Error ? err.message : err);

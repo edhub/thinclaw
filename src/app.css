@@ -26,6 +26,18 @@
   --error-bg: #fef2f2;
   --warn-color: #92400e;
   --warn-bg: #fffbeb;
+
+  /* ── Badge tokens (session viewer, etc.) ── */
+  --badge-session-bg:     #dbeafe;
+  --badge-session-fg:     #1d4ed8;
+  --badge-user-bg:        #d1fae5;
+  --badge-user-fg:        #065f46;
+  --badge-assistant-bg:   #ede9fe;
+  --badge-assistant-fg:   #5b21b6;
+  --badge-tool-bg:        #fef3c7;
+  --badge-tool-fg:        #92400e;
+  --badge-compaction-bg:  #f3f4f6;
+  --badge-compaction-fg:  #4b5563;
 }
 
 /* ─── Dark theme (explicit attribute) ─── */
@@ -51,6 +63,18 @@
   --error-bg: #1f1010;
   --warn-color: #fcd34d;
   --warn-bg: #1c1505;
+
+  /* ── Badge tokens ── */
+  --badge-session-bg:     #1e3a5f;
+  --badge-session-fg:     #93c5fd;
+  --badge-user-bg:        #064e3b;
+  --badge-user-fg:        #6ee7b7;
+  --badge-assistant-bg:   #2e1065;
+  --badge-assistant-fg:   #c4b5fd;
+  --badge-tool-bg:        #451a03;
+  --badge-tool-fg:        #fcd34d;
+  --badge-compaction-bg:  #1f2937;
+  --badge-compaction-fg:  #d1d5db;
 }
 
 /* ─── Dark theme (system preference, when not forced to light) ─── */
@@ -77,6 +101,18 @@
     --error-bg: #1f1010;
     --warn-color: #fcd34d;
     --warn-bg: #1c1505;
+
+    /* ── Badge tokens ── */
+    --badge-session-bg:     #1e3a5f;
+    --badge-session-fg:     #93c5fd;
+    --badge-user-bg:        #064e3b;
+    --badge-user-fg:        #6ee7b7;
+    --badge-assistant-bg:   #2e1065;
+    --badge-assistant-fg:   #c4b5fd;
+    --badge-tool-bg:        #451a03;
+    --badge-tool-fg:        #fcd34d;
+    --badge-compaction-bg:  #1f2937;
+    --badge-compaction-fg:  #d1d5db;
   }
 }
 

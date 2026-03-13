@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy, tick } from 'svelte';
   import Sidebar from '$lib/components/Sidebar.svelte';
   import ChatMessage from '$lib/components/ChatMessage.svelte';
   import ChatInput from '$lib/components/ChatInput.svelte';
@@ -38,12 +38,30 @@
   import { memories } from '$lib/stores/memory';
 
   import { settings } from '$lib/stores/settings';
+  import { sweepSessions } from '$lib/fs/session-recorder';
 
   let showSettings = $state(false);
   let sidebarOpen = $state(false);
   let chatEndEl = $state<HTMLDivElement | undefined>(undefined);
+  let chatInputRef = $state<{ focus: () => void } | undefined>(undefined);
+
+  function handleGlobalKeydown(e: KeyboardEvent) {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      e.preventDefault();
+      if ($activeConversationId) {
+        chatInputRef?.focus();
+      } else {
+        createConversation();
+        tick().then(() => chatInputRef?.focus());
+      }
+    }
+  }
 
   onMount(async () => {
+    document.addEventListener('keydown', handleGlobalKeydown);
+
+    // Sweep expired session files once per browser session (non-blocking).
+    sweepSessions().catch(() => {});
     // Load memories once at startup. The memory_save / memory_delete tools
     // keep the store in sync incrementally — no need to reload on every agent turn.
     await memories.load();
@@ -52,6 +70,8 @@
     const list = get(conversations);
     if (list.length > 0) await selectConversation(list[0].id);
   });
+
+  onDestroy(() => document.removeEventListener('keydown', handleGlobalKeydown));
 
   // Auto-scroll when messages or streaming message change
   $effect(() => {
@@ -204,7 +224,7 @@
         </div>
       </div>
 
-      <ChatInput onSend={handleSend} onAbort={abortStreaming} />
+      <ChatInput bind:this={chatInputRef} onSend={handleSend} onAbort={abortStreaming} />
 
       {#if $compactionStatus === 'compacting'}
         <div class="compaction-banner">

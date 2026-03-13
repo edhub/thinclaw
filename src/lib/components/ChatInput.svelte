@@ -55,6 +55,11 @@
     isMobile = window.matchMedia('(max-width: 639px)').matches;
   });
 
+  /** Focus the textarea from outside (called by parent via bind:this). */
+  export function focus() {
+    textareaEl?.focus();
+  }
+
   // ── @mention helpers ──────────────────────────────────────────────────────
 
   /**

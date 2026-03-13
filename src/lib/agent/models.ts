@@ -40,6 +40,20 @@ export const MODELS: Model<"anthropic-messages" | "google-generative-ai">[] = [
     maxTokens: 8192,
   },
 
+  // ── xAI Grok (via bianxie, Anthropic Messages API) ─────────────────────────
+  {
+    id: "grok-4.20-beta-0309-reasoning",
+    name: "Grok 4.20 Beta (Reasoning)",
+    api: "anthropic-messages",
+    provider: "bianxie",
+    baseUrl: "https://api.bianxie.ai", // SDK appends /v1/messages
+    reasoning: true,
+    input: ["text"],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: 131072,
+    maxTokens: 16000,
+  },
+
   // ── Anthropic (via bianxie) ─────────────────────────────────────────────────
   {
     id: "claude-haiku-4-5-20251001-thinking",
@@ -68,6 +82,7 @@ export const MODELS: Model<"anthropic-messages" | "google-generative-ai">[] = [
 ];
 
 export const DEFAULT_MODEL_ID = "claude-haiku-4-5-20251001-thinking";
+export const DEFAULT_UTILITY_MODEL_ID = "gemini-3.1-flash-lite-preview";
 
 export function getModelById(
   id: string,

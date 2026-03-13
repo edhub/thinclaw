@@ -91,11 +91,18 @@
           {/if}
         </button>
       </div>
-      <button class="btn-close" aria-label="关闭设置" onclick={onClose}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
+      <div class="header-actions">
+        <a href="/files" target="_blank" rel="noopener noreferrer" class="btn-files" aria-label="文件浏览器" title="文件浏览器">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
+          </svg>
+        </a>
+        <button class="btn-close" aria-label="关闭设置" onclick={onClose}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
     </div>
 
     <!-- Body -->
@@ -293,6 +300,28 @@
     transition: all 0.1s;
   }
   .btn-close:hover { background: var(--surface-hover); color: var(--text-primary); }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+
+  .btn-files {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    padding: 4px;
+    border-radius: 6px;
+    display: flex;
+    flex-shrink: 0;
+    transition: all 0.1s;
+    text-decoration: none;
+  }
+  .btn-files:hover { background: var(--surface-hover); color: var(--text-primary); }
 
   /* Body */
   .modal-body {
