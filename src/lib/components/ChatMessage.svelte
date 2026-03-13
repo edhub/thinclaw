@@ -575,90 +575,12 @@
     margin-top: 4px;
   }
 
-  /* Markdown body */
+  /* Markdown body — typography rules are in app.css */
   .markdown-body {
     color: var(--text-primary);
     line-height: 1.7;
     font-size: 0.9375rem;
     word-break: break-word;
-  }
-
-  :global(.markdown-body p) {
-    margin: 0 0 0.75em;
-  }
-  :global(.markdown-body p:last-child) {
-    margin-bottom: 0;
-  }
-  :global(.markdown-body h1, .markdown-body h2, .markdown-body h3) {
-    font-weight: 600;
-    margin: 1.25em 0 0.5em;
-    line-height: 1.3;
-    color: var(--text-primary);
-  }
-  :global(.markdown-body h1) {
-    font-size: 1.4em;
-  }
-  :global(.markdown-body h2) {
-    font-size: 1.2em;
-  }
-  :global(.markdown-body h3) {
-    font-size: 1.05em;
-  }
-  :global(.markdown-body ul, .markdown-body ol) {
-    padding-left: 1.5em;
-    margin: 0.5em 0;
-  }
-  :global(.markdown-body li) {
-    margin: 0.25em 0;
-  }
-  :global(.markdown-body pre) {
-    background: var(--code-bg);
-    border-radius: 8px;
-    padding: 12px 16px;
-    overflow-x: auto;
-    margin: 0.75em 0;
-    font-size: 0.875em;
-    border: 1px solid var(--border);
-  }
-  :global(.markdown-body code) {
-    font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace;
-    font-size: 0.875em;
-  }
-  :global(.markdown-body p code, .markdown-body li code) {
-    background: var(--code-inline-bg);
-    padding: 2px 5px;
-    border-radius: 4px;
-    color: var(--code-inline-color);
-  }
-  :global(.markdown-body blockquote) {
-    border-left: 3px solid var(--accent);
-    padding-left: 1em;
-    margin: 0.75em 0;
-    color: var(--text-secondary);
-  }
-  :global(.markdown-body table) {
-    border-collapse: collapse;
-    width: 100%;
-    margin: 0.75em 0;
-    font-size: 0.9em;
-  }
-  :global(.markdown-body th, .markdown-body td) {
-    border: 1px solid var(--border);
-    padding: 6px 12px;
-    text-align: left;
-  }
-  :global(.markdown-body th) {
-    background: var(--surface-elevated);
-    font-weight: 600;
-  }
-  :global(.markdown-body a) {
-    color: var(--accent);
-    text-decoration: underline;
-  }
-  :global(.markdown-body hr) {
-    border: none;
-    border-top: 1px solid var(--border);
-    margin: 1em 0;
   }
 
   .cursor-blink {
