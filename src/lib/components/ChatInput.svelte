@@ -2,6 +2,13 @@
   import { onMount } from 'svelte';
   import { isStreaming, queueLength } from '$lib/stores/chat';
   import type { ImageContent } from '@mariozechner/pi-ai';
+  import FilePicker from '$lib/components/FilePicker.svelte';
+  import {
+    listWorkspaceFiles,
+    fuzzyFilter,
+    getFilePreview,
+    type FileEntry,
+  } from '$lib/fs/mention';
 
   interface Props {
     onSend: (content: string, images: ImageContent[]) => void;
@@ -16,19 +23,101 @@
   let isDraggingOver = $state(false);
   let isMobile = $state(false);
 
+  // ── @mention state ────────────────────────────────────────────────────────
+
+  /** Files selected via @mention — shown as chips, injected as context on send. */
+  let fileChips = $state<FileEntry[]>([]);
+  /** All workspace files (lazy-loaded on first @). */
+  let allFiles = $state<FileEntry[]>([]);
+  /** Whether the dropdown is visible. */
+  let showDropdown = $state(false);
+  /** The text typed after the triggering @. */
+  let mentionQuery = $state('');
+  /** Index of @ in textarea value, used to splice it out on selection. */
+  let mentionStart = $state(-1);
+  /** Keyboard-highlighted item in the dropdown. */
+  let dropdownIndex = $state(0);
+
+  const filteredFiles = $derived(fuzzyFilter(allFiles, mentionQuery));
+
+  // Reset keyboard selection when the filtered list changes.
+  $effect(() => {
+    void filteredFiles;
+    dropdownIndex = 0;
+  });
+
   onMount(() => {
     isMobile = window.matchMedia('(max-width: 639px)').matches;
   });
 
+  // ── @mention helpers ──────────────────────────────────────────────────────
+
+  /**
+   * Reload the workspace file list (once per dropdown session).
+   * Fast on OPFS — only metadata reads.
+   */
+  async function refreshFiles() {
+    try {
+      allFiles = await listWorkspaceFiles();
+    } catch {
+      allFiles = [];
+    }
+  }
+
+  /**
+   * Inspect textarea content around the cursor.
+   * Opens the dropdown when an @-word is directly before the cursor;
+   * closes it otherwise.
+   */
+  function checkMentionTrigger(textarea: HTMLTextAreaElement) {
+    const cursor = textarea.selectionStart;
+    const before = textarea.value.slice(0, cursor);
+    // Match @ followed by non-whitespace chars up to the cursor.
+    const match = /@([^\s@]*)$/.exec(before);
+    if (match) {
+      if (!showDropdown) {
+        // Dropdown just opened — refresh file list.
+        refreshFiles();
+      }
+      mentionQuery = match[1];
+      mentionStart = match.index;
+      showDropdown = true;
+    } else {
+      showDropdown = false;
+      mentionQuery = '';
+      mentionStart = -1;
+    }
+  }
+
+  /** Called when the user picks a file from the dropdown. */
+  function selectFile(file: FileEntry) {
+    // Remove the @query text from the textarea.
+    if (mentionStart >= 0) {
+      value =
+        value.slice(0, mentionStart) +
+        value.slice(mentionStart + 1 + mentionQuery.length);
+    }
+    // Add as a chip (avoid duplicates).
+    if (!fileChips.find((c) => c.path === file.path)) {
+      fileChips = [...fileChips, file];
+    }
+    showDropdown = false;
+    mentionQuery = '';
+    mentionStart = -1;
+    textareaEl?.focus();
+  }
+
+  function removeChip(path: string) {
+    fileChips = fileChips.filter((c) => c.path !== path);
+  }
+
   // ── Image helpers ─────────────────────────────────────────────────────────
 
-  /** Read a File as base64 ImageContent. */
   function fileToImageContent(file: File): Promise<ImageContent> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => {
         const dataUrl = reader.result as string;
-        // dataUrl = "data:<mimeType>;base64,<data>"
         const commaIdx = dataUrl.indexOf(',');
         const data = dataUrl.slice(commaIdx + 1);
         resolve({ type: 'image', data, mimeType: file.type });
@@ -53,24 +142,97 @@
   // ── Event handlers ────────────────────────────────────────────────────────
 
   function handleKeydown(e: KeyboardEvent) {
+    // Escape closes the dropdown regardless of whether there are results.
+    if (showDropdown && e.key === 'Escape') {
+      e.preventDefault();
+      showDropdown = false;
+      return;
+    }
+
+    // Intercept navigation/selection keys only when there are items to pick from.
+    if (showDropdown && filteredFiles.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        dropdownIndex = Math.min(dropdownIndex + 1, filteredFiles.length - 1);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        dropdownIndex = Math.max(dropdownIndex - 1, 0);
+        return;
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (filteredFiles[dropdownIndex]) selectFile(filteredFiles[dropdownIndex]);
+        return;
+      }
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       submit();
     }
   }
 
-  function submit() {
+  function handleInput(e: Event) {
+    autoResize(e);
+    checkMentionTrigger(e.target as HTMLTextAreaElement);
+  }
+
+  function handleBlur() {
+    // Delay so FilePicker's onmousedown can fire before the dropdown disappears.
+    setTimeout(() => {
+      showDropdown = false;
+    }, 150);
+  }
+
+  /**
+   * Build and send the message.
+   * File chip contexts are prepended; UI resets immediately before the async reads.
+   */
+  async function submit() {
     const trimmed = value.trim();
-    // Allow sending images without text, but not completely empty
-    if (!trimmed && images.length === 0) return;
-    // $state.snapshot() strips Svelte 5 Proxy wrappers so ImageContent objects
-    // are plain serializable values — required for IndexedDB structured clone.
-    const snapshot = $state.snapshot(images) as ImageContent[];
+    if (!trimmed && images.length === 0 && fileChips.length === 0) return;
+
+    const currentImages = $state.snapshot(images) as ImageContent[];
+    const currentChips = $state.snapshot(fileChips) as FileEntry[];
+
+    // Reset UI eagerly — prevents double-sends while awaiting file reads.
     value = '';
     images = [];
-    onSend(trimmed, snapshot);
+    fileChips = [];
+    showDropdown = false;
     if (textareaEl) textareaEl.style.height = 'auto';
-    // Keep focus in the textarea so the user can keep typing.
+
+    // Inject file context blocks ahead of the user's message.
+    let content = trimmed;
+    if (currentChips.length > 0) {
+      const parts: string[] = [];
+      for (const chip of currentChips) {
+        try {
+          const preview = await getFilePreview(chip.path, 20);
+          if (preview.truncated) {
+            const returnedLines = preview.content.split('\n').length;
+            parts.push(
+              `<file-context path="${chip.path}" lines="1-${returnedLines}" total="${preview.totalLines}" truncated="true">\n` +
+              `${preview.content}\n` +
+              `</file-context>`,
+            );
+          } else {
+            parts.push(
+              `<file-context path="${chip.path}">\n` +
+              `${preview.content}\n` +
+              `</file-context>`,
+            );
+          }
+        } catch {
+          parts.push(`<file-context path="${chip.path}" error="true"></file-context>`);
+        }
+      }
+      content = parts.join('\n\n') + (trimmed ? '\n\n' + trimmed : '');
+    }
+
+    onSend(content, currentImages);
     textareaEl?.focus();
   }
 
@@ -80,7 +242,6 @@
     el.style.height = Math.min(el.scrollHeight, 200) + 'px';
   }
 
-  // File picker
   function openFilePicker() {
     fileInputEl?.click();
   }
@@ -88,11 +249,9 @@
   function handleFileChange(e: Event) {
     const input = e.target as HTMLInputElement;
     if (input.files) addFiles(input.files);
-    // Reset so the same file can be picked again
     input.value = '';
   }
 
-  // Clipboard paste
   function handlePaste(e: ClipboardEvent) {
     const items = e.clipboardData?.items;
     if (!items) return;
@@ -109,7 +268,6 @@
     }
   }
 
-  // Drag & drop
   function handleDragOver(e: DragEvent) {
     e.preventDefault();
     isDraggingOver = true;
@@ -123,12 +281,13 @@
     if (e.dataTransfer?.files) addFiles(e.dataTransfer.files);
   }
 
-  // Preview data-URL for a given ImageContent
   function previewSrc(img: ImageContent) {
     return `data:${img.mimeType};base64,${img.data}`;
   }
 
-  const canSend = $derived(value.trim().length > 0 || images.length > 0);
+  const canSend = $derived(
+    value.trim().length > 0 || images.length > 0 || fileChips.length > 0,
+  );
 </script>
 
 <!-- Hidden file input -->
@@ -170,60 +329,98 @@
     </div>
   {/if}
 
-  <div class="input-box" class:drag-over={isDraggingOver}>
-    <textarea
-      bind:this={textareaEl}
-      bind:value
-      placeholder={$isStreaming
-        ? $queueLength > 0
-          ? `AI 正在回复，已排队 ${$queueLength} 条…`
-          : 'AI 正在回复，可继续输入（Enter 排队）…'
-        : isMobile
-          ? '发消息…'
-          : '输入消息（Enter 发送，Shift+Enter 换行）'}
-      rows="1"
-      onkeydown={handleKeydown}
-      oninput={autoResize}
-      onpaste={handlePaste}
-    ></textarea>
+  <!-- File chips (from @mention) -->
+  {#if fileChips.length > 0}
+    <div class="file-chips">
+      {#each fileChips as chip}
+        <div class="file-chip">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+          </svg>
+          <span class="chip-name" title={chip.path}>{chip.path}</span>
+          <button
+            class="chip-remove"
+            onclick={() => removeChip(chip.path)}
+            type="button"
+            title="移除文件"
+          >
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+      {/each}
+    </div>
+  {/if}
 
-    <!-- Attach button -->
-    <button
-      class="attach-btn"
-      type="button"
-      onclick={openFilePicker}
-      title="附加图片"
-    >
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
-      </svg>
-    </button>
-
-    <!-- Stop button — only visible while streaming -->
-    {#if $isStreaming}
-      <button
-        class="stop-btn"
-        onclick={onAbort}
-        title="停止"
-        type="button"
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-          <rect x="6" y="6" width="12" height="12" rx="2"/>
-        </svg>
-      </button>
+  <!-- Input box wrapper (relative for dropdown positioning) -->
+  <div class="input-wrapper">
+    {#if showDropdown}
+      <FilePicker
+        files={filteredFiles}
+        selectedIndex={dropdownIndex}
+        onSelect={selectFile}
+      />
     {/if}
 
-    <!-- Send button — queues when streaming -->
-    <button
-      class="send-btn"
-      disabled={!canSend}
-      onclick={submit}
-      title={$isStreaming ? '排队发送' : '发送'}
-    >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-      </svg>
-    </button>
+    <div class="input-box" class:drag-over={isDraggingOver}>
+      <textarea
+        bind:this={textareaEl}
+        bind:value
+        placeholder={$isStreaming
+          ? $queueLength > 0
+            ? `AI 正在回复，已排队 ${$queueLength} 条…`
+            : 'AI 正在回复，可继续输入（Enter 排队）…'
+          : isMobile
+            ? '输入消息，@ 引用文件…'
+            : '输入消息（Enter 发送，Shift+Enter 换行，@ 引用文件）'}
+        rows="1"
+        onkeydown={handleKeydown}
+        oninput={handleInput}
+        onblur={handleBlur}
+        onpaste={handlePaste}
+      ></textarea>
+
+      <!-- Attach button -->
+      <button
+        class="attach-btn"
+        type="button"
+        onclick={openFilePicker}
+        title="附加图片"
+      >
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
+        </svg>
+      </button>
+
+      <!-- Stop button — only visible while streaming -->
+      {#if $isStreaming}
+        <button
+          class="stop-btn"
+          onclick={onAbort}
+          title="停止"
+          type="button"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <rect x="6" y="6" width="12" height="12" rx="2"/>
+          </svg>
+        </button>
+      {/if}
+
+      <!-- Send button — queues when streaming -->
+      <button
+        class="send-btn"
+        disabled={!canSend}
+        onclick={submit}
+        title={$isStreaming ? '排队发送' : '发送'}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+        </svg>
+      </button>
+    </div>
   </div>
 
   <p class="hint">ThinClaw 将对话存储在您的浏览器本地，API 密钥不会离开您的设备。</p>
@@ -284,6 +481,56 @@
 
   .remove-btn:hover {
     background: var(--error);
+  }
+
+  /* File chips row (@mention selections) */
+  .file-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+
+  .file-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: var(--surface-elevated);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 3px 6px 3px 8px;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    max-width: 240px;
+  }
+
+  .chip-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+
+  .chip-remove {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    border-radius: 3px;
+    transition: color 0.1s;
+  }
+
+  .chip-remove:hover {
+    color: var(--error);
+  }
+
+  /* Wrapper that anchors the FilePicker dropdown */
+  .input-wrapper {
+    position: relative;
   }
 
   /* Input box */

@@ -359,6 +359,30 @@ export async function searchFiles(
   const results: SearchMatch[] = [];
   const { root, segments, isTmp } = await resolveRoot(searchPath);
 
+  // ── Single-file mode (grep within one file) ───────────────────────────────
+  // If the path resolves to a file rather than a directory, search only that file.
+  if (segments.length > 0) {
+    try {
+      const fh = await getFileHandle(root, segments, false);
+      const fileName = segments[segments.length - 1];
+      if (!isTextFile(fileName)) return [];
+      const file = await fh.getFile();
+      const text = await file.text();
+      const lines = text.split('\n');
+      const displayPath = isTmp ? `tmp/${segments.join('/')}` : segments.join('/');
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].toLowerCase().includes(lowerQuery)) {
+          results.push({ file: displayPath, line: i + 1, text: lines[i].trim() });
+          if (results.length >= 200) break;
+        }
+      }
+      return results;
+    } catch {
+      // Not a file — fall through to directory search.
+    }
+  }
+
+  // ── Directory mode (recursive walk) ──────────────────────────────────────
   let rootDir: FileSystemDirectoryHandle;
   try {
     rootDir = await getDirHandle(root, segments, false);
@@ -451,4 +475,74 @@ export async function deleteEntry(path: string, recursive = false): Promise<void
     }
     throw new Error(`Delete failed: ${msg}`);
   }
+}
+
+// ─── fs_outline ───────────────────────────────────────────────────────────────
+
+export interface OutlineEntry {
+  /** 1-indexed line number. */
+  line: number;
+  /** The structural marker text (heading, function signature, etc.). */
+  text: string;
+}
+
+/**
+ * Extract a structural outline from a file.
+ *
+ * Supported file types and what is extracted:
+ *   .md / .markdown  — headings (#, ##, ###, …)
+ *   .ts / .js / .tsx / .jsx / .svelte / .mjs / .cjs
+ *                    — exported declarations, functions, classes
+ *   .py              — def / async def / class
+ *
+ * Returns an empty array for unrecognised file types (not an error).
+ */
+export async function outlineFile(path: string): Promise<OutlineEntry[]> {
+  const { root, segments } = await resolveRoot(path);
+  let fileHandle: FileSystemFileHandle;
+  try {
+    fileHandle = await getFileHandle(root, segments, false);
+  } catch {
+    throw new Error(`File not found: ${path}`);
+  }
+
+  const file = await fileHandle.getFile();
+  const text = await file.text();
+  const lines = text.split('\n');
+  const ext = (segments[segments.length - 1] ?? '').split('.').pop()?.toLowerCase() ?? '';
+  return extractOutline(lines, ext);
+}
+
+function extractOutline(lines: string[], ext: string): OutlineEntry[] {
+  const entries: OutlineEntry[] = [];
+
+  if (ext === 'md' || ext === 'markdown') {
+    for (let i = 0; i < lines.length; i++) {
+      if (/^#{1,6}\s/.test(lines[i])) {
+        entries.push({ line: i + 1, text: lines[i].trim() });
+      }
+    }
+  } else if (['ts', 'js', 'tsx', 'jsx', 'svelte', 'mjs', 'cjs'].includes(ext)) {
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i].trim();
+      // Match exported/top-level functions, classes, type aliases, interfaces, enums.
+      if (
+        /^(export\s+)?(default\s+)?(async\s+)?function[\s*]\s*\w+/.test(l) ||
+        /^(export\s+)?(abstract\s+)?class\s+\w+/.test(l) ||
+        /^export\s+(const|let|type|interface|enum)\s+\w+/.test(l) ||
+        /^(export\s+)?default\s+(class|function)\b/.test(l)
+      ) {
+        entries.push({ line: i + 1, text: l.slice(0, 120) });
+      }
+    }
+  } else if (ext === 'py') {
+    for (let i = 0; i < lines.length; i++) {
+      if (/^(async\s+)?def\s+\w+|^class\s+\w+/.test(lines[i].trim())) {
+        entries.push({ line: i + 1, text: lines[i].trim().slice(0, 120) });
+      }
+    }
+  }
+  // Other types: return empty (the tool will report "no markers found").
+
+  return entries;
 }

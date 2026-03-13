@@ -9,6 +9,8 @@
     ToolCall,
     ImageContent,
   } from '@mariozechner/pi-ai';
+  import FileContextCard from '$lib/components/FileContextCard.svelte';
+  import type { FileContext } from '$lib/components/FileContextCard.svelte';
 
   interface Props {
     message: AgentMessage;
@@ -87,6 +89,38 @@
   const hasError = $derived(
     isAssistant && (assistantMsg?.stopReason === 'error' || !!assistantMsg?.errorMessage),
   );
+
+  // ── File context parsing ──────────────────────────────────────────────────
+
+  /**
+   * Parse <file-context> XML blocks out of a user message string.
+   * Returns the extracted file blocks and the remaining user text.
+   *
+   * Format injected by ChatInput:
+   *   <file-context path="..." [lines="1-20"] [total="N"] [truncated="true"] [error="true"]>
+   *   ...content...
+   *   </file-context>
+   */
+  function parseUserMessage(raw: string): { files: FileContext[]; text: string } {
+    const files: FileContext[] = [];
+    const cleaned = raw.replace(
+      /<file-context([^>]*)>([\s\S]*?)<\/file-context>/g,
+      (_, attrs: string, body: string) => {
+        files.push({
+          path:      /path="([^"]*)"/.exec(attrs)?.[1] ?? '',
+          lines:     /lines="([^"]*)"/.exec(attrs)?.[1],
+          total:     parseInt(/total="(\d+)"/.exec(attrs)?.[1] ?? '0', 10) || undefined,
+          truncated: /truncated="true"/.test(attrs),
+          error:     /error="true"/.test(attrs),
+          content:   body.trim(),
+        });
+        return '';
+      },
+    );
+    return { files, text: cleaned.trim() };
+  }
+
+  const parsedUser = $derived(isUser ? parseUserMessage(userText) : { files: [], text: userText });
 </script>
 
 <div
@@ -126,8 +160,13 @@
           {/each}
         </div>
       {/if}
-      {#if userText}
-        <p class="user-text">{userText}</p>
+      <!-- File context cards (collapsed by default) -->
+      {#each parsedUser.files as file}
+        <FileContextCard {file} />
+      {/each}
+      <!-- Actual user question -->
+      {#if parsedUser.text}
+        <p class="user-text">{parsedUser.text}</p>
       {/if}
 
     {:else if isAssistant}

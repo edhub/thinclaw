@@ -29,6 +29,7 @@ import {
   statEntry,
   moveEntry,
   deleteEntry,
+  outlineFile,
 } from '$lib/fs/opfs';
 
 // ─── fs_read ──────────────────────────────────────────────────────────────────
@@ -228,10 +229,11 @@ export const fsSearchTool: AgentTool<typeof fsSearchParams> = {
   name: 'fs_search',
   label: 'Search Files',
   description:
-    'Search for text across files. Case-insensitive substring match. Returns up to 200 matches. ' +
-    'Searches workspace only by default. ' +
+    'Search for text across files. Case-insensitive substring match. Returns up to 200 matches with file path and line number. ' +
+    'Pass a FILE path (e.g. path="notes/todo.md") to grep within a single file — much faster than reading the whole file. ' +
+    'Pass a DIRECTORY path to search all files under it, or omit path to search all of workspace. ' +
     'To search tmp, pass path="tmp" or path="tmp/subdir". ' +
-    'To search both, call this tool twice.',
+    'To search both workspace and tmp, call this tool twice.',
   parameters: fsSearchParams,
   execute: async (_id, { query, path }) => {
     try {
@@ -378,6 +380,56 @@ export const fsDeleteTool: AgentTool<typeof fsDeleteParams> = {
   },
 };
 
+// ─── fs_outline ───────────────────────────────────────────────────────────────
+
+const fsOutlineParams = Type.Object({
+  path: Type.String({
+    description: 'File path relative to workspace root, e.g. "notes/design.md" or "src/utils.ts".',
+  }),
+});
+
+export const fsOutlineTool: AgentTool<typeof fsOutlineParams> = {
+  name: 'fs_outline',
+  label: 'File Outline',
+  description:
+    'Extract a structural outline from a file — headings for Markdown, exported functions/classes/types for TypeScript/JavaScript, ' +
+    'def/class for Python. Each entry includes the 1-indexed line number so you can jump directly with ' +
+    'fs_read(path, offset=N, limit=Y) or grep a section with fs_search(query, path). ' +
+    'Use this before reading a large file to understand its structure and avoid reading it all.',
+  parameters: fsOutlineParams,
+  execute: async (_id, { path }) => {
+    try {
+      const entries = await outlineFile(path);
+      if (entries.length === 0) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `No structural markers found in ${path}. Use fs_search or fs_read to explore the file.`,
+            },
+          ],
+          details: { path, entries: [] },
+        };
+      }
+      // Align line numbers for readability: "L42   ## Section Title"
+      const maxLineWidth = String(entries[entries.length - 1].line).length;
+      const lines = entries.map(
+        (e) => `L${String(e.line).padEnd(maxLineWidth)}  ${e.text}`,
+      );
+      return {
+        content: [{ type: 'text' as const, text: lines.join('\n') }],
+        details: { path, entries },
+      };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return {
+        content: [{ type: 'text' as const, text: `Error: ${msg}` }],
+        details: { error: msg },
+      };
+    }
+  },
+};
+
 // ─── export ───────────────────────────────────────────────────────────────────
 
 export const fsTools: AgentTool[] = [
@@ -386,6 +438,7 @@ export const fsTools: AgentTool[] = [
   fsEditTool as unknown as AgentTool,
   fsListTool as unknown as AgentTool,
   fsSearchTool as unknown as AgentTool,
+  fsOutlineTool as unknown as AgentTool,  // structural overview — use before read/search on large files
   fsStatTool as unknown as AgentTool,
   fsMoveTool as unknown as AgentTool,
   fsDeleteTool as unknown as AgentTool,
