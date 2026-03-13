@@ -1,12 +1,11 @@
 /**
  * System prompt builder.
  *
- * The prompt is assembled from three layers:
- *   1. Soul       — the AI's identity (stored in localStorage, editable by the AI)
- *   2. Memory     — persistent facts saved across conversations (IndexedDB)
- *   3. Custom     — optional extra instructions from the user (Settings)
- *
- * There are no fixed "personas" anymore — the soul IS the identity.
+ * The prompt is assembled from up to four layers:
+ *   1. Soul       — the AI's identity (localStorage, editable by the AI)
+ *   2. Persona    — optional temporary role for this conversation (locked after first message)
+ *   3. Memory     — persistent facts saved across conversations (IndexedDB)
+ *   4. Custom     — optional extra instructions from the user (Settings)
  */
 import type { Memory } from '$lib/db';
 
@@ -25,28 +24,38 @@ export function formatMemoriesForPrompt(mems: Memory[]): string {
 }
 
 /**
- * Assemble the full system prompt from soul + memories + custom instructions.
+ * Assemble the full system prompt from soul + persona + memories + custom instructions.
  *
- * @param soulContent    Current soul Markdown (from soul store).
- * @param memoriesText   Pre-formatted memory block (from formatMemoriesForPrompt).
+ * @param soulContent         Current soul Markdown (from soul store).
+ * @param memoriesText        Pre-formatted memory block (from formatMemoriesForPrompt).
  * @param customInstructions  Optional user-supplied extra instructions.
+ * @param personaContent      Optional active persona prompt content.
  */
 export function buildSystemPrompt(
   soulContent: string,
   memoriesText: string,
   customInstructions?: string,
+  personaContent?: string,
 ): string {
   const parts: string[] = [];
 
   // Layer 1: Soul
   parts.push(`## Your Soul\n${soulContent}`);
 
-  // Layer 2: Memory (omit section if empty)
+  // Layer 2: Active Persona (omit if none selected)
+  if (personaContent?.trim()) {
+    parts.push(
+      `## Active Persona\n\nYou are temporarily playing the following role in this conversation. ` +
+        `Your soul and core identity remain unchanged — this persona shapes *how* you behave here, not *who* you are.\n\n---\n\n${personaContent.trim()}`,
+    );
+  }
+
+  // Layer 3: Memory (omit section if empty)
   if (memoriesText) {
     parts.push(`## Your Memory\n${memoriesText}`);
   }
 
-  // Layer 3: How to operate (tool guidance)
+  // Layer 4: How to operate (tool guidance)
   parts.push(`## How You Operate
 
 - Your soul is your identity. When it needs to evolve, call \`soul_update\` with the full new content — then tell the user what changed and why.
@@ -55,7 +64,7 @@ export function buildSystemPrompt(
 - Use \`memory_delete\` to remove stale or wrong memories.
 - Available tools: \`calculate\`, \`get_datetime\`, \`soul_update\`, \`soul_read\`, \`memory_save\`, \`memory_recall\`, \`memory_delete\``);
 
-  // Layer 4: Custom instructions (omit if empty)
+  // Layer 5: Custom instructions (omit if empty)
   if (customInstructions?.trim()) {
     parts.push(`## Custom Instructions\n${customInstructions.trim()}`);
   }

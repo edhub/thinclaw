@@ -5,6 +5,7 @@
   import ChatInput from '$lib/components/ChatInput.svelte';
   import Settings from '$lib/components/Settings.svelte';
   import ModelSwitcher from '$lib/components/ModelSwitcher.svelte';
+  import PersonaPicker from '$lib/components/PersonaPicker.svelte';
   import {
     loadConversations,
     selectConversation,
@@ -154,6 +155,11 @@
       <!-- Chat thread -->
       <div class="messages">
         <div class="messages-inner">
+          <!-- Persona picker: shown only while the conversation has no messages -->
+          {#if $activeMessages.length === 0 && !$isStreaming && !$pendingUserMessage}
+            <PersonaPicker />
+          {/if}
+
           <!-- Persisted messages -->
           {#each $activeMessages as msg, i (keyOf(msg))}
             <ChatMessage message={msg} isStreaming={false} />

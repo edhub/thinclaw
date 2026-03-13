@@ -18,7 +18,7 @@ export interface Conversation {
   id: string;
   title: string;
   model: string;
-  personaId?: string; // deprecated — kept for backward compat with v2 data
+  personaId?: string; // optional: built-in persona locked in at conversation creation
   createdAt: number;
   updatedAt: number;
 }

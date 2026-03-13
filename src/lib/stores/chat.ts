@@ -16,6 +16,7 @@ import type { ImageContent, Message } from '@mariozechner/pi-ai';
 import { nanoid } from '$lib/utils/nanoid';
 import { getModelById } from '$lib/agent/models';
 import { buildSystemPrompt, formatMemoriesForPrompt } from '$lib/agent/prompts';
+import { getPersonaById } from '$lib/agent/personas';
 import { soul } from '$lib/agent/soul';
 import { memories } from '$lib/stores/memory';
 import { browserTools } from '$lib/agent/tools';
@@ -87,12 +88,15 @@ function getAgent(): Agent {
   return _agent;
 }
 
-/** Build the full system prompt from live soul + memory store + settings. */
-function assembleSystemPrompt(): string {
+/** Build the full system prompt from live soul + persona + memory store + settings. */
+function assembleSystemPrompt(convId?: string): string {
   const s = get(settings);
   const soulContent = soul.current();
   const memText = formatMemoriesForPrompt(memories.all());
-  return buildSystemPrompt(soulContent, memText, s.systemPrompt);
+  const id = convId ?? get(activeConversationId);
+  const conv = get(conversations).find((c) => c.id === id);
+  const persona = conv?.personaId ? getPersonaById(conv.personaId) : undefined;
+  return buildSystemPrompt(soulContent, memText, s.systemPrompt, persona?.content);
 }
 
 // ─── Svelte stores ────────────────────────────────────────────────────────────
@@ -272,7 +276,7 @@ export async function selectConversation(id: string): Promise<void> {
   const agent = getAgent();
   const conv = get(conversations).find((c) => c.id === id);
 
-  agent.setSystemPrompt(assembleSystemPrompt());
+  agent.setSystemPrompt(assembleSystemPrompt(id));
   const selectedModel = getModelById(get(settings).model);
   agent.setModel(selectedModel);
   agent.setThinkingLevel(selectedModel.reasoning ? 'medium' : 'off');
@@ -300,6 +304,26 @@ export async function createConversation(): Promise<string> {
   conversations.update((list) => [conv, ...list]);
   await selectConversation(id);
   return id;
+}
+
+/**
+ * Update the persona for the active conversation (only while it has no messages).
+ * Immediately refreshes the agent's system prompt.
+ */
+export async function setConversationPersona(personaId: string | null): Promise<void> {
+  const convId = get(activeConversationId);
+  if (!convId) return;
+  // Guard: persona is locked once the conversation has messages.
+  if (get(activeMessages).length > 0) return;
+  conversations.update((list) =>
+    list.map((c) =>
+      c.id === convId ? { ...c, personaId: personaId ?? undefined } : c,
+    ),
+  );
+  const conv = get(conversations).find((c) => c.id === convId);
+  if (conv) await saveConversation(conv);
+  // Immediately update agent system prompt to reflect the new persona.
+  getAgent().setSystemPrompt(assembleSystemPrompt());
 }
 
 export async function removeConversation(id: string): Promise<void> {

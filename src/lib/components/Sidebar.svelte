@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createConversation, removeConversation, selectConversation, renameConversation, conversations, activeConversationId, isStreaming } from '$lib/stores/chat';
+  import { getPersonaById } from '$lib/agent/personas';
 
   interface Props {
     onOpenSettings: () => void;
@@ -76,7 +77,15 @@
             autofocus
           />
         {:else}
-          <span class="conv-title">{conv.title}</span>
+          <div class="conv-body">
+            <span class="conv-title">{conv.title}</span>
+            {#if conv.personaId}
+              {@const persona = getPersonaById(conv.personaId)}
+              {#if persona}
+                <span class="conv-persona">{persona.name}</span>
+              {/if}
+            {/if}
+          </div>
           <div class="conv-actions">
             <button class="btn-icon-sm" onclick={(e) => startRename(e, conv.id, conv.title)} title="重命名">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -169,11 +178,31 @@
     color: var(--text-primary);
   }
 
-  .conv-title {
+  .conv-body {
     flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow: hidden;
+  }
+
+  .conv-title {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .conv-persona {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .conv-item.active .conv-persona {
+    color: var(--accent);
+    opacity: 0.8;
   }
 
   .conv-actions {
