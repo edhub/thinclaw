@@ -277,7 +277,7 @@ export async function createConversation(): Promise<string> {
   const now = Date.now();
   const conv: Conversation = {
     id,
-    title: 'New conversation',
+    title: '新对话',
     model: s.model,
     createdAt: now,
     updatedAt: now,
@@ -436,7 +436,7 @@ async function generateAiTitle(
 async function maybeGenerateTitle(convId: string, minRounds: number): Promise<void> {
   const conv = get(conversations).find((c) => c.id === convId);
   // Skip if already titled.
-  if (!conv || conv.title !== 'New conversation') return;
+  if (!conv || conv.title !== '新对话') return;
 
   const agent = getAgent();
   const messages = agent.state.messages;

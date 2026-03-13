@@ -142,7 +142,7 @@
 <div
   class="input-area"
   role="region"
-  aria-label="Message input"
+  aria-label="消息输入框"
   ondragover={handleDragOver}
   ondragleave={handleDragLeave}
   ondrop={handleDrop}
@@ -156,7 +156,7 @@
           <button
             class="remove-btn"
             onclick={() => removeImage(i)}
-            title="Remove image"
+            title="移除图片"
             type="button"
           >
             <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
@@ -173,10 +173,10 @@
       bind:this={textareaEl}
       bind:value
       placeholder={$isStreaming
-        ? 'Waiting for response…'
+        ? '等待响应中…'
         : isMobile
-          ? 'Message…'
-          : 'Message (Enter to send, Shift+Enter for new line)'}
+          ? '发消息…'
+          : '输入消息（Enter 发送，Shift+Enter 换行）'}
       rows="1"
       disabled={$isStreaming}
       onkeydown={handleKeydown}
@@ -190,7 +190,7 @@
       type="button"
       disabled={$isStreaming}
       onclick={openFilePicker}
-      title="Attach image"
+      title="附加图片"
     >
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
@@ -202,7 +202,7 @@
       class="send-btn"
       disabled={!canSend}
       onclick={$isStreaming ? onAbort : submit}
-      title={$isStreaming ? 'Stop' : 'Send'}
+      title={$isStreaming ? '停止' : '发送'}
     >
       {#if $isStreaming}
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
@@ -216,7 +216,7 @@
     </button>
   </div>
 
-  <p class="hint">ThinClaw stores conversations locally in your browser. API keys never leave your device.</p>
+  <p class="hint">ThinClaw 将对话存储在您的浏览器本地，API 密钥不会离开您的设备。</p>
 </div>
 
 <style>

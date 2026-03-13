@@ -172,7 +172,7 @@
       <!-- Error -->
       {#if hasError}
         <div class="error-inline">
-          {assistantMsg?.errorMessage ?? 'An error occurred.'}
+          {assistantMsg?.errorMessage ?? '发生错误。'}
         </div>
       {/if}
 

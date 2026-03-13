@@ -32,7 +32,7 @@
   }
 
   function resetSoul() {
-    if (confirm('Reset soul to the built-in default? This cannot be undone.')) {
+    if (confirm('确定恢复灵魂到内置默认值？此操作不可撤销。')) {
       soulDraft = DEFAULT_SOUL;
       soul.reset();
     }
@@ -68,30 +68,30 @@
   }
 
   const themes: { value: Theme; label: string }[] = [
-    { value: 'system', label: 'System' },
-    { value: 'light', label: 'Light' },
-    { value: 'dark', label: 'Dark' },
+    { value: 'system', label: '跟随系统' },
+    { value: 'light', label: '浅色' },
+    { value: 'dark', label: '深色' },
   ];
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div class="overlay" role="dialog" aria-modal="true" aria-label="Settings" tabindex="-1" onkeydown={handleKeydown} onclick={onClose}>
+<div class="overlay" role="dialog" aria-modal="true" aria-label="设置" tabindex="-1" onkeydown={handleKeydown} onclick={onClose}>
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="modal" onkeydown={() => {}} onclick={(e) => e.stopPropagation()}>
 
     <!-- Header -->
     <div class="modal-header">
       <div class="tabs">
-        <button class="tab" class:active={activeTab === 'general'} onclick={() => (activeTab = 'general')}>General</button>
-        <button class="tab" class:active={activeTab === 'soul'} onclick={() => (activeTab = 'soul')}>Soul</button>
+        <button class="tab" class:active={activeTab === 'general'} onclick={() => (activeTab = 'general')}>通用</button>
+        <button class="tab" class:active={activeTab === 'soul'} onclick={() => (activeTab = 'soul')}>灵魂</button>
         <button class="tab" class:active={activeTab === 'memory'} onclick={() => (activeTab = 'memory')}>
-          Memory
+          记忆
           {#if memList.length > 0}
             <span class="badge">{memList.length}</span>
           {/if}
         </button>
       </div>
-      <button class="btn-close" aria-label="Close settings" onclick={onClose}>
+      <button class="btn-close" aria-label="关闭设置" onclick={onClose}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
         </svg>
@@ -104,7 +104,7 @@
       <!-- ── General ── -->
       {#if activeTab === 'general'}
         <div class="field">
-          <label for="api-key">API Key</label>
+          <label for="api-key">API 密钥</label>
           <div class="key-input-wrap">
             <input
               id="api-key"
@@ -115,14 +115,14 @@
               spellcheck="false"
             />
             <button class="btn-toggle-key" onclick={() => (showKey = !showKey)} type="button">
-              {showKey ? 'Hide' : 'Show'}
+              {showKey ? '隐藏' : '显示'}
             </button>
           </div>
-          <p class="field-hint">Stored locally in your browser. Never sent anywhere except the AI API.</p>
+          <p class="field-hint">存储在您的浏览器本地，仅发送至 AI API。</p>
         </div>
 
         <div class="field">
-          <label for="model">Model</label>
+          <label for="model">模型</label>
           <select id="model" bind:value={draft.model}>
             {#each MODELS as m (m.id)}
               <option value={m.id}>{m.name}</option>
@@ -131,17 +131,17 @@
         </div>
 
         <div class="field">
-          <label for="system-prompt">Custom Instructions <span class="label-hint">(appended to Soul)</span></label>
+          <label for="system-prompt">自定义指令 <span class="label-hint">（附加到灵魂）</span></label>
           <textarea
             id="system-prompt"
             bind:value={draft.systemPrompt}
             rows="3"
-            placeholder="Optional: add extra behavioural notes…"
+            placeholder="可选：添加额外行为说明…"
           ></textarea>
         </div>
 
         <div class="field">
-          <label for="theme">Theme</label>
+          <label for="theme">主题</label>
           <select id="theme" bind:value={draft.theme}>
             {#each themes as t (t.value)}
               <option value={t.value}>{t.label}</option>
@@ -153,9 +153,8 @@
       <!-- ── Soul ── -->
       {#if activeTab === 'soul'}
         <p class="tab-description">
-          This is the AI's identity — its values, personality, and operating principles.
-          The AI can evolve it autonomously via the <code>soul_update</code> tool.
-          You can also edit it directly here.
+          这是 AI 的身份设定——包括其价值观、个性和行为准则。
+          AI 可以通过 <code>soul_update</code> 工具自主更新，您也可以直接在此编辑。
         </p>
         <div class="field soul-field">
           <textarea
@@ -166,9 +165,9 @@
           ></textarea>
         </div>
         <div class="soul-actions">
-          <button class="btn-reset" onclick={resetSoul} type="button">Reset to default</button>
+          <button class="btn-reset" onclick={resetSoul} type="button">恢复默认</button>
           <button class="btn-save-soul" onclick={saveSoul} type="button">
-            {soulSaved ? '✓ Saved' : 'Save Soul'}
+            {soulSaved ? '✓ 已保存' : '保存灵魂'}
           </button>
         </div>
       {/if}
@@ -176,9 +175,7 @@
       <!-- ── Memory ── -->
       {#if activeTab === 'memory'}
         <p class="tab-description">
-          Persistent memories injected into every conversation. The AI manages these
-          automatically via <code>memory_save</code> / <code>memory_delete</code>.
-          You can also add or remove them here.
+          持久记忆会注入到每次对话中。AI 会通过 <code>memory_save</code> / <code>memory_delete</code> 工具自动管理，您也可以在此手动添加或删除。
         </p>
 
         <!-- Add memory -->
@@ -186,24 +183,24 @@
           <input
             type="text"
             bind:value={newMemContent}
-            placeholder="Add a memory…"
+            placeholder="添加记忆…"
             onkeydown={handleMemInputKeydown}
           />
           <button class="btn-add-mem" onclick={addMemory} disabled={memAdding || !newMemContent.trim()} type="button">
-            Add
+            添加
           </button>
         </div>
 
         <!-- Memory list -->
         {#if memList.length === 0}
-          <p class="mem-empty">No memories yet. The AI will start saving things as you chat.</p>
+          <p class="mem-empty">暂无记忆。AI 会在对话中自动保存信息。</p>
         {:else}
           <ul class="mem-list">
             {#each memList as mem (mem.id)}
               <li class="mem-item">
                 <span class="mem-date">{new Date(mem.createdAt).toLocaleDateString('en-CA')}</span>
                 <span class="mem-content">{mem.content}</span>
-                <button class="btn-del-mem" onclick={() => removeMemory(mem.id)} aria-label="Delete memory" type="button">
+                <button class="btn-del-mem" onclick={() => removeMemory(mem.id)} aria-label="删除记忆" type="button">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                     <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                   </svg>
@@ -219,8 +216,8 @@
     <!-- Footer (General only) -->
     {#if activeTab === 'general'}
       <div class="modal-footer">
-        <button class="btn-cancel" onclick={onClose}>Cancel</button>
-        <button class="btn-save" onclick={saveGeneral}>Save</button>
+        <button class="btn-cancel" onclick={onClose}>取消</button>
+        <button class="btn-save" onclick={saveGeneral}>保存</button>
       </div>
     {/if}
 

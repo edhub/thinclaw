@@ -82,7 +82,7 @@
   <main class="chat-area">
     <!-- Mobile-only top bar -->
     <header class="mobile-header">
-      <button class="btn-hamburger" onclick={() => (sidebarOpen = true)} aria-label="Open sidebar">
+      <button class="btn-hamburger" onclick={() => (sidebarOpen = true)} aria-label="打开侧边栏">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="3" y1="6" x2="21" y2="6"/>
           <line x1="3" y1="12" x2="21" y2="12"/>
@@ -92,7 +92,7 @@
       <span class="mobile-title">
         {$activeConversation?.title ?? 'ThinClaw'}
       </span>
-      <button class="btn-mobile-settings" onclick={() => (showSettings = true)} aria-label="Settings">
+      <button class="btn-mobile-settings" onclick={() => (showSettings = true)} aria-label="设置">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="3"/>
           <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
@@ -105,16 +105,16 @@
       <div class="welcome">
         <div class="welcome-icon">🦀</div>
         <h1>ThinClaw</h1>
-        <p>A lightweight AI chat that runs entirely in your browser.</p>
+        <p>一款完全在浏览器中运行的轻量级 AI 聊天应用。</p>
         {#if !$settings.apiKey}
           <p class="warn">
-            No API key set.
-            <button onclick={() => (showSettings = true)}>Open Settings</button>
-            to add your key.
+            未设置 API 密钥。
+            <button onclick={() => (showSettings = true)}>打开设置</button>
+            以添加您的密钥。
           </p>
         {:else}
           <button class="btn-start" onclick={() => createConversation()}>
-            Start a conversation
+            开始对话
           </button>
         {/if}
       </div>
@@ -158,7 +158,7 @@
       {#if $compactionStatus === 'compacting'}
         <div class="compaction-banner">
           <span class="compaction-spinner"></span>
-          Compressing conversation history…
+          正在压缩对话历史…
         </div>
       {/if}
     {/if}
