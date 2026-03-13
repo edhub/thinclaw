@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Rounded square background -->
+  <rect width="512" height="512" rx="96" fill="#5b6af5"/>
+
+  <!-- Speech bubble body -->
+  <rect x="96" y="116" width="320" height="224" rx="48" fill="white"/>
+
+  <!-- Speech bubble tail (pointing down-left) -->
+  <polygon points="132,340 88,432 236,340" fill="white"/>
+
+  <!-- Text lines (decorative) -->
+  <rect x="148" y="176" width="216" height="22" rx="11" fill="#5b6af5" opacity="0.25"/>
+  <rect x="148" y="216" width="160" height="22" rx="11" fill="#5b6af5" opacity="0.25"/>
+  <rect x="148" y="256" width="188" height="22" rx="11" fill="#5b6af5" opacity="0.25"/>
+
+  <!-- Sparkle / AI accent (top-right of bubble) -->
+  <circle cx="356" cy="176" r="14" fill="#5b6af5" opacity="0.35"/>
+  <circle cx="356" cy="176" r="7"  fill="#5b6af5" opacity="0.5"/>
+</svg>
