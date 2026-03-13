@@ -10,6 +10,7 @@
     createConversation,
     activeMessages,
     streamingMessage,
+    pendingUserMessage,
     activeConversationId,
     activeConversation,
     isStreaming,
@@ -17,6 +18,17 @@
     abortStreaming,
     compactionStatus,
   } from '$lib/stores/chat';
+  import { nanoid } from '$lib/utils/nanoid';
+  import type { AgentMessage } from '@mariozechner/pi-agent-core';
+
+  // Assign a stable random key to each message object on first encounter.
+  // Using WeakMap avoids memory leaks — keys are GC'd with their message objects.
+  const msgKeys = new WeakMap<AgentMessage, string>();
+  function keyOf(msg: AgentMessage): string {
+    let k = msgKeys.get(msg);
+    if (!k) { k = nanoid(); msgKeys.set(msg, k); }
+    return k;
+  }
   import type { ImageContent } from '@mariozechner/pi-ai';
   import { memories } from '$lib/stores/memory';
 
@@ -37,7 +49,8 @@
   $effect(() => {
     const _a = $activeMessages.length;
     const _b = $streamingMessage;
-    void _a; void _b;
+    const _c = $pendingUserMessage;
+    void _a; void _b; void _c;
     const behavior = $streamingMessage ? 'instant' : 'smooth';
     chatEndEl?.scrollIntoView({ behavior, block: 'end' });
   });
@@ -129,9 +142,28 @@
           {/if}
 
           <!-- Persisted messages -->
-          {#each $activeMessages as msg ((msg as any).timestamp)}
+          {#each $activeMessages as msg, i (keyOf(msg))}
             <ChatMessage message={msg} isStreaming={false} />
           {/each}
+
+          <!-- Optimistic user message shown immediately on send -->
+          {#if $pendingUserMessage}
+            <ChatMessage message={$pendingUserMessage} isStreaming={false} />
+          {/if}
+
+          <!-- Loading placeholder: request is in-flight but no streaming chunk yet -->
+          {#if $isStreaming && !$streamingMessage}
+            <div class="ai-loading">
+              <div class="ai-loading-avatar">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
+                </svg>
+              </div>
+              <div class="ai-loading-dots">
+                <span></span><span></span><span></span>
+              </div>
+            </div>
+          {/if}
 
           <!-- In-flight streaming message -->
           {#if $streamingMessage}
@@ -286,6 +318,51 @@
     padding: 10px 14px;
     font-size: 0.875rem;
     margin: 8px 0;
+  }
+
+  /* AI response loading placeholder */
+  .ai-loading {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 0;
+  }
+
+  .ai-loading-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--surface-elevated);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .ai-loading-dots {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding-top: 3px;
+  }
+
+  .ai-loading-dots span {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    animation: ai-dot-bounce 1.2s ease-in-out infinite;
+  }
+
+  .ai-loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .ai-loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes ai-dot-bounce {
+    0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+    40% { transform: translateY(-5px); opacity: 1; }
   }
 
   .compaction-banner {

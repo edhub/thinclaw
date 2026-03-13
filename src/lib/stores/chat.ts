@@ -103,6 +103,11 @@ export const activeMessages = writable<AgentMessage[]>([]);
 export const streamingMessage = writable<AgentMessage | null>(null);
 export const isStreaming = writable(false);
 export const streamError = writable<string | null>(null);
+/**
+ * Optimistic user message shown immediately after sendMessage() is called,
+ * before the first message_end event confirms it's in agent.state.messages.
+ */
+export const pendingUserMessage = writable<AgentMessage | null>(null);
 /** 'compacting' while auto-compaction LLM call is in flight. */
 export const compactionStatus = writable<'idle' | 'compacting'>('idle');
 
@@ -132,6 +137,8 @@ function handleAgentEvent(event: AgentEvent) {
     case 'message_end':
       streamingMessage.set(null);
       activeMessages.set([...getAgent().state.messages]);
+      // User message is now in agent.state.messages — clear the optimistic placeholder.
+      pendingUserMessage.set(null);
       break;
 
     case 'turn_end': {
@@ -337,11 +344,23 @@ export async function sendMessage(content: string, images: ImageContent[] = []):
 
   _prevMessageCounts.set(convId, agent.state.messages.length);
 
+  // Show the user message in the UI immediately — don't wait for the API round-trip.
+  const userMsgContent: AgentMessage = {
+    role: 'user',
+    content:
+      images.length > 0
+        ? [{ type: 'text', text: content }, ...images]
+        : [{ type: 'text', text: content }],
+    timestamp: Date.now(),
+  } as AgentMessage;
+  pendingUserMessage.set(userMsgContent);
+
   try {
     await agent.prompt(content, images.length > 0 ? images : undefined);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     streamError.set(msg);
+    pendingUserMessage.set(null);
   }
 }
 
