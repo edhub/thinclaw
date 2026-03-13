@@ -7,6 +7,7 @@
   import ModelSwitcher from '$lib/components/ModelSwitcher.svelte';
   import {
     loadConversations,
+    selectConversation,
     sendMessage,
     createConversation,
     activeMessages,
@@ -14,11 +15,13 @@
     pendingUserMessage,
     activeConversationId,
     activeConversation,
+    conversations,
     isStreaming,
     streamError,
     abortStreaming,
     compactionStatus,
   } from '$lib/stores/chat';
+  import { get } from 'svelte/store';
   import { nanoid } from '$lib/utils/nanoid';
   import type { AgentMessage } from '@mariozechner/pi-agent-core';
 
@@ -44,6 +47,9 @@
     // keep the store in sync incrementally — no need to reload on every agent turn.
     await memories.load();
     await loadConversations();
+    // Auto-open the most recent conversation on startup.
+    const list = get(conversations);
+    if (list.length > 0) await selectConversation(list[0].id);
   });
 
   // Auto-scroll when messages or streaming message change
@@ -115,18 +121,16 @@
       </button>
     </header>
 
-    <!-- Desktop chat header -->
-    <header class="chat-header">
-      <div class="chat-header-right">
-        <ModelSwitcher />
-        <button class="btn-settings" onclick={() => (showSettings = true)} aria-label="设置">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="3"/>
-            <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
-          </svg>
-        </button>
-      </div>
-    </header>
+    <!-- Desktop: floating controls in top-right corner -->
+    <div class="chat-controls">
+      <ModelSwitcher />
+      <button class="btn-settings" onclick={() => (showSettings = true)} aria-label="设置">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+        </svg>
+      </button>
+    </div>
 
     {#if !$activeConversationId}
       <!-- Welcome screen -->
@@ -150,12 +154,6 @@
       <!-- Chat thread -->
       <div class="messages">
         <div class="messages-inner">
-          {#if $activeConversation}
-            <div class="thread-header">
-              <span class="thread-badge">{$activeConversation.model}</span>
-            </div>
-          {/if}
-
           <!-- Persisted messages -->
           {#each $activeMessages as msg, i (keyOf(msg))}
             <ChatMessage message={msg} isStreaming={false} />
@@ -230,6 +228,7 @@
     flex-direction: column;
     overflow: hidden;
     min-width: 0;
+    position: relative;
   }
 
   /* Welcome */
@@ -302,24 +301,6 @@
     max-width: 740px;
     margin: 0 auto;
     padding: 24px 0;
-  }
-
-  .thread-header {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 8px 0 16px;
-    flex-wrap: wrap;
-  }
-
-  .thread-badge {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    background: var(--surface-elevated);
-    border: 1px solid var(--border);
-    border-radius: 100px;
-    padding: 3px 10px;
   }
 
   .error-banner {
@@ -412,22 +393,15 @@
     display: none;
   }
 
-  /* ── Desktop chat header ── */
-  .chat-header {
+  /* ── Desktop floating controls (top-right, no layout row) ── */
+  .chat-controls {
+    position: absolute;
+    top: 10px;
+    right: 14px;
     display: flex;
     align-items: center;
-    justify-content: flex-end;
-    height: 48px;
-    padding: 0 20px;
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-    gap: 8px;
-  }
-
-  .chat-header-right {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+    gap: 6px;
+    z-index: 10;
   }
 
   .btn-settings {
@@ -463,7 +437,8 @@
     }
 
     /* Hide desktop header on mobile */
-    .chat-header {
+    /* On mobile, hide the floating desktop controls */
+    .chat-controls {
       display: none;
     }
 

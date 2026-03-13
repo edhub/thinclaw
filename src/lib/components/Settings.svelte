@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { settings, MODELS, type Theme } from '$lib/stores/settings';
+  import { settings, type Theme } from '$lib/stores/settings';
   import { soul, DEFAULT_SOUL } from '$lib/agent/soul';
   import { memories, type Memory } from '$lib/stores/memory';
 
@@ -119,15 +119,6 @@
             </button>
           </div>
           <p class="field-hint">存储在您的浏览器本地，仅发送至 AI API。</p>
-        </div>
-
-        <div class="field">
-          <label for="model">模型</label>
-          <select id="model" bind:value={draft.model}>
-            {#each MODELS as m (m.id)}
-              <option value={m.id}>{m.name}</option>
-            {/each}
-          </select>
         </div>
 
         <div class="field">
