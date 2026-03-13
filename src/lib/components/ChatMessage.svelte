@@ -9,6 +9,7 @@
     ToolCall,
     ImageContent,
   } from '@mariozechner/pi-ai'
+  import type { GeneratedImage } from '$lib/agent/image'
   import FileContextCard from '$lib/components/FileContextCard.svelte'
   import type { FileContext } from '$lib/components/FileContextCard.svelte'
 
@@ -64,6 +65,13 @@
           return null
       }
     })(),
+  )
+
+  /** Generated image data for generate_image tool results. */
+  const generatedImage = $derived(
+    toolResultMsg?.toolName === 'generate_image' && !toolResultMsg.isError
+      ? (toolResultMsg.details as GeneratedImage | null)
+      : null,
   )
 
   // User message content
@@ -282,10 +290,35 @@
           </svg>
           <span class="tool-name">{toolResultMsg?.toolName ?? 'tool'}</span>
         </div>
-        <pre class="tool-result-text">{toolResultMsg?.content
+        <pre class="tool-result-text" class:hidden={!!generatedImage}>{toolResultMsg?.content
             .filter((c) => c.type === 'text')
             .map((c) => (c as TextContent).text)
             .join('\n')}</pre>
+        {#if generatedImage}
+          <div class="tool-result-image">
+            <img
+              src="data:{generatedImage.mimeType};base64,{generatedImage.imageData}"
+              alt={generatedImage.prompt}
+              class="generated-image"
+            />
+            <div class="generated-image-footer">
+              <p class="generated-image-meta">{generatedImage.aspectRatio} · {generatedImage.imageSize}</p>
+              <a
+                href="data:{generatedImage.mimeType};base64,{generatedImage.imageData}"
+                download="generated-{toolResultMsg?.timestamp ?? Date.now()}.{generatedImage.mimeType.split('/')[1] ?? 'png'}"
+                class="download-link"
+                title="下载图片"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                保存图片
+              </a>
+            </div>
+          </div>
+        {/if}
         {#if openFilePath}
           <div class="tool-result-open">
             <a
@@ -544,8 +577,52 @@
     overflow-y: auto;
   }
 
-  .tool-result-open {
-    padding: 6px 10px;
+  .tool-result-text.hidden {
+    display: none;
+  }
+
+  .tool-result-image {
+    padding: 10px;
+    border-top: 1px solid var(--border);
+  }
+
+  .generated-image {
+    display: block;
+    max-width: 100%;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+  }
+
+  .generated-image-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 6px;
+  }
+
+  .generated-image-meta {
+    margin: 0;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-family: monospace;
+  }
+
+  .download-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.75rem;
+    color: var(--accent);
+    text-decoration: none;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: background 0.1s;
+  }
+  .download-link:hover {
+    background: var(--surface-active);
+  }
+
+  .tool-result-open {    padding: 6px 10px;
     border-top: 1px solid var(--border);
   }
 

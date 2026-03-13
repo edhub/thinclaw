@@ -18,7 +18,8 @@ export interface Conversation {
   id: string
   title: string
   model: string
-  personaId?: string // optional: built-in persona locked in at conversation creation
+  personaId?: string      // optional: built-in persona locked in at conversation creation
+  imageToolEnabled?: boolean // whether the generate_image tool is active for this conversation
   createdAt: number
   updatedAt: number
 }

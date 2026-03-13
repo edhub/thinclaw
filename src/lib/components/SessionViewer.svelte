@@ -136,10 +136,27 @@
     }
   }
 
-  // ── Pretty-print JSON ─────────────────────────────────────────────────────
+  // ── Pretty-print JSON (truncate large base64 blobs) ────────────────────────
 
   function prettyJson(entry: SessionEntry): string {
-    return JSON.stringify(entry, null, 2)
+    // Deep-clone via JSON round-trip, then truncate any long base64-like strings
+    // (e.g. generated image data stored in tool result details).
+    return JSON.stringify(entry, (_key, value) => {
+      if (typeof value === 'string' && value.length > 200 && /^[A-Za-z0-9+/=]+$/.test(value)) {
+        return `[base64 ~${Math.round(value.length / 1024)}KB — truncated]`
+      }
+      return value
+    }, 2)
+  }
+
+  /** Extract a generated image from a tool-result entry, if present. */
+  function extractGeneratedImage(entry: SessionEntry): { imageData: string; mimeType: string; prompt: string; aspectRatio: string; imageSize: string } | null {
+    if (entry.type !== 'message') return null
+    const msg = (entry as any).message
+    if (msg?.role !== 'toolResult' || msg?.toolName !== 'generate_image') return null
+    const d = msg?.details
+    if (!d?.imageData) return null
+    return d
   }
 </script>
 
@@ -201,6 +218,24 @@
             {/if}
           </div>
         {:else}
+          {@const img = extractGeneratedImage(entry)}
+          {#if img}
+            <div class="generated-image-block">
+              <img
+                src="data:{img.mimeType};base64,{img.imageData}"
+                alt={img.prompt}
+                class="session-generated-image"
+              />
+              <div class="session-image-footer">
+                <span class="session-image-meta">{img.aspectRatio} · {img.imageSize}</span>
+                <a
+                  href="data:{img.mimeType};base64,{img.imageData}"
+                  download="generated-{(entry as any).message?.timestamp ?? Date.now()}.{img.mimeType.split('/')[1] ?? 'png'}"
+                  class="session-download-link"
+                >↓ 保存图片</a>
+              </div>
+            </div>
+          {/if}
           <pre class="raw-json">{prettyJson(entry)}</pre>
         {/if}
       {/if}
@@ -390,6 +425,44 @@
     word-break: break-word;
     border-left: 2px solid var(--border);
     margin-left: 14px;
+  }
+
+  /* ── Generated image in session ── */
+  .generated-image-block {
+    border-top: 1px solid var(--border);
+    padding: 10px 14px;
+  }
+
+  .session-generated-image {
+    display: block;
+    max-width: 100%;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+  }
+
+  .session-image-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 6px;
+  }
+
+  .session-image-meta {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-family: monospace;
+  }
+
+  .session-download-link {
+    font-size: 0.75rem;
+    color: var(--accent);
+    text-decoration: none;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: background 0.1s;
+  }
+  .session-download-link:hover {
+    background: var(--surface-active);
   }
 
   /* ── Empty ── */

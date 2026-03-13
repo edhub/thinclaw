@@ -1,13 +1,14 @@
 <script lang="ts">
-  import { settings, MODELS } from '$lib/stores/settings'
+  import { settings, MODELS, modelKey, getAvailableModels } from '$lib/stores/settings'
 
   let open = $state(false)
   let btnEl = $state<HTMLButtonElement | undefined>(undefined)
 
-  const currentModel = $derived(MODELS.find((m) => m.id === $settings.model) ?? MODELS[0])
+  const availableModels = $derived(getAvailableModels($settings))
+  const currentModel = $derived(MODELS.find((m) => modelKey(m) === $settings.model) ?? availableModels[0] ?? MODELS[0])
 
-  function select(id: string) {
-    settings.update((s) => ({ ...s, model: id }))
+  function select(key: string) {
+    settings.update((s) => ({ ...s, model: key }))
     open = false
   }
 
@@ -50,15 +51,15 @@
 
   {#if open}
     <div class="dropdown" role="menu">
-      {#each MODELS as model (model.id)}
+      {#each availableModels as model (modelKey(model))}
         <button
           class="option"
-          class:selected={model.id === $settings.model}
+          class:selected={modelKey(model) === $settings.model}
           role="menuitem"
-          onclick={() => select(model.id)}
+          onclick={() => select(modelKey(model))}
         >
           {model.name}
-          {#if model.id === $settings.model}
+          {#if modelKey(model) === $settings.model}
             <svg
               width="13"
               height="13"

@@ -3,7 +3,6 @@
   import Sidebar from '$lib/components/Sidebar.svelte'
   import ChatMessage from '$lib/components/ChatMessage.svelte'
   import ChatInput from '$lib/components/ChatInput.svelte'
-  import Settings from '$lib/components/Settings.svelte'
   import ModelSwitcher from '$lib/components/ModelSwitcher.svelte'
   import PersonaPicker from '$lib/components/PersonaPicker.svelte'
   import {
@@ -21,6 +20,8 @@
     streamError,
     abortStreaming,
     compactionStatus,
+    imageToolEnabled,
+    toggleImageTool,
   } from '$lib/stores/chat'
   import { get } from 'svelte/store'
   import { nanoid } from '$lib/utils/nanoid'
@@ -43,7 +44,6 @@
   import { settings } from '$lib/stores/settings'
   import { sweepSessions } from '$lib/fs/session-recorder'
 
-  let showSettings = $state(false)
   let sidebarOpen = $state(false)
   let chatEndEl = $state<HTMLDivElement | undefined>(undefined)
   let chatInputRef = $state<{ focus: () => void } | undefined>(undefined)
@@ -130,7 +130,6 @@
   {/if}
 
   <Sidebar
-    onOpenSettings={() => (showSettings = true)}
     open={sidebarOpen}
     onClose={() => (sidebarOpen = false)}
   />
@@ -155,18 +154,47 @@
       <span class="mobile-title">
         {$activeConversation?.title ?? 'ThinClaw'}
       </span>
+      {#if $activeConversationId && $settings.laozhangApiKey}
+        <button
+          class="btn-tool-toggle"
+          class:active={$imageToolEnabled}
+          onclick={toggleImageTool}
+          aria-label={$imageToolEnabled ? '停用图像生成工具' : '启用图像生成工具'}
+          title={$imageToolEnabled ? '图像工具已启用（点击关闭）' : '启用图像生成工具'}
+        >
+          🎨
+        </button>
+      {/if}
       <ModelSwitcher />
-      <button class="btn-mobile-settings" onclick={() => (showSettings = true)} aria-label="设置">
+      <a href="/settings" class="btn-mobile-settings" aria-label="设置">
         {@render gearIcon()}
-      </button>
+      </a>
     </header>
 
     <!-- Desktop: floating controls in top-right corner -->
     <div class="chat-controls">
+      <div class="btn-icon-group">
+        <a href="/settings" class="btn-settings" aria-label="设置" title="设置">
+          {@render gearIcon()}
+        </a>
+        <a href="/files" class="btn-settings" aria-label="文件浏览器" title="文件浏览器" target="_blank" rel="noopener noreferrer">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
+          </svg>
+        </a>
+      </div>
       <ModelSwitcher />
-      <button class="btn-settings" onclick={() => (showSettings = true)} aria-label="设置">
-        {@render gearIcon()}
-      </button>
+      {#if $activeConversationId && $settings.laozhangApiKey}
+        <button
+          class="btn-tool-toggle"
+          class:active={$imageToolEnabled}
+          onclick={toggleImageTool}
+          aria-label={$imageToolEnabled ? '停用图像生成工具' : '启用图像生成工具'}
+          title={$imageToolEnabled ? '图像工具已启用（点击关闭）' : '启用图像生成工具'}
+        >
+          🎨
+        </button>
+      {/if}
     </div>
 
     {#if !$activeConversationId}
@@ -178,7 +206,7 @@
         {#if !$settings.apiKey}
           <p class="warn">
             未设置 API 密钥。
-            <button onclick={() => (showSettings = true)}>打开设置</button>
+            <a href="/settings">打开设置</a>
             以添加您的密钥。
           </p>
         {:else}
@@ -259,9 +287,6 @@
   </main>
 </div>
 
-{#if showSettings}
-  <Settings onClose={() => (showSettings = false)} />
-{/if}
 
 <style>
   .app-shell {
@@ -321,11 +346,8 @@
     align-items: center;
   }
 
-  .warn button {
-    background: none;
-    border: none;
+  .warn a {
     color: var(--accent);
-    cursor: pointer;
     font-size: 0.9rem;
     text-decoration: underline;
     padding: 0;
@@ -471,8 +493,15 @@
     right: 14px;
     display: flex;
     align-items: center;
-    gap: 6px;
+    flex-direction: column;
+    gap: 2px;
     z-index: 10;
+  }
+
+  .btn-icon-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
   }
 
   .btn-settings {
@@ -484,12 +513,34 @@
     color: var(--text-secondary);
     display: flex;
     align-items: center;
+    text-decoration: none;
     transition: all 0.1s;
     flex-shrink: 0;
   }
   .btn-settings:hover {
     background: var(--surface-hover);
     color: var(--text-primary);
+  }
+
+  .btn-tool-toggle {
+    background: none;
+    border: none;
+    padding: 4px 6px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.95rem;
+    line-height: 1;
+    transition: all 0.1s;
+    opacity: 0.4;
+    flex-shrink: 0;
+  }
+  .btn-tool-toggle:hover {
+    background: var(--surface-hover);
+    opacity: 0.8;
+  }
+  .btn-tool-toggle.active {
+    background: var(--surface-active);
+    opacity: 1;
   }
 
   /* ── Mobile header (hidden on desktop) ── */
@@ -546,6 +597,7 @@
       color: var(--text-secondary);
       display: flex;
       align-items: center;
+      text-decoration: none;
       flex-shrink: 0;
       transition: all 0.1s;
     }

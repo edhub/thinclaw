@@ -11,15 +11,16 @@
  */
 import { writable, derived, get } from 'svelte/store'
 import { Agent } from '@mariozechner/pi-agent-core'
-import type { AgentEvent, AgentMessage } from '@mariozechner/pi-agent-core'
+import type { AgentEvent, AgentMessage, AgentTool } from '@mariozechner/pi-agent-core'
 import type { ImageContent, Message } from '@mariozechner/pi-ai'
 import { nanoid } from '$lib/utils/nanoid'
-import { getModelById, DEFAULT_UTILITY_MODEL_ID } from '$lib/agent/models'
+import { getModelByKey, DEFAULT_UTILITY_MODEL_KEY } from '$lib/agent/models'
 import { buildSystemPrompt, formatMemoriesForPrompt } from '$lib/agent/prompts'
 import { getPersonaById } from '$lib/agent/personas'
 import { soul } from '$lib/agent/soul'
 import { memories } from '$lib/stores/memory'
 import { browserTools } from '$lib/agent/tools'
+import { imageGenerateTool } from '$lib/agent/image'
 import { settings } from '$lib/stores/settings'
 import {
   listConversations,
@@ -43,7 +44,9 @@ import { recordSession, updateSessionTitle, sweepSessions } from '$lib/fs/sessio
 
 /** Return the utility model used for background tasks (compaction, auto-title). */
 function getUtilityModel() {
-  return getModelById(DEFAULT_UTILITY_MODEL_ID)
+  const s = get(settings)
+  const key = s.utilityModelKey || DEFAULT_UTILITY_MODEL_KEY
+  return getModelByKey(key)
 }
 
 /**
@@ -82,16 +85,28 @@ function getAgent(): Agent {
   if (!_agent) {
     _agent = new Agent({
       initialState: {
-        tools: browserTools,
+        tools: buildTools(false),
         systemPrompt: '',
       },
       convertToLlm,
     })
-    // Resolve api key dynamically so runtime changes are picked up
-    _agent.getApiKey = async () => get(settings).apiKey || undefined
+    // Resolve api key dynamically so runtime changes are picked up.
+    // Routes to the correct key based on the model's provider.
+    _agent.getApiKey = async (provider: string) => {
+      const s = get(settings)
+      if (provider === 'laozhang') return s.laozhangApiKey || undefined
+      return s.apiKey || undefined
+    }
     _agent.subscribe(handleAgentEvent)
   }
   return _agent
+}
+
+/** Build the agent tool list, optionally including the image generation tool. */
+function buildTools(imageEnabled: boolean): AgentTool[] {
+  return imageEnabled
+    ? ([...browserTools, imageGenerateTool] as AgentTool[])
+    : (browserTools as AgentTool[])
 }
 
 /** Build the full system prompt from live soul + persona + memory store + settings. */
@@ -106,7 +121,6 @@ function assembleSystemPrompt(convId?: string): string {
 }
 
 // ─── Svelte stores ────────────────────────────────────────────────────────────
-
 export const conversations = writable<Conversation[]>([])
 export const activeConversationId = writable<string | null>(null)
 export const activeMessages = writable<AgentMessage[]>([])
@@ -128,7 +142,12 @@ export const activeConversation = derived(
   ([$convs, $id]) => $convs.find((c) => c.id === $id) ?? null,
 )
 
-// Per-conversation message count before the current agent run.
+/** Whether the image generation tool is enabled for the active conversation. */
+export const imageToolEnabled = derived(
+  activeConversation,
+  ($conv) => $conv?.imageToolEnabled ?? false,
+)
+
 // Using a Map prevents cross-conversation pollution when onAgentEnd and
 // selectConversation race on the same module-level variable.
 const _prevMessageCounts = new Map<string, number>()
@@ -315,10 +334,11 @@ export async function selectConversation(id: string): Promise<void> {
   const conv = get(conversations).find((c) => c.id === id)
 
   agent.setSystemPrompt(assembleSystemPrompt(id))
-  const selectedModel = getModelById(get(settings).model)
+  const selectedModel = getModelByKey(get(settings).model)
   agent.setModel(selectedModel)
   agent.setThinkingLevel(selectedModel.reasoning ? 'medium' : 'off')
   agent.replaceMessages(msgs)
+  agent.setTools(buildTools(conv?.imageToolEnabled ?? false))
 
   _prevMessageCounts.set(id, msgs.length)
   activeConversationId.set(id)
@@ -389,11 +409,29 @@ export async function renameConversation(id: string, title: string): Promise<voi
   updateSessionTitle(id, title).catch(() => {})
 }
 
+/**
+ * Toggle the image generation tool for the active conversation.
+ * Persists to IndexedDB and immediately updates the agent's live tool list.
+ */
+export async function toggleImageTool(): Promise<void> {
+  const convId = get(activeConversationId)
+  if (!convId) return
+  const next = !(get(activeConversation)?.imageToolEnabled ?? false)
+  conversations.update((list) =>
+    list.map((c) => (c.id === convId ? { ...c, imageToolEnabled: next } : c)),
+  )
+  const conv = get(conversations).find((c) => c.id === convId)
+  if (conv) await saveConversation(conv)
+  getAgent().setTools(buildTools(next))
+}
+
 export async function sendMessage(content: string, images: ImageContent[] = []): Promise<void> {
   const agent = getAgent()
 
   const s = get(settings)
-  if (!s.apiKey) {
+  const activeModel = getModelByKey(s.model)
+  const requiredKey = activeModel.provider === 'laozhang' ? s.laozhangApiKey : s.apiKey
+  if (!requiredKey) {
     streamError.set('API key is not set. Please add it in Settings.')
     return
   }
@@ -420,7 +458,7 @@ export async function sendMessage(content: string, images: ImageContent[] = []):
   }
 
   // Rebuild system prompt before every message so soul/memory changes take effect
-  const selectedModel = getModelById(s.model)
+  const selectedModel = getModelByKey(s.model)
   agent.setSystemPrompt(assembleSystemPrompt())
   agent.setModel(selectedModel)
   agent.setThinkingLevel(selectedModel.reasoning ? 'medium' : 'off')
