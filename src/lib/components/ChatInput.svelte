@@ -9,6 +9,7 @@
     getFilePreview,
     type FileEntry,
   } from '$lib/fs/mention';
+  import { writeFile } from '$lib/fs/opfs';
 
   interface Props {
     onSend: (content: string, images: ImageContent[]) => void;
@@ -20,8 +21,12 @@
   let images = $state<ImageContent[]>([]);
   let textareaEl = $state<HTMLTextAreaElement | undefined>(undefined);
   let fileInputEl = $state<HTMLInputElement | undefined>(undefined);
+  let textFileInputEl = $state<HTMLInputElement | undefined>(undefined);
   let isDraggingOver = $state(false);
   let isMobile = $state(false);
+  /** Names of files rejected during local upload (auto-clears after 3 s). */
+  let uploadErrors = $state<string[]>([]);
+  let uploadErrorTimer: ReturnType<typeof setTimeout> | null = null;
 
   // ── @mention state ────────────────────────────────────────────────────────
 
@@ -127,12 +132,78 @@
     });
   }
 
-  const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+  const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 
   async function addFiles(files: FileList | File[]) {
-    const valid = Array.from(files).filter((f) => ACCEPTED_TYPES.includes(f.type));
+    const valid = Array.from(files).filter((f) => ACCEPTED_IMAGE_TYPES.includes(f.type));
     const contents = await Promise.all(valid.map(fileToImageContent));
     images = [...images, ...contents];
+  }
+
+  // ── Local text-file upload helpers ───────────────────────────────────────
+
+  /** Extensions we're confident are plain text / source code. */
+  const TEXT_EXTENSIONS = new Set([
+    'txt', 'md', 'markdown', 'rst', 'adoc',
+    'json', 'jsonc', 'yaml', 'yml', 'toml', 'csv', 'tsv', 'xml', 'sql',
+    'ini', 'cfg', 'conf', 'env', 'properties', 'editorconfig',
+    'sh', 'bash', 'zsh', 'fish', 'ps1', 'bat',
+    'html', 'htm', 'css', 'scss', 'less', 'svelte', 'vue',
+    'ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs',
+    'py', 'rb', 'go', 'rs', 'java', 'kt', 'swift',
+    'c', 'cpp', 'h', 'hpp', 'cs', 'php', 'r', 'scala', 'lua',
+    'graphql', 'gql', 'proto', 'tf', 'hcl',
+    'gitignore', 'dockerignore', 'npmignore', 'log',
+  ]);
+
+  function isTextFile(file: File): boolean {
+    if (file.type.startsWith('text/')) return true;
+    if (['application/json', 'application/xml', 'application/javascript'].includes(file.type))
+      return true;
+    const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+    return TEXT_EXTENSIONS.has(ext);
+  }
+
+  /**
+   * Upload local text files to OPFS under `uploads/`, then add as chips.
+   * Non-text files are rejected with a brief inline error.
+   * Same-name files are silently overwritten.
+   */
+  async function uploadLocalFiles(files: FileList | File[]) {
+    const all = Array.from(files);
+    const rejected: string[] = [];
+    const uploaded: FileEntry[] = [];
+
+    for (const file of all) {
+      if (!isTextFile(file)) {
+        rejected.push(file.name);
+        continue;
+      }
+      try {
+        const text = await file.text();
+        const opfsPath = `uploads/${file.name}`;
+        await writeFile(opfsPath, text);
+        uploaded.push({ name: file.name, path: opfsPath });
+      } catch {
+        rejected.push(file.name);
+      }
+    }
+
+    // Add successfully uploaded files as chips (deduplicated).
+    for (const entry of uploaded) {
+      if (!fileChips.find((c) => c.path === entry.path)) {
+        fileChips = [...fileChips, entry];
+      } else {
+        // Already chipped — content was silently overwritten; no need to add again.
+      }
+    }
+
+    // Show rejection notice for 3 s.
+    if (rejected.length > 0) {
+      if (uploadErrorTimer) clearTimeout(uploadErrorTimer);
+      uploadErrors = rejected;
+      uploadErrorTimer = setTimeout(() => { uploadErrors = []; }, 3000);
+    }
   }
 
   function removeImage(idx: number) {
@@ -252,12 +323,22 @@
     input.value = '';
   }
 
+  function openTextFilePicker() {
+    textFileInputEl?.click();
+  }
+
+  function handleTextFileChange(e: Event) {
+    const input = e.target as HTMLInputElement;
+    if (input.files) uploadLocalFiles(input.files);
+    input.value = '';
+  }
+
   function handlePaste(e: ClipboardEvent) {
     const items = e.clipboardData?.items;
     if (!items) return;
     const imageFiles: File[] = [];
     for (const item of items) {
-      if (item.kind === 'file' && ACCEPTED_TYPES.includes(item.type)) {
+      if (item.kind === 'file' && ACCEPTED_IMAGE_TYPES.includes(item.type)) {
         const f = item.getAsFile();
         if (f) imageFiles.push(f);
       }
@@ -275,10 +356,15 @@
   function handleDragLeave() {
     isDraggingOver = false;
   }
-  function handleDrop(e: DragEvent) {
+  async function handleDrop(e: DragEvent) {
     e.preventDefault();
     isDraggingOver = false;
-    if (e.dataTransfer?.files) addFiles(e.dataTransfer.files);
+    if (!e.dataTransfer?.files) return;
+    const all = Array.from(e.dataTransfer.files);
+    const imageFiles = all.filter((f) => ACCEPTED_IMAGE_TYPES.includes(f.type));
+    const otherFiles = all.filter((f) => !ACCEPTED_IMAGE_TYPES.includes(f.type));
+    if (imageFiles.length > 0) await addFiles(imageFiles);
+    if (otherFiles.length > 0) await uploadLocalFiles(otherFiles);
   }
 
   function previewSrc(img: ImageContent) {
@@ -290,7 +376,7 @@
   );
 </script>
 
-<!-- Hidden file input -->
+<!-- Hidden image input -->
 <input
   bind:this={fileInputEl}
   type="file"
@@ -298,6 +384,16 @@
   multiple
   style="display:none"
   onchange={handleFileChange}
+/>
+
+<!-- Hidden text-file input -->
+<input
+  bind:this={textFileInputEl}
+  type="file"
+  accept="text/*,.md,.ts,.tsx,.js,.jsx,.json,.yaml,.yml,.toml,.py,.go,.rs,.sql,.csv,.sh,.html,.css,.svelte"
+  multiple
+  style="display:none"
+  onchange={handleTextFileChange}
 />
 
 <div
@@ -329,7 +425,7 @@
     </div>
   {/if}
 
-  <!-- File chips (from @mention) -->
+  <!-- File chips (from @mention and local upload) -->
   {#if fileChips.length > 0}
     <div class="file-chips">
       {#each fileChips as chip}
@@ -339,7 +435,7 @@
             <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
             <polyline points="14 2 14 8 20 8"/>
           </svg>
-          <span class="chip-name" title={chip.path}>{chip.path}</span>
+          <span class="chip-name" title={chip.path}>{chip.name}</span>
           <button
             class="chip-remove"
             onclick={() => removeChip(chip.path)}
@@ -352,6 +448,16 @@
           </button>
         </div>
       {/each}
+    </div>
+  {/if}
+
+  <!-- Upload error notice (auto-dismisses after 3 s) -->
+  {#if uploadErrors.length > 0}
+    <div class="upload-error">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      不支持：{uploadErrors.join('、')}（仅限文本 / 代码文件）
     </div>
   {/if}
 
@@ -383,7 +489,7 @@
         onpaste={handlePaste}
       ></textarea>
 
-      <!-- Attach button -->
+      <!-- Attach image button -->
       <button
         class="attach-btn"
         type="button"
@@ -392,6 +498,21 @@
       >
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
+        </svg>
+      </button>
+
+      <!-- Upload local text file button -->
+      <button
+        class="attach-btn"
+        type="button"
+        onclick={openTextFilePicker}
+        title="上传本地文本文件到工作区"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="12" y1="18" x2="12" y2="12"/>
+          <polyline points="9 15 12 12 15 15"/>
         </svg>
       </button>
 
@@ -526,6 +647,20 @@
 
   .chip-remove:hover {
     color: var(--error);
+  }
+
+  /* Upload error notice */
+  .upload-error {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.78rem;
+    color: var(--error);
+    background: var(--error-bg);
+    border: 1px solid var(--error);
+    border-radius: 6px;
+    padding: 5px 10px;
+    margin-bottom: 8px;
   }
 
   /* Wrapper that anchors the FilePicker dropdown */
