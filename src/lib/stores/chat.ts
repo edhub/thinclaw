@@ -21,7 +21,7 @@ import { soul } from '$lib/agent/soul'
 import { memories } from '$lib/stores/memory'
 import { browserTools } from '$lib/agent/tools'
 import { imageGenerateTool } from '$lib/agent/image'
-import { settings } from '$lib/stores/settings'
+import { settings, getApiKeyForProvider } from '$lib/stores/settings'
 import {
   listConversations,
   saveConversation,
@@ -117,9 +117,8 @@ function getAgent(): Agent {
       convertToLlm,
     })
     // Resolve api key dynamically so runtime changes are picked up.
-    _agent.getApiKey = async (_provider: string) => {
-      const s = get(settings)
-      return s.laozhangApiKey || undefined
+    _agent.getApiKey = async (provider: string) => {
+      return getApiKeyForProvider(provider, get(settings))
     }
     _agent.subscribe(handleAgentEvent)
   }
@@ -463,7 +462,7 @@ export async function sendMessage(content: string, images: ImageContent[] = []):
 
   const s = get(settings)
   const activeModel = getModelByKey(s.model)
-  const requiredKey = s.laozhangApiKey
+  const requiredKey = getApiKeyForProvider(activeModel.provider, s)
   if (!requiredKey) {
     streamError.set('API key is not set. Please add it in Settings.')
     return

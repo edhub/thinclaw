@@ -20,6 +20,7 @@ export type Theme = 'light' | 'dark' | 'system'
 
 export interface Settings {
   laozhangApiKey: string
+  bianxieApiKey: string
   enabledModelKeys: string[]   // [] means all models of providers with keys
   model: string                // active model key: `${provider}:${modelId}`
   utilityModelKey: string      // utility model key (compaction / auto-title)
@@ -31,6 +32,7 @@ const STORAGE_KEY = 'thinclaw:settings'
 
 const DEFAULTS: Settings = {
   laozhangApiKey: '',
+  bianxieApiKey: '',
   enabledModelKeys: [],
   model: DEFAULT_MODEL_KEY,
   utilityModelKey: DEFAULT_UTILITY_MODEL_KEY,
@@ -40,9 +42,23 @@ const DEFAULTS: Settings = {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
+/** Returns true if the given provider has an API key configured. */
+function hasProviderKey(provider: string, s: Settings): boolean {
+  if (provider === 'laozhang') return !!s.laozhangApiKey
+  if (provider === 'bianxie') return !!s.bianxieApiKey
+  return false
+}
+
+/** Returns the API key for the given provider, or undefined if not configured. */
+export function getApiKeyForProvider(provider: string, s: Settings): string | undefined {
+  if (provider === 'laozhang') return s.laozhangApiKey || undefined
+  if (provider === 'bianxie') return s.bianxieApiKey || undefined
+  return undefined
+}
+
 /** All models whose provider currently has a key configured (ignores enabledModelKeys). */
 export function getKeyedModels(s: Settings): Model<any>[] {
-  return s.laozhangApiKey ? [...MODELS] : []
+  return MODELS.filter((m) => hasProviderKey(m.provider, s))
 }
 
 /**
@@ -51,7 +67,7 @@ export function getKeyedModels(s: Settings): Model<any>[] {
  */
 export function getAvailableModels(s: Settings): Model<any>[] {
   return MODELS.filter((m) => {
-    if (!s.laozhangApiKey) return false
+    if (!hasProviderKey(m.provider, s)) return false
     if (s.enabledModelKeys.length === 0) return true
     return s.enabledModelKeys.includes(modelKey(m))
   })
@@ -62,7 +78,7 @@ export function getAvailableModels(s: Settings): Model<any>[] {
  * A model is enabled if it has a key AND is in enabledModelKeys (or list is empty).
  */
 export function isModelEnabled(m: Model<any>, s: Settings): boolean {
-  if (!s.laozhangApiKey) return false
+  if (!hasProviderKey(m.provider, s)) return false
   if (s.enabledModelKeys.length === 0) return true
   return s.enabledModelKeys.includes(modelKey(m))
 }
