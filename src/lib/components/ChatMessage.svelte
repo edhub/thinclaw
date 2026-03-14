@@ -66,7 +66,7 @@
 
   // Render markdown for assistant text
   let renderedHtml = $state('')
-  let thinkingOpen = $state(true)
+  let thinkingOpen = $state(false)
   /** Whether the collapsed error card is expanded to show the full error message. */
   let errorExpanded = $state(false)
 

@@ -4,111 +4,56 @@
 
   const currentPersonaId = $derived($activeConversation?.personaId ?? null)
 
-  async function select(id: string | null) {
-    // Toggle off if clicking the already-selected persona
-    await setConversationPersona(id === currentPersonaId ? null : id)
+  async function handleChange(e: Event) {
+    const value = (e.target as HTMLSelectElement).value
+    await setConversationPersona(value || null)
   }
 </script>
 
 <div class="persona-picker">
-  <p class="hint">为当前会话选择一个角色（可选）</p>
-
-  <div class="cards">
+  <label class="label" for="persona-select">角色</label>
+  <select id="persona-select" value={currentPersonaId ?? ''} onchange={handleChange}>
+    <option value="">无（默认）</option>
     {#each BUILTIN_PERSONAS as persona (persona.id)}
-      <button
-        class="card"
-        class:selected={currentPersonaId === persona.id}
-        onclick={() => select(persona.id)}
-        type="button"
-      >
-        <span class="card-name">{persona.name}</span>
-        <span class="card-desc">{persona.description}</span>
-      </button>
+      <option value={persona.id}>{persona.name} — {persona.description}</option>
     {/each}
-  </div>
-
-  {#if currentPersonaId}
-    <button class="btn-clear" onclick={() => select(null)} type="button"> 清除角色 </button>
-  {/if}
+  </select>
 </div>
 
 <style>
   .persona-picker {
     display: flex;
-    flex-direction: column;
     align-items: center;
-    gap: 16px;
-    padding: 48px 0 32px;
-  }
-
-  .hint {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    margin: 0;
-  }
-
-  .cards {
-    display: flex;
-    flex-wrap: wrap;
     gap: 10px;
+    padding: 32px 0 0;
     justify-content: center;
-    max-width: 560px;
   }
 
-  .card {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: 12px 16px;
-    background: var(--surface-elevated);
+  .label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    opacity: 0.7;
+    white-space: nowrap;
+  }
+
+  select {
+    background: var(--surface-input);
+    color: var(--text-primary);
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: 8px;
+    padding: 5px 10px;
+    font-size: 0.82rem;
     cursor: pointer;
-    text-align: left;
-    width: 180px;
-    transition: all 0.15s;
-    color: var(--text-primary);
+    outline: none;
+    transition: border-color 0.15s;
+    max-width: 260px;
   }
 
-  .card:hover {
+  select:hover {
     border-color: var(--accent);
-    background: var(--surface-hover);
   }
 
-  .card.selected {
+  select:focus {
     border-color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 10%, var(--surface-elevated));
-  }
-
-  .card-name {
-    font-size: 0.875rem;
-    font-weight: 600;
-    color: var(--text-primary);
-  }
-
-  .card.selected .card-name {
-    color: var(--accent);
-  }
-
-  .card-desc {
-    font-size: 0.775rem;
-    color: var(--text-muted);
-    line-height: 1.4;
-  }
-
-  .btn-clear {
-    background: none;
-    border: none;
-    font-size: 0.775rem;
-    color: var(--text-muted);
-    cursor: pointer;
-    padding: 4px 8px;
-    border-radius: 6px;
-    transition: all 0.1s;
-  }
-
-  .btn-clear:hover {
-    color: var(--error);
-    background: var(--error-bg);
   }
 </style>

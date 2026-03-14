@@ -69,30 +69,40 @@ function convertToLlm(messages: AgentMessage[]): Message[] {
     }
   }
 
-  return messages
-    .filter((_, i) => !skipSet.has(i))
-    .flatMap((m) => {
-      const msg = m as any
-      if (msg.role === 'compactionSummary') {
-        const cs = m as CompactionSummaryMessage
-        return [
-          {
-            role: 'user' as const,
-            content: [
-              {
-                type: 'text' as const,
-                text: `[Summary of previous conversation]\n\n${cs.summary}`,
-              },
-            ],
-            timestamp: cs.timestamp,
-          } satisfies Message,
-        ]
-      }
-      if (msg.role === 'user' || msg.role === 'assistant' || msg.role === 'toolResult') {
-        return [m as Message]
-      }
-      return []
-    })
+  // Keep thinking blocks only in the last 2 assistant messages to save tokens.
+  const assistantIndices = messages
+    .map((m, i) => ((m as any).role === 'assistant' ? i : -1))
+    .filter((i) => i !== -1)
+  const recentAssistantSet = new Set(assistantIndices.slice(-2))
+
+  return messages.flatMap((m, i) => {
+    if (skipSet.has(i)) return []
+    const msg = m as any
+    if (msg.role === 'compactionSummary') {
+      const cs = m as CompactionSummaryMessage
+      return [
+        {
+          role: 'user' as const,
+          content: [
+            {
+              type: 'text' as const,
+              text: `[Summary of previous conversation]\n\n${cs.summary}`,
+            },
+          ],
+          timestamp: cs.timestamp,
+        } satisfies Message,
+      ]
+    }
+    if (msg.role === 'assistant') {
+      if (recentAssistantSet.has(i)) return [m as Message]
+      const stripped = { ...msg, content: (msg.content ?? []).filter((b: any) => b.type !== 'thinking') }
+      return [stripped as Message]
+    }
+    if (msg.role === 'user' || msg.role === 'toolResult') {
+      return [m as Message]
+    }
+    return []
+  })
 }
 
 let _agent: Agent | null = null

@@ -67,6 +67,9 @@
   // Chat input is closed by default; user opens it via FAB or ⌘K.
   let chatInputOpen = $state(false)
 
+  const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/i.test(navigator.platform)
+  const shortcutHint = isMac ? '⌘K' : 'Ctrl+K'
+
   function handleGlobalKeydown(e: KeyboardEvent) {
     if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
       e.preventDefault()
@@ -95,7 +98,18 @@
 
   onDestroy(() => document.removeEventListener('keydown', handleGlobalKeydown))
 
-  // Auto-scroll when messages or streaming message change
+  // Scroll to bottom on conversation switch — use rAF so the browser has time
+  // to finish layout before we call scrollIntoView (messages are bulk-inserted).
+  $effect(() => {
+    const _convId = $activeConversationId
+    void _convId
+    requestAnimationFrame(() => {
+      chatEndEl?.scrollIntoView({ behavior: 'instant', block: 'end' })
+    })
+  })
+
+  // Scroll to bottom during streaming / when new messages arrive.
+  // No rAF needed here — messages append incrementally and layout is already stable.
   $effect(() => {
     const _a = $activeMessages.length
     const _b = $streamingMessage
@@ -254,6 +268,15 @@
           <!-- Persona picker: shown only while the conversation has no messages -->
           {#if $activeMessages.length === 0 && !$isStreaming && !$pendingUserMessage}
             <PersonaPicker />
+            <div class="empty-actions">
+              <button class="btn-new-msg" onclick={() => (chatInputOpen = true)}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+                新消息
+              </button>
+              <span class="shortcut-hint">或按 <kbd>{shortcutHint}</kbd></span>
+            </div>
           {/if}
 
           <!-- Persisted messages -->
@@ -459,6 +482,51 @@
     max-width: 860px;
     margin: 0 auto;
     padding: 24px 0 120px;
+  }
+
+  .shortcut-hint {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    opacity: 0.6;
+  }
+
+  .shortcut-hint kbd {
+    display: inline-block;
+    background: var(--surface-elevated);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: 0.7rem;
+    font-family: inherit;
+    color: var(--text-muted);
+  }
+
+  .empty-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 16px;
+  }
+
+  .btn-new-msg {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 14px;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .btn-new-msg:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
   }
 
   .error-banner {
