@@ -9,8 +9,11 @@
   interface Props {
     onSend: (content: string, images: ImageContent[]) => void
     onAbort?: () => void
+    open?: boolean
+    onClose?: () => void
+    isModal?: boolean
   }
-  let { onSend, onAbort }: Props = $props()
+  let { onSend, onAbort, open = true, onClose, isModal = false }: Props = $props()
 
   let value = $state('')
   let images = $state<ImageContent[]>([])
@@ -267,6 +270,13 @@
   // ── Event handlers ────────────────────────────────────────────────────────
 
   function handleKeydown(e: KeyboardEvent) {
+    // ESC closes modal
+    if (isModal && e.key === 'Escape') {
+      e.preventDefault()
+      onClose?.()
+      return
+    }
+
     // Escape closes the dropdown regardless of whether there are results.
     if (showDropdown && e.key === 'Escape') {
       e.preventDefault()
@@ -634,6 +644,17 @@
     border-top: 1px solid var(--border);
     background: var(--surface-main);
     flex-shrink: 0;
+  }
+
+  /* Modal mode adjustments */
+  :global(.chat-input-modal) .input-area {
+    border-top: none;
+    border-radius: 16px;
+    padding: 16px 24px 20px;
+  }
+
+  :global(.chat-input-modal) .hint {
+    display: none;
   }
 
   /* Image previews row */

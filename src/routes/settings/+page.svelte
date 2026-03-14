@@ -10,6 +10,15 @@
 -->
 <script lang="ts">
   import { onMount } from 'svelte'
+  import { goto } from '$app/navigation'
+
+  function closeSettings() {
+    if (history.length > 1) {
+      history.back()
+    } else {
+      goto('/')
+    }
+  }
   import { memories } from '$lib/stores/memory'
   import {
     settings,
@@ -101,15 +110,34 @@
   <!-- Top bar -->
   <header class="topbar">
     <h1 class="page-title">设置</h1>
-    <a href="/" class="btn-close" aria-label="关闭设置">
+    <button class="btn-close" onclick={closeSettings} type="button" aria-label="关闭设置">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
         <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
       </svg>
-    </a>
+    </button>
   </header>
 
+  <!-- Mobile tab bar (outside .body so it sits above content, not beside sidebar) -->
+  <div class="tab-bar" role="tablist">
+    {#each NAV as item (item.id)}
+      <button
+        class="tab"
+        class:active={activeSection === item.id}
+        onclick={() => (activeSection = item.id)}
+        role="tab"
+        aria-selected={activeSection === item.id}
+        type="button"
+      >
+        {item.label}
+        {#if item.id === 'memory' && memCount > 0}
+          <span class="nav-badge">{memCount}</span>
+        {/if}
+      </button>
+    {/each}
+  </div>
+
   <div class="body">
-    <!-- Sidebar -->
+    <!-- Sidebar (desktop only) -->
     <nav class="sidebar" aria-label="设置导航">
       {#each NAV as item (item.id)}
         <button
@@ -125,25 +153,6 @@
         </button>
       {/each}
     </nav>
-
-    <!-- Mobile tab bar -->
-    <div class="tab-bar" role="tablist">
-      {#each NAV as item (item.id)}
-        <button
-          class="tab"
-          class:active={activeSection === item.id}
-          onclick={() => (activeSection = item.id)}
-          role="tab"
-          aria-selected={activeSection === item.id}
-          type="button"
-        >
-          {item.label}
-          {#if item.id === 'memory' && memCount > 0}
-            <span class="nav-badge">{memCount}</span>
-          {/if}
-        </button>
-      {/each}
-    </div>
 
     <!-- Content -->
     <main class="content">
@@ -346,7 +355,10 @@
     height: 28px;
     border-radius: 8px;
     color: var(--text-muted);
-    text-decoration: none;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
     transition: all 0.1s;
     flex-shrink: 0;
   }
@@ -758,14 +770,56 @@
 
     .section {
       padding-top: 20px;
+      /* allow full width on mobile */
+      max-width: 100%;
     }
 
     .provider-card {
-      padding: 14px 16px;
+      padding: 14px 14px;
     }
 
     .theme-options {
       flex-wrap: wrap;
+    }
+
+    /* Stack API key input + toggle button vertically on mobile */
+    .key-wrap {
+      flex-direction: column;
+    }
+    .btn-toggle {
+      width: 100%;
+      padding: 9px 14px;
+    }
+
+    /* Hide context-window tag on mobile, keep reasoning tag */
+    .tag:not(.tag-reason) {
+      display: none;
+    }
+
+    /* Tighten model row layout */
+    .model-label {
+      padding: 8px 6px;
+      gap: 8px;
+    }
+
+    .model-name {
+      font-size: 0.82rem;
+    }
+  }
+
+  /* Extra-small screens */
+  @media (max-width: 374px) {
+    .topbar {
+      padding: 0 12px;
+    }
+
+    .content {
+      padding: 0 12px 40px;
+    }
+
+    .tab {
+      padding: 10px 8px 12px;
+      font-size: 0.78rem;
     }
   }
 </style>

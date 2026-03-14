@@ -62,7 +62,7 @@
 
   // Render markdown for assistant text
   let renderedHtml = $state('')
-  let thinkingOpen = $state(false)
+  let thinkingOpen = $state(true)
 
   $effect(() => {
     const combined = textBlocks.map((b) => b.text).join('')

@@ -25,12 +25,12 @@
   }
 
   async function handleSelect(id: string) {
-    onClose?.() // always close drawer on mobile
     if ($activeConversationId === id) return
     // Don't allow switching while the agent is mid-stream: the agent's internal
     // message list and _prevMessageCounts would get entangled between conversations.
     if ($isStreaming) return
     await selectConversation(id)
+    onClose?.() // close drawer after selection completes
   }
 
   async function handleDelete(e: MouseEvent, id: string) {

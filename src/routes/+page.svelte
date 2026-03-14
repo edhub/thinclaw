@@ -57,15 +57,17 @@
   let sidebarOpen = $state(false)
   let chatEndEl = $state<HTMLDivElement | undefined>(undefined)
   let chatInputRef = $state<{ focus: () => void } | undefined>(undefined)
+  // Chat input is closed by default; user opens it via FAB or ⌘K.
+  let chatInputOpen = $state(false)
 
   function handleGlobalKeydown(e: KeyboardEvent) {
     if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
       e.preventDefault()
-      if ($activeConversationId) {
-        chatInputRef?.focus()
-      } else {
+      if (!$activeConversationId) {
         createConversation()
-        tick().then(() => chatInputRef?.focus())
+        tick().then(() => (chatInputOpen = true))
+      } else {
+        chatInputOpen = true
       }
     }
   }
@@ -98,7 +100,15 @@
     chatEndEl?.scrollIntoView({ behavior, block: 'end' })
   })
 
+  // Focus input when modal opens
+  $effect(() => {
+    if (chatInputOpen) {
+      tick().then(() => chatInputRef?.focus())
+    }
+  })
+
   async function handleSend(content: string, images: ImageContent[]) {
+    chatInputOpen = false
     await sendMessage(content, images)
   }
 
@@ -164,21 +174,28 @@
       <span class="mobile-title">
         {$activeConversation?.title ?? 'ThinClaw'}
       </span>
-      {#if $activeConversationId && $settings.laozhangApiKey}
-        <button
-          class="btn-tool-toggle"
-          class:active={$imageToolEnabled}
-          onclick={toggleImageTool}
-          aria-label={$imageToolEnabled ? '停用图像生成工具' : '启用图像生成工具'}
-          title={$imageToolEnabled ? '图像工具已启用（点击关闭）' : '启用图像生成工具'}
-        >
-          🎨
-        </button>
-      {/if}
       <ModelSwitcher />
-      <a href="/settings" class="btn-mobile-settings" aria-label="设置">
-        {@render gearIcon()}
-      </a>
+      <div class="mobile-header-actions">
+        {#if $activeConversationId && $settings.laozhangApiKey}
+          <button
+            class="btn-tool-toggle"
+            class:active={$imageToolEnabled}
+            onclick={toggleImageTool}
+            aria-label={$imageToolEnabled ? '停用图像生成工具' : '启用图像生成工具'}
+            title={$imageToolEnabled ? '图像工具已启用（点击关闭）' : '启用图像生成工具'}
+          >
+            🎨
+          </button>
+        {/if}
+        <a href="/files" class="btn-mobile-settings" aria-label="文件浏览器" title="文件浏览器" target="_blank" rel="noopener noreferrer">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
+          </svg>
+        </a>
+        <a href="/settings" class="btn-mobile-settings" aria-label="设置">
+          {@render gearIcon()}
+        </a>
+      </div>
     </header>
 
     <!-- Desktop: floating controls in top-right corner -->
@@ -285,8 +302,6 @@
         </div>
       </div>
 
-      <ChatInput bind:this={chatInputRef} onSend={handleSend} onAbort={abortStreaming} />
-
       {#if $compactionStatus === 'compacting'}
         <div class="compaction-banner">
           <span class="compaction-spinner"></span>
@@ -295,6 +310,40 @@
       {/if}
     {/if}
   </main>
+
+  <!-- Chat input modal backdrop + modal (combined to avoid duplicate condition) -->
+  {#if chatInputOpen}
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <div 
+      class="chat-input-backdrop" 
+      role="presentation" 
+      onclick={() => (chatInputOpen = false)}
+    ></div>
+    <div class="chat-input-modal">
+      <ChatInput 
+        bind:this={chatInputRef} 
+        onSend={handleSend} 
+        onAbort={abortStreaming}
+        open={true}
+        onClose={() => (chatInputOpen = false)}
+        isModal={true}
+      />
+    </div>
+  {/if}
+
+  <!-- Floating action button (when chat input is closed) -->
+  {#if !chatInputOpen}
+    <button 
+      class="floating-input-btn"
+      onclick={() => (chatInputOpen = true)}
+      aria-label="打开聊天输入"
+      title="打开聊天输入"
+    >
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+      </svg>
+    </button>
+  {/if}
 </div>
 
 
@@ -389,7 +438,7 @@
   .messages-inner {
     max-width: 740px;
     margin: 0 auto;
-    padding: 24px 0;
+    padding: 24px 0 120px;
   }
 
   .error-banner {
@@ -597,6 +646,13 @@
       text-align: center;
     }
 
+    .mobile-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      flex-shrink: 0;
+    }
+
     .btn-hamburger,
     .btn-mobile-settings {
       background: none;
@@ -623,7 +679,82 @@
     }
 
     .messages-inner {
-      padding: 16px 0;
+      padding: 16px 0 100px;
+    }
+  }
+
+  /* ── Chat input modal ── */
+  .chat-input-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 60;
+    animation: fadeIn 0.2s ease-out;
+  }
+
+  .chat-input-modal {
+    position: fixed;
+    top: 10vh;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 70;
+    width: 90%;
+    max-width: 600px;
+    background: var(--surface-main);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    animation: slideUp 0.3s ease-out;
+    max-height: 70vh;
+    overflow-y: auto;
+  }
+
+  /* Show the floating button */
+  .floating-input-btn {
+    display: flex;
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: none;
+    color: white;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 50;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    transition: all 0.2s ease;
+  }
+
+  .floating-input-btn:hover {
+    transform: scale(1.1);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+  }
+
+  .floating-input-btn:active {
+    transform: scale(0.95);
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes slideUp {
+    from {
+      opacity: 0;
+      transform: translateX(-50%) translateY(30px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
     }
   }
 </style>
