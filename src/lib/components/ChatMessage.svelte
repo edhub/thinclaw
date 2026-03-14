@@ -18,8 +18,12 @@
     isStreaming?: boolean
     /** toolCallId → ToolResultMessage, built by the parent from activeMessages */
     toolResultMap?: Map<string, ToolResultMessage>
+    /** Called when the user clicks "删除" on an error message. */
+    onDelete?: () => void
+    /** Called when the user clicks "重试" on an error message. */
+    onRetry?: () => void
   }
-  let { message, isStreaming = false, toolResultMap }: Props = $props()
+  let { message, isStreaming = false, toolResultMap, onDelete, onRetry }: Props = $props()
 
   // --- Derived helpers ---
 
@@ -63,6 +67,8 @@
   // Render markdown for assistant text
   let renderedHtml = $state('')
   let thinkingOpen = $state(true)
+  /** Whether the collapsed error card is expanded to show the full error message. */
+  let errorExpanded = $state(false)
 
   $effect(() => {
     const combined = textBlocks.map((b) => b.text).join('')
@@ -210,10 +216,61 @@
         <span class="cursor-blink">▋</span>
       {/if}
 
-      <!-- Error -->
+      <!-- Error card (collapsed by default) -->
       {#if hasError}
-        <div class="error-inline">
-          {assistantMsg?.errorMessage ?? '发生错误。'}
+        <div class="error-card" class:open={errorExpanded}>
+          <div class="error-row">
+            <button
+              class="error-toggle"
+              onclick={() => (errorExpanded = !errorExpanded)}
+              type="button"
+              aria-expanded={errorExpanded}
+            >
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                class="error-icon"
+              >
+                <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                <line x1="12" y1="9" x2="12" y2="13" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+              <span class="error-label">请求失败</span>
+              <svg
+                class="chevron"
+                class:open={errorExpanded}
+                width="10"
+                height="10"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+              >
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </button>
+            <div class="error-actions">
+              {#if onRetry}
+                <button class="error-action-btn" onclick={() => onRetry?.()} type="button" title="删除此条错误并重新发送">
+                  ↺ 重试
+                </button>
+              {/if}
+              {#if onDelete}
+                <button class="error-action-btn error-action-delete" onclick={() => onDelete?.()} type="button" title="删除此条错误记录">
+                  ✕
+                </button>
+              {/if}
+            </div>
+          </div>
+          {#if errorExpanded}
+            <div class="error-body">
+              {assistantMsg?.errorMessage ?? '发生未知错误。'}
+            </div>
+          {/if}
         </div>
       {/if}
     {:else if isToolResult}
@@ -353,14 +410,106 @@
     margin: 0;
   }
 
-  /* Error inline */
-  .error-inline {
-    color: var(--error);
-    font-size: 0.875rem;
-    padding: 6px 10px;
+  /* Error card (collapsed by default) */
+  .error-card {
+    border: 1px solid var(--error);
+    border-radius: 7px;
+    margin-top: 6px;
+    overflow: hidden;
     background: var(--error-bg);
-    border-radius: 6px;
-    margin-top: 4px;
+  }
+
+  .error-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .error-toggle {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 7px 10px;
+    text-align: left;
+    color: var(--error);
+    font-size: 0.8rem;
+    border-radius: 7px;
+    transition: background 0.1s;
+  }
+
+  .error-toggle:hover {
+    background: color-mix(in srgb, var(--error) 10%, transparent);
+  }
+
+  .error-card.open .error-toggle {
+    border-radius: 7px 7px 0 0;
+  }
+
+  .error-icon {
+    flex-shrink: 0;
+    opacity: 0.85;
+  }
+
+  .error-label {
+    flex: 1;
+    font-weight: 500;
+  }
+
+  .error-card .chevron {
+    flex-shrink: 0;
+    color: var(--error);
+    opacity: 0.7;
+    transition: transform 0.18s;
+    transform: rotate(0deg);
+  }
+
+  .error-card .chevron.open {
+    transform: rotate(90deg);
+  }
+
+  .error-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding-right: 6px;
+    flex-shrink: 0;
+  }
+
+  .error-action-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 5px;
+    font-size: 0.75rem;
+    color: var(--error);
+    opacity: 0.8;
+    transition: all 0.1s;
+    white-space: nowrap;
+  }
+
+  .error-action-btn:hover {
+    background: color-mix(in srgb, var(--error) 15%, transparent);
+    opacity: 1;
+  }
+
+  .error-action-delete {
+    opacity: 0.5;
+  }
+
+  .error-body {
+    padding: 8px 12px 10px;
+    font-size: 0.8rem;
+    color: var(--error);
+    opacity: 0.9;
+    line-height: 1.55;
+    border-top: 1px solid color-mix(in srgb, var(--error) 30%, transparent);
+    white-space: pre-wrap;
+    word-break: break-word;
   }
 
   /* Markdown body — typography rules are in app.css */

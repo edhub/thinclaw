@@ -53,30 +53,46 @@ function getUtilityModel() {
  * Convert AgentMessage[] → Message[] for the LLM.
  * Handles the built-in compactionSummary type by presenting it as a user message
  * so the LLM sees prior context without treating it as a live conversation turn.
+ *
+ * Error filtering: assistant messages with stopReason==='error' or errorMessage set
+ * are excluded, along with their immediately preceding user message (the failed
+ * request pair). This prevents broken exchanges from polluting the AI's context.
  */
 function convertToLlm(messages: AgentMessage[]): Message[] {
-  return messages.flatMap((m) => {
-    const msg = m as any
-    if (msg.role === 'compactionSummary') {
-      const cs = m as CompactionSummaryMessage
-      return [
-        {
-          role: 'user' as const,
-          content: [
-            {
-              type: 'text' as const,
-              text: `[Summary of previous conversation]\n\n${cs.summary}`,
-            },
-          ],
-          timestamp: cs.timestamp,
-        } satisfies Message,
-      ]
+  // Build the set of indices to skip: error assistant messages + preceding user messages.
+  const skipSet = new Set<number>()
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i] as any
+    if (msg.role === 'assistant' && (msg.stopReason === 'error' || msg.errorMessage)) {
+      skipSet.add(i)
+      if (i > 0 && messages[i - 1].role === 'user') skipSet.add(i - 1)
     }
-    if (msg.role === 'user' || msg.role === 'assistant' || msg.role === 'toolResult') {
-      return [m as Message]
-    }
-    return []
-  })
+  }
+
+  return messages
+    .filter((_, i) => !skipSet.has(i))
+    .flatMap((m) => {
+      const msg = m as any
+      if (msg.role === 'compactionSummary') {
+        const cs = m as CompactionSummaryMessage
+        return [
+          {
+            role: 'user' as const,
+            content: [
+              {
+                type: 'text' as const,
+                text: `[Summary of previous conversation]\n\n${cs.summary}`,
+              },
+            ],
+            timestamp: cs.timestamp,
+          } satisfies Message,
+        ]
+      }
+      if (msg.role === 'user' || msg.role === 'assistant' || msg.role === 'toolResult') {
+        return [m as Message]
+      }
+      return []
+    })
 }
 
 let _agent: Agent | null = null
@@ -135,6 +151,13 @@ export const pendingUserMessage = writable<AgentMessage | null>(null)
 /** 'compacting' while auto-compaction LLM call is in flight. */
 export const compactionStatus = writable<'idle' | 'compacting'>('idle')
 
+/**
+ * Content of the most recently attempted sendMessage call.
+ * Used to enable "retry" on pre-request errors where no assistant message was created.
+ */
+export const lastPromptContent = writable<string>('')
+export const lastPromptImages = writable<ImageContent[]>([])
+
 export const activeConversation = derived(
   [conversations, activeConversationId],
   ([$convs, $id]) => $convs.find((c) => c.id === $id) ?? null,
@@ -174,13 +197,11 @@ function handleAgentEvent(event: AgentEvent) {
       }
       break
 
-    case 'turn_end': {
-      const msg = event.message as AgentMessage & { errorMessage?: string }
-      if (msg.role === 'assistant' && msg.errorMessage) {
-        streamError.set(msg.errorMessage)
-      }
+    case 'turn_end':
+      // Note: error information lives on the assistant message itself (msg.errorMessage).
+      // The ChatMessage component renders it as a collapsible error card — no need to
+      // mirror it in the streamError banner here.
       break
-    }
 
     case 'agent_end':
       isStreaming.set(false)
@@ -426,6 +447,10 @@ export async function toggleImageTool(): Promise<void> {
 export async function sendMessage(content: string, images: ImageContent[] = []): Promise<void> {
   const agent = getAgent()
 
+  // Always track the last attempted content so the error banner retry is correct.
+  lastPromptContent.set(content)
+  lastPromptImages.set(images)
+
   const s = get(settings)
   const activeModel = getModelByKey(s.model)
   const requiredKey = s.laozhangApiKey
@@ -490,6 +515,83 @@ export function abortStreaming(): void {
   agent.clearFollowUpQueue()
   queueLength.set(0)
   agent.abort()
+}
+
+/**
+ * Remove an error assistant message (and its immediately preceding user message)
+ * from agent state, the active UI, and IndexedDB.
+ *
+ * Safe to call while the agent is idle. No-ops if the agent is currently streaming.
+ */
+export async function deleteErrorMessage(errorMsg: AgentMessage): Promise<void> {
+  if (get(isStreaming)) return
+  const agent = getAgent()
+  const msgs = agent.state.messages
+  const idx = msgs.indexOf(errorMsg)
+  if (idx < 0) return
+
+  // Also remove the user message that triggered this error, if present.
+  const prevIdx = idx > 0 && msgs[idx - 1].role === 'user' ? idx - 1 : -1
+  const filtered = msgs.filter((_, i) => i !== idx && i !== prevIdx)
+
+  agent.replaceMessages(filtered)
+  activeMessages.set([...filtered])
+
+  const convId = get(activeConversationId)
+  if (convId) {
+    await replaceAllMessages(convId, filtered)
+    _prevMessageCounts.set(convId, filtered.length)
+  }
+}
+
+/**
+ * Delete the error assistant message (and its preceding user message), then
+ * re-send the same user content so the request is retried immediately.
+ *
+ * No-ops if the agent is currently streaming.
+ */
+export async function retryFromError(errorMsg: AgentMessage): Promise<void> {
+  if (get(isStreaming)) return
+  const agent = getAgent()
+  const msgs = agent.state.messages
+  const idx = msgs.indexOf(errorMsg)
+  if (idx < 0) return
+
+  // Extract the content we need to resend BEFORE deleting.
+  const prevIdx = idx > 0 && msgs[idx - 1].role === 'user' ? idx - 1 : -1
+  let content = ''
+  let images: ImageContent[] = []
+  if (prevIdx >= 0) {
+    const prevMsg = msgs[prevIdx] as any
+    if (typeof prevMsg.content === 'string') {
+      content = prevMsg.content
+    } else if (Array.isArray(prevMsg.content)) {
+      content = prevMsg.content
+        .filter((b: any) => b.type === 'text')
+        .map((b: any) => b.text as string)
+        .join('')
+      images = prevMsg.content.filter((b: any) => b.type === 'image') as ImageContent[]
+    }
+  }
+
+  await deleteErrorMessage(errorMsg)
+
+  if (content || images.length > 0) {
+    await sendMessage(content, images)
+  }
+}
+
+/**
+ * Retry the last attempted sendMessage call.
+ * Used by the pre-request error banner (e.g., when an API key is added after
+ * the first attempt failed before the agent loop even started).
+ */
+export async function retryLastMessage(): Promise<void> {
+  if (get(isStreaming)) return
+  const content = get(lastPromptContent)
+  const images = get(lastPromptImages)
+  if (!content && images.length === 0) return
+  await sendMessage(content, images)
 }
 
 // ─── AI title generation ──────────────────────────────────────────────────────

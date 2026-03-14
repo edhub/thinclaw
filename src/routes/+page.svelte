@@ -22,11 +22,13 @@
     compactionStatus,
     imageToolEnabled,
     toggleImageTool,
+    deleteErrorMessage,
+    retryFromError,
+    retryLastMessage,
   } from '$lib/stores/chat'
   import { get } from 'svelte/store'
   import { nanoid } from '$lib/utils/nanoid'
   import type { AgentMessage } from '@mariozechner/pi-agent-core'
-  import type { ToolResultMessage } from '@mariozechner/pi-ai'
 
   // Assign a stable random key to each message object on first encounter.
   // Using WeakMap avoids memory leaks — keys are GC'd with their message objects.
@@ -48,11 +50,16 @@
         .map((m) => [m.toolCallId, m]),
     ),
   )
-  import type { ImageContent } from '@mariozechner/pi-ai'
+  import type { ImageContent, ToolResultMessage } from '@mariozechner/pi-ai'
   import { memories } from '$lib/stores/memory'
-
   import { settings } from '$lib/stores/settings'
   import { sweepSessions } from '$lib/fs/session-recorder'
+
+  /** True if a message is an error assistant message (shows the collapsible error card). */
+  function isErrorMsg(msg: AgentMessage): boolean {
+    const m = msg as any
+    return m.role === 'assistant' && (m.stopReason === 'error' || !!m.errorMessage)
+  }
 
   let sidebarOpen = $state(false)
   let chatEndEl = $state<HTMLDivElement | undefined>(undefined)
@@ -251,7 +258,13 @@
 
           <!-- Persisted messages -->
           {#each $activeMessages as msg, i (keyOf(msg))}
-            <ChatMessage message={msg} isStreaming={false} {toolResultMap} />
+            <ChatMessage
+              message={msg}
+              isStreaming={false}
+              {toolResultMap}
+              onDelete={isErrorMsg(msg) ? () => deleteErrorMessage(msg) : undefined}
+              onRetry={isErrorMsg(msg) ? () => retryFromError(msg) : undefined}
+            />
           {/each}
 
           <!-- Optimistic user message shown immediately on send -->
@@ -294,7 +307,13 @@
                 <line x1="12" y1="8" x2="12" y2="12" />
                 <line x1="12" y1="16" x2="12.01" y2="16" />
               </svg>
-              {$streamError}
+              <span class="error-banner-text">{$streamError}</span>
+              <button class="error-banner-btn" onclick={() => retryLastMessage()} title="重新发送上次消息">
+                ↺ 重试
+              </button>
+              <button class="error-banner-btn error-banner-dismiss" onclick={() => streamError.set(null)} title="关闭">
+                ✕
+              </button>
             </div>
           {/if}
 
@@ -432,11 +451,12 @@
   .messages {
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 0 24px;
   }
 
   .messages-inner {
-    max-width: 740px;
+    max-width: 860px;
     margin: 0 auto;
     padding: 24px 0 120px;
   }
@@ -449,9 +469,41 @@
     color: var(--error);
     border: 1px solid var(--error);
     border-radius: 8px;
-    padding: 10px 14px;
+    padding: 8px 10px 8px 14px;
     font-size: 0.875rem;
     margin: 8px 0;
+  }
+
+  .error-banner-text {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .error-banner-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 3px 8px;
+    border-radius: 5px;
+    font-size: 0.78rem;
+    color: var(--error);
+    opacity: 0.8;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: all 0.1s;
+  }
+
+  .error-banner-btn:hover {
+    background: color-mix(in srgb, var(--error) 15%, transparent);
+    opacity: 1;
+  }
+
+  .error-banner-dismiss {
+    opacity: 0.5;
+    font-size: 0.85rem;
   }
 
   /* AI response loading placeholder */

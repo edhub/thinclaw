@@ -15,6 +15,32 @@
   // Track which entries are expanded (by index)
   let expanded = $state<Set<number>>(new Set())
 
+  // ── Aggregate token usage across all assistant turns ─────────────────────
+
+  interface UsageTotals {
+    input: number
+    output: number
+    cacheRead: number
+    cacheWrite: number
+    turns: number
+  }
+
+  const totalUsage = $derived.by<UsageTotals>(() => {
+    const t = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, turns: 0 }
+    for (const entry of entries) {
+      if (entry.type !== 'message') continue
+      const msg = (entry as any).message
+      if (msg?.role !== 'assistant' || !msg.usage) continue
+      const u = msg.usage
+      t.input += u.input ?? 0
+      t.output += u.output ?? 0
+      t.cacheRead += u.cacheRead ?? 0
+      t.cacheWrite += u.cacheWrite ?? 0
+      t.turns++
+    }
+    return t
+  })
+
   function toggle(i: number) {
     const next = new Set(expanded)
     if (next.has(i)) next.delete(i)
@@ -84,8 +110,16 @@
             parts.push(`💭 ${thinking.length} thinking block${thinking.length > 1 ? 's' : ''}`)
           if (tools.length) parts.push(`🔧 ${tools.map((t: any) => t.name).join(', ')}`)
           if (texts.length) parts.push(snippet(texts.join('')))
-          if (msg.usage?.totalTokens)
-            parts.push(`[${msg.usage.totalTokens.toLocaleString()} tokens]`)
+          if (msg.usage) {
+            const u = msg.usage
+            const usageParts: string[] = []
+            if (u.input > 0 || u.output > 0) {
+              usageParts.push(`↑${u.input.toLocaleString()} ↓${u.output.toLocaleString()}`)
+            }
+            if (u.cacheRead > 0) usageParts.push(`⚡r:${u.cacheRead.toLocaleString()}`)
+            if (u.cacheWrite > 0) usageParts.push(`⬡w:${u.cacheWrite.toLocaleString()}`)
+            if (usageParts.length) parts.push(`[${usageParts.join(' ')}]`)
+          }
           return parts.join('  ·  ') || '(empty)'
         }
         if (role === 'toolResult') {
@@ -162,6 +196,27 @@
 
 <div class="inspector">
   <div class="entry-count">{entries.length} entries</div>
+
+  <!-- Session-wide token usage summary -->
+  {#if totalUsage.turns > 0}
+    <div class="usage-bar">
+      <span class="usage-label">Token 用量</span>
+      <span class="usage-stat">↑ {totalUsage.input.toLocaleString()} input</span>
+      <span class="usage-sep">·</span>
+      <span class="usage-stat">↓ {totalUsage.output.toLocaleString()} output</span>
+      {#if totalUsage.cacheRead > 0}
+        <span class="usage-sep">·</span>
+        <span class="usage-stat usage-cache-hit">⚡ {totalUsage.cacheRead.toLocaleString()} cache read</span>
+      {:else}
+        <span class="usage-sep">·</span>
+        <span class="usage-stat usage-cache-miss">⚡ cache: 0</span>
+      {/if}
+      {#if totalUsage.cacheWrite > 0}
+        <span class="usage-sep">·</span>
+        <span class="usage-stat">⬡ {totalUsage.cacheWrite.toLocaleString()} cache write</span>
+      {/if}
+    </div>
+  {/if}
 
   {#each entries as entry, i (i)}
     {@const kind = badgeKind(entry)}
@@ -263,8 +318,52 @@
     text-transform: uppercase;
     letter-spacing: 0.06em;
     font-weight: 600;
-    padding: 0 4px 8px;
+    padding: 0 4px 6px;
     flex-shrink: 0;
+  }
+
+  /* ── Usage summary bar ── */
+  .usage-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 8px;
+    margin-bottom: 6px;
+    background: var(--surface-elevated);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.72rem;
+    flex-shrink: 0;
+  }
+
+  .usage-label {
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 0.68rem;
+    margin-right: 2px;
+  }
+
+  .usage-stat {
+    color: var(--text-secondary);
+    font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace;
+    font-size: 0.72rem;
+  }
+
+  .usage-cache-hit {
+    color: var(--accent);
+  }
+
+  .usage-cache-miss {
+    color: var(--text-muted);
+    opacity: 0.7;
+  }
+
+  .usage-sep {
+    color: var(--border);
+    font-size: 0.7rem;
   }
 
   /* ── Entry card ── */
