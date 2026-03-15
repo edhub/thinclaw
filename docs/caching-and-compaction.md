@@ -201,6 +201,33 @@ user 消息上。tool call 后 `tool_result` 变成新的 "最后一条 user"，
 
 **实现位置：** `src/lib/stores/chat.ts` → `onAnthropicPayload()`
 
+#### 已知限制：bianxie 多账号路由（2026-03 实测）
+
+bianxie.ai 代理在至少 2 个 Anthropic 账号间做负载均衡。Anthropic 的 prompt cache
+是**按账号隔离**的，不同账号之间的缓存无法共用。
+
+**证据：** 一次 6-turn 纯文字对话（无 tool call）的缓存数据：
+
+| Turn | cacheRead | cacheWrite | 分析 |
+|------|-----------|------------|------|
+| 1 "早～" | 3,598 | 0 | 跨 session 命中（前一个 session 写入的 3,598） |
+| 2 "我来给你打招呼" | **0** | 3,644 | ❌ 全部 miss |
+| 3 "今天天气很好" | **3,598** | 110 | ✅ 命中，但读的是 **3,598**（Turn 1 的值）不是 3,644（Turn 2 的值） |
+| 4 "我昨天睡的很香" | **0** | 3,788 | ❌ 全部 miss |
+| 5 "你睡觉吗？" | **3,708** | 153 | ✅ 命中（3,708 = Turn 3 的 3,598 + 110） |
+| 6 "适合去上班的…" | **3,861** | 120 | ✅ 命中（3,861 = Turn 5 的 3,708 + 153） |
+
+关键证据：**Turn 3 读到的是 3,598（Turn 1 写入的值），不是 3,644（Turn 2 写入的值）。**
+这只有在 Turn 1 和 Turn 3 路由到同一账号（A），Turn 2 路由到另一账号（B）时才能解释。
+
+缓存链条追踪：
+- **账号 A**：Turn 1(read 3,598) → Turn 3(read 3,598 + write 110) → Turn 5(read 3,708 + write 153) → Turn 6(read 3,861)
+- **账号 B**：Turn 2(write 3,644) → Turn 4(write 3,788，Turn 2 缓存因 thinking→redacted 变化而失效)
+
+**影响：** tools 级缓存（~3,500 tokens）在同一账号上始终命中，但跨账号请求会重写。
+ThinClaw 无法控制路由策略，只能确保缓存断点设置正确以最大化同账号命中率。
+直连 Anthropic API 时此问题不存在。
+
 ---
 
 ## 三、Thinking Block 处理

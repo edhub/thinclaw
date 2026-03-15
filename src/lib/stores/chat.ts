@@ -267,9 +267,10 @@ let _capturedPayloads: SessionPayloadEntry[] = []
  * Anthropic's 1,024 minimum so effectively a no-op) and the last user
  * message (helps cross-turn caching).
  *
- * We intentionally do NOT mark intermediate user messages. The tools
- * breakpoint provides stable savings; message-level caching is handled
- * by pi-ai's last-user breakpoint automatically.
+ * We intentionally do NOT mark intermediate user messages. bianxie.ai
+ * routes requests across multiple Anthropic accounts (cache is per-account),
+ * making volatile message-level breakpoints unreliable. The tools breakpoint
+ * provides stable savings regardless of account routing.
  *
  * Also captures request payloads for session JSONL debugging.
  */
