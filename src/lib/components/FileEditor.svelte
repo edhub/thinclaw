@@ -107,6 +107,20 @@
           <line x1="12" y1="15" x2="12" y2="3" />
         </svg>
       </button>
+      <button class="btn-icon" onclick={() => window.print()} title="Print">
+        <svg
+          width="15"
+          height="15"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <polyline points="6 9 6 2 18 2 18 9" />
+          <path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2" />
+          <rect x="6" y="14" width="12" height="8" />
+        </svg>
+      </button>
     </div>
   </div>
 
@@ -263,5 +277,20 @@
     line-height: 1.75;
     font-size: 0.9375rem;
     word-break: break-word;
+  }
+
+  /* Print: hide toolbar, show only content */
+  @media print {
+    .toolbar {
+      display: none;
+    }
+    .editor {
+      padding: 0;
+      font-size: 0.875rem;
+    }
+    .markdown-body {
+      padding: 0;
+      max-width: none;
+    }
   }
 </style>

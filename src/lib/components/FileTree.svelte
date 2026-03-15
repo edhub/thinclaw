@@ -12,8 +12,10 @@
     selectedPath: string | null
     onOpenFile: (path: string) => void
     onOpenSession: (convId: string) => void
+    open?: boolean
+    onClose?: () => void
   }
-  let { selectedPath, onOpenFile, onOpenSession }: Props = $props()
+  let { selectedPath, onOpenFile, onOpenSession, open = false, onClose }: Props = $props()
 
   // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -91,7 +93,7 @@
   onMount(refresh)
 </script>
 
-<aside class="sidebar">
+<aside class="sidebar" class:mobile-open={open}>
   <div class="header">
     <span class="title">Files</span>
     <button class="btn-refresh" onclick={refresh} title="Refresh">
@@ -136,7 +138,7 @@
         <button
           class="item session"
           class:selected={selectedPath === `sessions/${item.convId}`}
-          onclick={() => onOpenSession(item.convId)}
+          onclick={() => { onOpenSession(item.convId); onClose?.() }}
         >
           <svg
             width="12"
@@ -190,7 +192,7 @@
       class="item file"
       class:selected={selectedPath === node.path}
       style="padding-left: {12 + depth * 14}px"
-      onclick={() => onOpenFile(node.path)}
+      onclick={() => { onOpenFile(node.path); onClose?.() }}
     >
       <svg
         width="12"
@@ -360,6 +362,25 @@
   .item.session:hover .session-title,
   .item.session.selected .session-title {
     color: inherit;
+  }
+
+  /* ── Mobile: slide-in drawer ── */
+  @media (max-width: 639px) {
+    .sidebar {
+      position: fixed;
+      left: 0;
+      top: 0;
+      height: 100%;
+      z-index: 50;
+      width: 280px;
+      transform: translateX(-100%);
+      transition: transform 0.25s ease;
+      box-shadow: 4px 0 24px rgba(0, 0, 0, 0.18);
+    }
+
+    .sidebar.mobile-open {
+      transform: translateX(0);
+    }
   }
 
   /* Chevron (for directory expand/collapse) */

@@ -148,6 +148,28 @@
     </svg>
   </button>
 
+  {#if openFilePath}
+    <div class="file-link-row">
+      <a
+        href="/files?path={encodeURIComponent(openFilePath)}"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="open-link"
+      >
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z" />
+          <polyline points="13 2 13 9 20 9" />
+        </svg>
+        {openFilePath}
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
+          <polyline points="15 3 21 3 21 9" />
+          <line x1="10" y1="14" x2="21" y2="3" />
+        </svg>
+      </a>
+    </div>
+  {/if}
+
   {#if expanded}
     <div class="tool-body">
       <!-- Args -->
@@ -189,28 +211,6 @@
             </div>
           {:else}
             <pre class="code-block">{resultText}</pre>
-          {/if}
-
-          {#if openFilePath}
-            <div class="open-file">
-              <a
-                href="/files?path={encodeURIComponent(openFilePath)}"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="open-link"
-              >
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z" />
-                  <polyline points="13 2 13 9 20 9" />
-                </svg>
-                {openFilePath}
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
-                  <polyline points="15 3 21 3 21 9" />
-                  <line x1="10" y1="14" x2="21" y2="3" />
-                </svg>
-              </a>
-            </div>
           {/if}
         </div>
       {/if}
@@ -403,9 +403,9 @@
     background: var(--surface-active);
   }
 
-  /* Open file link */
-  .open-file {
-    margin-top: 6px;
+  /* Open file link — always visible, sits between header and body */
+  .file-link-row {
+    padding: 0 10px 6px;
   }
 
   .open-link {
