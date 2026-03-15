@@ -173,52 +173,33 @@ Call #2 of Turn N（工具结果回传）：
   cache_creation   = [assistant-toolCall + toolResult_N]  ← 仅新增 token → checkpoint③
 ```
 
-#### 问题：`cache_control` 标记移动导致前缀不匹配
+#### `onPayload` hook — 稳定缓存层
 
-pi-ai 只在**最后一条 user 消息**上打 `cache_control`。当 Call #2 发送时，`cache_control` 从 `user_N` 移到了 `tool_result`（现在是最后一条 user 消息）。`user_N` 的序列化字节发生变化（失去了 `cache_control` 字段），导致**整个前缀从 `user_N` 处开始不匹配**，所有缓存失效，产生全量重写。
+ThinClaw 通过 Agent 的 `onPayload` hook 在 Anthropic 请求发送前注入缓存断点。
+策略是**只缓存稳定不变的前缀**（system + tools），不在易变的消息历史上加断点：
 
-#### 修复：`onPayload` hook — 4 断点策略
-
-ThinClaw 通过 Agent 的 `onPayload` hook 在 Anthropic 请求发送前注入额外的缓存断点：
-
-| 断点 | 位置 | 来源 | 稳定性 |
+| 断点 | 约 tokens | 来源 | 稳定性 |
 |---|---|---|---|
-| ① | System prompt 末尾 | pi-ai 内置 | 永远不变 ✓ |
-| ② | 最后一个 tool 定义 | `onPayload` hook | 工具不变 ✓ |
-| ③ | 倒数第二条 user 消息 | `onPayload` hook | 上一次 Call 的"最后一条"→ cc 保持一致 ✓ |
-| ④ | 最后一条 user 消息 | pi-ai 内置 | 当前前沿 ✓ |
+| ① | ~600 | System prompt 末尾（pi-ai 内置） | 永远不变，但低于 Anthropic 1,024 最低阈值，不生效 |
+| ② | ~3,500 | 最后一个 tool 定义（`onPayload` hook） | **永远不变 ✓ — 真正的稳定缓存层** |
+| ③ | 变化 | 最后一条 user 消息（pi-ai 内置） | 跨 turn 前沿，有助于连续对话复用 |
 
 ```
-Call #1 of Turn N：
-  [sys ← cc①] [tools ← cc②] [...history...] [user_{N-1} ← cc③] [...] [user_N ← cc④]
-
-Call #2 of Turn N（工具结果）：
-  [sys ← cc①] [tools ← cc②] [...history...] [user_N ← cc③] [assistant+toolResult ← cc④]
-                                               ↑ user_N 在两次 Call 中都有 cc → 前缀一致 ✓
+每次 LLM 调用：
+  [sys ← cc①(no-op)] [tools ← cc②] [...history...] [last_user ← cc③]
+                       ↑ ~3,500 tokens 永远命中
 ```
 
-**效果：** Call #2 的前缀通过 `user_N` 匹配 Call #1 的缓存，`cache_read` 覆盖到 `user_N`，`cache_creation` 仅包含新增的 `assistant(toolCall) + toolResult` token。
+**效果：** 无论对话内容如何变化，`system + tools` 前缀（~3,500 tokens）始终从缓存读取。
+消息历史部分由 pi-ai 的 last-user 断点 ③ 提供跨 turn 的增量缓存。
 
-**额外收益：** 工具定义上的断点 ② 确保即使消息历史完全变化（如跨 turn 前缀滑动），`system + tools` 的缓存始终命中。
+**为什么不在中间 user 消息上加断点：** pi-ai 会在每次调用时将 `cache_control` 打在最后一条
+user 消息上。tool call 后 `tool_result` 变成新的 "最后一条 user"，导致前一条 user 消息
+失去 `cache_control`，序列化字节变化，破坏前缀匹配。虽然可以通过在倒数第二条 user 上
+补加断点来修复，但通过 bianxie 代理时由于多账号路由问题，这种精细优化不可靠。
+只保留 tools 断点更简单且收益确定。
 
 **实现位置：** `src/lib/stores/chat.ts` → `onAnthropicPayload()`
-
-#### 已知限制：bianxie 多账号路由（2026-03）
-
-bianxie.ai 代理会将不同请求**负载均衡到不同的 Anthropic 账号**。Anthropic 的 prompt cache
-是**按账号隔离**的，不同账号之间的缓存无法共用。
-
-这意味着缓存命中率取决于路由的随机性：连续请求如果恰好路由到同一账号则命中（实测中
-tool call → tool result 有时命中有时不命中，取决于运气），否则全量重写。
-
-**诊断过程：** 最初怀疑是 `cache_control` 标记位移导致前缀不匹配，通过 `onPayload` hook
-在 system/tools/2nd-to-last user 上添加断点修复了标记位移问题。但实测发现即使前缀字节级
-完全一致（hash 对比确认），缓存仍然不稳定——同一会话中相同模式的 tool continuation
-有时命中有时不命中，与请求内容无关。最终推断为多账号路由问题。
-
-**结论：** `onPayload` hook 的断点设置是正确的（解决了 `cache_control` 位移问题），
-但缓存是否命中最终取决于 bianxie 的路由是否将连续请求分配到同一账号。
-直连 Anthropic API 时此问题不存在。
 
 ---
 
@@ -263,6 +244,24 @@ const content = (msg.content ?? []).flatMap((b: any) => {
 ```
 
 这是 Anthropic 官方支持的紧凑格式：**只传签名（opaque payload），不传思考文本**，完全合规，token 消耗极小。
+
+### 缓存影响：thinking → redacted 转换破坏前缀
+
+Thinking block 从完整形式 `{type:"thinking", thinking:"...", signature:"..."}` 转为
+redacted 形式 `{type:"redacted_thinking", data:"..."}` 会改变消息的序列化字节。如果这个
+转换发生在 Anthropic 已缓存的前缀范围内，会导致**前缀不匹配，缓存全量重写**。
+
+**策略：3-turn buffer.** 保留最近 3 个 user turn 内的 thinking block 原始形式，只对更早的
+block 做 redact。这样连续两次 LLM 调用之间，前缀中的 thinking block 表示形式不变。
+3 turns 之外的 redact 虽然仍会导致该位置的前缀变化，但此时 `system + tools` 的
+稳定缓存层（~3,500 tokens）仍然命中。
+
+```ts
+// chat.ts → convertToLlm
+const keepThinkingFromIdx = userIndices.length >= 3
+  ? userIndices[userIndices.length - 3]  // 3-turn buffer
+  : 0                                     // 短对话全部保留
+```
 
 ### 各 Provider 的兼容性
 

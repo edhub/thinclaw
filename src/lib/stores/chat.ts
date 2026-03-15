@@ -115,28 +115,31 @@ function convertToLlm(messages: AgentMessage[]): Message[] {
     }
   }
 
-  // Keep thinking blocks only for assistant messages within the last 2 user-turn
+  // Keep thinking blocks only for assistant messages within the last 3 user-turn
   // "blocks" (anchored on user message boundaries, not assistant count).
   //
-  // WHY NOT slice(-2): a tool call adds a new assistant message mid-turn, shifting
-  // the window and redacting an older message that was "recent" in Call #1 but
-  // "old" in Call #2. That changes the content of messages *before* user_N,
-  // breaking the Anthropic prompt cache prefix match between the two LLM calls.
+  // WHY 3 turns (not 2): Anthropic prompt cache is prefix-based. If a thinking
+  // block changes form between consecutive LLM calls (e.g. from full `thinking`
+  // to `redacted_thinking`), the serialized bytes change, breaking the prefix
+  // match and causing a full cache rewrite. With 2 turns, the boundary shifts
+  // every new user message, causing the oldest kept thinking block to get
+  // redacted — exactly when the prefix needs to stay stable. 3 turns gives a
+  // buffer: blocks only get redacted when they're far enough back that the
+  // prefix up to that point was already cached in a previous call.
   //
-  // WHY user boundaries are stable: toolResult messages have role 'toolResult'
-  // (not 'user') in our internal representation, so userIndices doesn't shift
-  // during a tool-call sequence. keepThinkingFromIdx stays the same in Call #1
-  // and Call #2, so the same assistant messages have the same thinking treatment
-  // in both calls → identical prefix → cache hit.
+  // WHY user boundaries (not assistant count): a tool call adds a new assistant
+  // message mid-turn, shifting an assistant-count window. User message indices
+  // are stable within a tool-call sequence, so keepThinkingFromIdx stays the
+  // same in Call #1 (tool call) and Call #2 (tool result) → identical prefix.
   const assistantIndices = messages
     .map((m, i) => ((m as any).role === 'assistant' ? i : -1))
     .filter((i) => i !== -1)
   const userIndices = messages
     .map((m, i) => ((m as any).role === 'user' ? i : -1))
     .filter((i) => i !== -1)
-  // Start of the second-to-last user turn; keep thinking for all assistant
+  // Start of the third-to-last user turn; keep thinking for all assistant
   // messages at or after that boundary.
-  const keepThinkingFromIdx = userIndices.length >= 2 ? userIndices[userIndices.length - 2] : 0
+  const keepThinkingFromIdx = userIndices.length >= 3 ? userIndices[userIndices.length - 3] : 0
   const recentAssistantSet = new Set(assistantIndices.filter((i) => i >= keepThinkingFromIdx))
 
   const converted = messages.flatMap((m, i) => {
@@ -254,21 +257,19 @@ let _agent: Agent | null = null
 let _capturedPayloads: SessionPayloadEntry[] = []
 
 /**
- * onPayload hook for Anthropic prompt caching stability.
+ * onPayload hook for Anthropic prompt caching.
  *
- * Adds cache_control breakpoints at stable positions to maximize cache hits:
- *   - Last tool definition (tools never change → always stable)
- *   - Second-to-last user message (was the "last" in the previous call)
+ * Adds cache_control to the last tool definition — this creates a stable
+ * cache prefix covering system prompt + all tools (~3,500 tokens). Since
+ * tools never change during a session, every request reuses this prefix.
  *
- * Combined with pi-ai's built-in breakpoints (system prompt + last user
- * message), this gives 4 breakpoints total (Anthropic's max).
+ * pi-ai also places cache_control on the system prompt (~600 tokens, below
+ * Anthropic's 1,024 minimum so effectively a no-op) and the last user
+ * message (helps cross-turn caching).
  *
- * NOTE (2026-03): bianxie.ai load-balances requests across multiple Anthropic
- * accounts. Anthropic's prompt cache is per-account, so cache hits depend on
- * whether consecutive requests are routed to the same account. This hook
- * correctly solves the cache_control marker drift problem; the remaining
- * inconsistency is due to multi-account routing, not request content.
- * Direct Anthropic API usage would not have this issue.
+ * We intentionally do NOT mark intermediate user messages. The tools
+ * breakpoint provides stable savings; message-level caching is handled
+ * by pi-ai's last-user breakpoint automatically.
  *
  * Also captures request payloads for session JSONL debugging.
  */
@@ -278,29 +279,9 @@ function onAnthropicPayload(payload: unknown): unknown {
   // Only apply to Anthropic-shaped payloads (has messages array, not Google's contents).
   if (!params?.messages || !Array.isArray(params.messages)) return payload
 
-  const cc = { type: 'ephemeral' as const }
-
-  // 1. Add cache_control to the last tool definition (always stable).
+  // Add cache_control to the last tool definition (always stable).
   if (Array.isArray(params.tools) && params.tools.length > 0) {
-    params.tools[params.tools.length - 1].cache_control = cc
-  }
-
-  // 2. Add cache_control to the second-to-last user message.
-  //    This was the "last user message" in the previous LLM call and already
-  //    had cache_control. Keeping it ensures byte-identical prefix.
-  const userIndices: number[] = []
-  for (let i = 0; i < params.messages.length; i++) {
-    if (params.messages[i].role === 'user') userIndices.push(i)
-  }
-  if (userIndices.length >= 2) {
-    const idx = userIndices[userIndices.length - 2]
-    const msg = params.messages[idx]
-    if (Array.isArray(msg.content)) {
-      const lastBlock = msg.content[msg.content.length - 1]
-      if (lastBlock) lastBlock.cache_control = cc
-    } else if (typeof msg.content === 'string') {
-      msg.content = [{ type: 'text', text: msg.content, cache_control: cc }]
-    }
+    params.tools[params.tools.length - 1].cache_control = { type: 'ephemeral' as const }
   }
 
   // Capture a deep copy of the final params for session recording / debugging.
