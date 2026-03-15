@@ -23,9 +23,9 @@ function createMemoryStore() {
     },
 
     /** Save a new memory entry, update the store. Returns the saved memory. */
-    async add(content: string): Promise<Memory> {
+    async add(content: string, tier: 'core' | 'general' = 'general'): Promise<Memory> {
       const now = Date.now()
-      const mem: Memory = { id: nanoid(), content, createdAt: now, updatedAt: now }
+      const mem: Memory = { id: nanoid(), content, tier, createdAt: now, updatedAt: now }
       await saveMemory(mem)
       inner.update((list) => [mem, ...list])
       return mem
@@ -38,8 +38,8 @@ function createMemoryStore() {
     },
 
     /** Keyword search (delegates to DB). Does not require store to be loaded. */
-    async search(query: string): Promise<Memory[]> {
-      return searchMemories(query)
+    async search(query: string, tier?: 'core' | 'general' | 'all'): Promise<Memory[]> {
+      return searchMemories(query, { tier })
     },
 
     /** Synchronously read the current list (valid after load()). */

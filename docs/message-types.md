@@ -150,7 +150,7 @@ interface MemoryUpdateMessage {
 }
 ```
 
-**创建时机：** `onAgentEnd` → `appendMemoryUpdateIfNeeded()` 检测到本轮有新的 `memory_save` 调用时追加（仅 delta：不在 `_convMemSnapshotIds` 且不在 `_memUpdateCoveredIds` 中的记忆）。
+**创建时机：** `onAgentEnd` → `appendMemoryUpdateIfNeeded()` 检测到本轮有新的 `memory_save(tier='core')` 调用时追加（仅 delta：不在 `_convMemSnapshotIds` 且不在 `_memUpdateCoveredIds` 中的 core 记忆）。`general` 记忆不触发此追加——它们仅通过 `memory_recall` 按需检索。
 
 **位置规则：**
 - 追加在对应轮次 assistant 消息之后，位置永久固定
@@ -243,7 +243,7 @@ interface ToolCall {
 | `memoryUpdate` | ✅ | ✅ | ✅ → 展开为 user+ack |
 | memory prefix（base）| ❌ 不存储 | ❌ 不存在 | ✅ `convertToLlm` 动态注入 |
 
-> **memory prefix** 是 `convertToLlm` 在每次 LLM 调用时从 `_convMemSnapshot` 动态构造的合成消息对，仅存在于发往 provider 的请求中，不写入 `agent.state.messages`，也不持久化。
+> **memory prefix** 是 `convertToLlm` 在每次 LLM 调用时从 `_convMemSnapshot` 动态构造的合成消息对，仅包含 **core 记忆**，仅存在于发往 provider 的请求中，不写入 `agent.state.messages`，也不持久化。`general` 记忆不在此列，由 AI 通过 `memory_recall` 工具按需检索。
 
 ---
 

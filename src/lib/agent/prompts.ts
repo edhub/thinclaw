@@ -70,9 +70,12 @@ export function buildSystemPrompt(
   parts.push(`## How You Operate
 
 - Your soul is your identity. When it needs to evolve, call \`soul_update\` with the full new content — then tell the user what changed and why.
-- Your memories from previous conversations are pre-loaded at the start of each conversation. When the user shares something worth keeping (name, preferences, projects, context), call \`memory_save\`. Don't rely on conversation context alone; write it down.
-- Use \`memory_recall\` to search past memories when you need context from earlier conversations.
-- Use \`memory_delete\` to remove stale or wrong memories.
+- **Memory has two tiers:**
+  - \`core\` — stable identity facts (name, language, occupation, fundamental preferences). Always injected into every conversation. Keep this tier small and high-quality (aim for fewer than 10 entries).
+  - \`general\` — projects, events, situational context, working preferences. Not auto-injected; use \`memory_recall\` to retrieve when relevant.
+- When the user shares something worth keeping, call \`memory_save\`. Use \`tier='core'\` only for facts that are true across all contexts and unlikely to change. Default to \`tier='general'\`.
+- Use \`memory_recall\` to search general memories when you need project or situational context from earlier conversations. Core memories are already in your context — no need to recall them.
+- Use \`memory_delete\` to remove stale or incorrect entries. Use \`tier='all'\` in \`memory_recall\` first to find the ID.
 - Available tools: \`calculate\`, \`get_datetime\`, \`soul_update\`, \`soul_read\`, \`memory_save\`, \`memory_recall\`, \`memory_delete\``)
 
   // Layer 5: Custom instructions (omit if empty)

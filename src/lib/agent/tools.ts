@@ -142,54 +142,101 @@ const memorySaveParams = Type.Object({
     description:
       'The memory to save. Be concise and specific — one fact or note per entry. E.g. "User\'s name is Alice", "Prefers TypeScript over JavaScript", "Working on a SvelteKit project called ThinClaw".',
   }),
+  tier: Type.Optional(
+    Type.Union(
+      [
+        Type.Literal('core', {
+          description:
+            'Permanent identity-level facts: name, language preference, occupation, fundamental values. Always injected into every conversation. Keep this tier small and high-quality — fewer than ~10 entries.',
+        }),
+        Type.Literal('general', {
+          description:
+            'Situational context: projects, events, working preferences, temporary notes. Not auto-injected; retrieved on demand via memory_recall when relevant. Default tier.',
+        }),
+      ],
+      { default: 'general' },
+    ),
+  ),
 })
 
 export const memorySaveTool: AgentTool<typeof memorySaveParams> = {
   name: 'memory_save',
   label: 'Save Memory',
   description:
-    "Persist a memory that should survive across conversations: the user's name, preferences, ongoing projects, important facts. If someone says 'remember this' — write it down.",
+    "Persist a memory that should survive across conversations. Use tier='core' only for stable identity facts about the user (name, language, key long-term preferences). Everything else — projects, events, working context — goes in tier='general' (default) and is retrieved via memory_recall when needed. If someone says 'remember this' — write it down.",
   parameters: memorySaveParams,
-  execute: async (_id, { content }) => {
-    const mem = await memories.add(content)
+  execute: async (_id, { content, tier = 'general' }) => {
+    const mem = await memories.add(content, tier)
     return {
-      content: [{ type: 'text' as const, text: `Memory saved (id: ${mem.id})` }],
-      details: { id: mem.id, content },
+      content: [{ type: 'text' as const, text: `Memory saved (id: ${mem.id}, tier: ${tier})` }],
+      details: { id: mem.id, content, tier },
     }
   },
 }
 
 // ─── memory_recall ────────────────────────────────────────────────────────────
 
+const MAX_RECALL_CHARS = 3_000
+
 const memoryRecallParams = Type.Object({
   query: Type.String({
-    description: 'Keywords to search for. All tokens must match (case-insensitive).',
+    description:
+      'Keywords to search for. Short and specific works best — e.g. "TypeScript project" or "dinner plan". All tokens are tried together (AND); if nothing matches, any token is tried (OR fallback).',
   }),
+  tier: Type.Optional(
+    Type.Union(
+      [
+        Type.Literal('general', { description: 'Search only general memories (default).' }),
+        Type.Literal('core', { description: 'Search only core memories.' }),
+        Type.Literal('all', {
+          description: 'Search across both tiers. Useful when managing or deleting memories.',
+        }),
+      ],
+      { default: 'general' },
+    ),
+  ),
 })
 
 export const memoryRecallTool: AgentTool<typeof memoryRecallParams> = {
   name: 'memory_recall',
   label: 'Recall Memory',
   description:
-    'Search your saved memories by keywords. Use to retrieve context that was stored in a previous conversation.',
+    "Search saved memories by keywords. Core memories are already in your context — use this primarily for general-tier memories (project details, events, situational context). Use tier='all' when you need an ID to delete or update a memory.",
   parameters: memoryRecallParams,
-  execute: async (_id, { query }) => {
-    const results = await memories.search(query)
+  execute: async (_id, { query, tier = 'general' }) => {
+    const results = await memories.search(query, tier)
     if (results.length === 0) {
       return {
-        content: [{ type: 'text' as const, text: `No memories found for: "${query}"` }],
-        details: { query, count: 0 },
+        content: [
+          {
+            type: 'text' as const,
+            text: `No ${tier === 'all' ? '' : tier + ' '}memories found for: "${query}"`,
+          },
+        ],
+        details: { query, tier, count: 0 },
       }
     }
-    const text = results
-      .map((m) => {
-        const date = new Date(m.createdAt).toLocaleDateString('en-CA')
-        return `[${m.id}] [${date}] ${m.content}`
-      })
-      .join('\n')
+
+    const lines = results.map((m) => {
+      const date = new Date(m.createdAt).toLocaleDateString('en-CA')
+      const t = m.tier ?? 'general'
+      return `[${m.id}] [${date}] [${t}] ${m.content}`
+    })
+
+    // Enforce a character budget: drop trailing lines if over limit.
+    let text = ''
+    let included = 0
+    for (const line of lines) {
+      if (text.length + line.length + 1 > MAX_RECALL_CHARS) break
+      text += (text ? '\n' : '') + line
+      included++
+    }
+    const header = `Found ${included}${included < results.length ? ` of ${results.length}` : ''} memories (tier: ${tier}):`
+    text = header + '\n' + text
+
     return {
       content: [{ type: 'text' as const, text }],
-      details: { query, count: results.length },
+      details: { query, tier, count: included },
     }
   },
 }

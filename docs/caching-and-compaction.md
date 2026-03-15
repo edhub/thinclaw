@@ -127,8 +127,8 @@ Turn N+1 发送: [mem] + [turn1] + ... + [turnN] + [assistantN] + [turnN+1 ← c
 
 | 注入 | 位置 | 内容 | 稳定性 |
 |---|---|---|---|
-| **Base**（`_convMemSnapshot`） | 对话历史最前面（位置 0）| 会话开始时的全量记忆 | 整个会话期间不变 ✓ |
-| **Delta**（`MemoryUpdateMessage`） | `memory_save` 被调用的 turn 结束后，追加到历史末尾 | 该 turn 新存的记忆（delta only）| 一旦追加位置永远固定 ✓ |
+| **Base**（`_convMemSnapshot`） | 对话历史最前面（位置 0）| 会话开始时的全量 **core** 记忆 | 整个会话期间不变 ✓ |
+| **Delta**（`MemoryUpdateMessage`） | `memory_save` 被调用的 turn 结束后，追加到历史末尾 | 该 turn 新存的 **core** 记忆（delta only）| 一旦追加位置永远固定 ✓ |
 
 ```
 Turn 3 调用了 memory_save("C"):
@@ -150,10 +150,75 @@ Turn 5 (无新记忆):
 
 **`_convMemSnapshot` 刷新时机：**
 - `selectConversation` 时（加载/切换到一个会话）
-- `runCompaction` 后（旧 MemoryUpdateMessage 已被压缩进摘要，新 base 包含所有历史记忆）
+- `runCompaction` 后（旧 MemoryUpdateMessage 已被压缩进摘要，新 base 包含所有历史 core 记忆）
 
 **`MemoryUpdateMessage` 的生命周期：**
 `onAgentEnd` 后检测新记忆 → 追加到 `agent.state.messages` → 持久化到 IndexedDB → `convertToLlm` 展开为 user/assistant 对 → 压缩时被纳入摘要 → `refreshConvMemSnapshot()` 将其内容并入新 base。
+
+---
+
+### 工具调用产生的额外缓存写
+
+`anthropic.js` 在每次 LLM 调用时，把 `cache_control` 打在"最后一条 user 消息的最后一个 block"上。由于 `toolResult` 在发送给 Anthropic 时会被转为 `role: "user"` 的 `tool_result` block，**任何一次工具调用都会产生 2 次 LLM 请求，从而产生 2 个缓存断点**：
+
+```
+Turn N-1 结束时已缓存：[sys] [core-mem][ack] [history] [user_{N-1} ← checkpoint①]
+
+Call #1 of Turn N：
+  cache_read       = [sys...user_{N-1}]           ← 命中 checkpoint①
+  cache_creation   = [user_N]                     ← 仅新增 token → checkpoint②
+
+Call #2 of Turn N（工具结果回传）：
+  cache_read       = [sys...user_N]               ← 自动命中 checkpoint②
+  cache_creation   = [assistant-toolCall + toolResult_N]  ← 仅新增 token → checkpoint③
+```
+
+#### 问题：`cache_control` 标记移动导致前缀不匹配
+
+pi-ai 只在**最后一条 user 消息**上打 `cache_control`。当 Call #2 发送时，`cache_control` 从 `user_N` 移到了 `tool_result`（现在是最后一条 user 消息）。`user_N` 的序列化字节发生变化（失去了 `cache_control` 字段），导致**整个前缀从 `user_N` 处开始不匹配**，所有缓存失效，产生全量重写。
+
+#### 修复：`onPayload` hook — 4 断点策略
+
+ThinClaw 通过 Agent 的 `onPayload` hook 在 Anthropic 请求发送前注入额外的缓存断点：
+
+| 断点 | 位置 | 来源 | 稳定性 |
+|---|---|---|---|
+| ① | System prompt 末尾 | pi-ai 内置 | 永远不变 ✓ |
+| ② | 最后一个 tool 定义 | `onPayload` hook | 工具不变 ✓ |
+| ③ | 倒数第二条 user 消息 | `onPayload` hook | 上一次 Call 的"最后一条"→ cc 保持一致 ✓ |
+| ④ | 最后一条 user 消息 | pi-ai 内置 | 当前前沿 ✓ |
+
+```
+Call #1 of Turn N：
+  [sys ← cc①] [tools ← cc②] [...history...] [user_{N-1} ← cc③] [...] [user_N ← cc④]
+
+Call #2 of Turn N（工具结果）：
+  [sys ← cc①] [tools ← cc②] [...history...] [user_N ← cc③] [assistant+toolResult ← cc④]
+                                               ↑ user_N 在两次 Call 中都有 cc → 前缀一致 ✓
+```
+
+**效果：** Call #2 的前缀通过 `user_N` 匹配 Call #1 的缓存，`cache_read` 覆盖到 `user_N`，`cache_creation` 仅包含新增的 `assistant(toolCall) + toolResult` token。
+
+**额外收益：** 工具定义上的断点 ② 确保即使消息历史完全变化（如跨 turn 前缀滑动），`system + tools` 的缓存始终命中。
+
+**实现位置：** `src/lib/stores/chat.ts` → `onAnthropicPayload()`
+
+#### 已知限制：bianxie 多账号路由（2026-03）
+
+bianxie.ai 代理会将不同请求**负载均衡到不同的 Anthropic 账号**。Anthropic 的 prompt cache
+是**按账号隔离**的，不同账号之间的缓存无法共用。
+
+这意味着缓存命中率取决于路由的随机性：连续请求如果恰好路由到同一账号则命中（实测中
+tool call → tool result 有时命中有时不命中，取决于运气），否则全量重写。
+
+**诊断过程：** 最初怀疑是 `cache_control` 标记位移导致前缀不匹配，通过 `onPayload` hook
+在 system/tools/2nd-to-last user 上添加断点修复了标记位移问题。但实测发现即使前缀字节级
+完全一致（hash 对比确认），缓存仍然不稳定——同一会话中相同模式的 tool continuation
+有时命中有时不命中，与请求内容无关。最终推断为多账号路由问题。
+
+**结论：** `onPayload` hook 的断点设置是正确的（解决了 `cache_control` 位移问题），
+但缓存是否命中最终取决于 bianxie 的路由是否将连续请求分配到同一账号。
+直连 Anthropic API 时此问题不存在。
 
 ---
 

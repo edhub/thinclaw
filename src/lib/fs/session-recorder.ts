@@ -53,7 +53,19 @@ export interface SessionMessageEntry {
   message: AgentMessage
 }
 
-export type SessionEntry = SessionHeader | SessionMessageEntry
+/**
+ * Captured LLM request payload for debugging prompt caching and prefix stability.
+ * Contains the full Anthropic/Google params object as sent to the provider.
+ */
+export interface SessionPayloadEntry {
+  type: 'payload'
+  /** Unix ms — when the LLM call was initiated. */
+  timestamp: number
+  /** Full provider request params (messages, system, tools, thinking, etc.). */
+  params: Record<string, unknown>
+}
+
+export type SessionEntry = SessionHeader | SessionMessageEntry | SessionPayloadEntry
 
 // ─── OPFS helpers ─────────────────────────────────────────────────────────────
 
@@ -109,6 +121,7 @@ export async function recordSession(
   systemPrompt: string,
   messages: AgentMessage[],
   tools?: SerializedTool[],
+  payloads?: SessionPayloadEntry[],
 ): Promise<void> {
   await sweepSessions() // lazy sweep before first write
 
@@ -130,6 +143,7 @@ export async function recordSession(
     ...messages.map((msg) =>
       JSON.stringify({ type: 'message', message: msg } satisfies SessionMessageEntry),
     ),
+    ...(payloads ?? []).map((p) => JSON.stringify(p)),
   ]
 
   const dir = await getSessionsDir()

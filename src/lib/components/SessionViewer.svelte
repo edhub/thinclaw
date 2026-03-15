@@ -54,6 +54,7 @@
 
   function badgeKind(entry: SessionEntry): BadgeKind {
     if (entry.type === 'session') return 'session'
+    if (entry.type === 'payload') return 'other'
     if (entry.type === 'message') {
       const role = (entry as any).message?.role
       if (role === 'user') return 'user'
@@ -66,6 +67,7 @@
 
   function badgeLabel(entry: SessionEntry): string {
     if (entry.type === 'session') return 'session'
+    if (entry.type === 'payload') return 'payload'
     if (entry.type === 'message') {
       const role = (entry as any).message?.role ?? '?'
       if (role === 'toolResult') return 'tool-result'
@@ -99,6 +101,13 @@
     } else if (entry.type === 'session') {
       const h = entry as any
       if (h.timestamp) parts.push(fmtDate(h.timestamp))
+    } else if (entry.type === 'payload') {
+      const p = entry as any
+      if (p.timestamp) parts.push(fmtDate(new Date(p.timestamp).toISOString()))
+      const params = p.params ?? {}
+      const msgCount = Array.isArray(params.messages) ? params.messages.length : '?'
+      parts.push(`${msgCount} messages`)
+      if (params.model) parts.push(params.model)
     }
     return parts.join('  ·  ')
   }
@@ -116,6 +125,29 @@
           `thinking: ${h.thinkingLevel ?? 'off'}`,
           ...(h.personaId ? [`persona: ${h.personaId}`] : []),
         ]
+        return parts.join('  ·  ')
+      }
+      if (entry.type === 'payload') {
+        const params = (entry as any).params ?? {}
+        const parts: string[] = []
+        if (params.system) {
+          const sysLen = JSON.stringify(params.system).length
+          parts.push(`sys:${sysLen}c`)
+        }
+        if (Array.isArray(params.tools)) parts.push(`tools:${params.tools.length}`)
+        if (params.thinking) parts.push(`thinking:${JSON.stringify(params.thinking)}`)
+        parts.push(`max_tokens:${params.max_tokens ?? '?'}`)
+        // Show cache_control placement summary
+        const ccPositions: string[] = []
+        if (params.system?.[params.system.length - 1]?.cache_control) ccPositions.push('sys')
+        if (Array.isArray(params.tools) && params.tools[params.tools.length - 1]?.cache_control) ccPositions.push('tools[-1]')
+        if (Array.isArray(params.messages)) {
+          params.messages.forEach((m: any, i: number) => {
+            const hasCC = Array.isArray(m.content) && m.content.some((b: any) => b.cache_control)
+            if (hasCC) ccPositions.push(`msg[${i}]:${m.role}`)
+          })
+        }
+        if (ccPositions.length) parts.push(`cc:[${ccPositions.join(',')}]`)
         return parts.join('  ·  ')
       }
       if (entry.type === 'message') {

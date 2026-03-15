@@ -42,7 +42,13 @@ import {
   type CompactionSummaryMessage,
   type MemoryUpdateMessage,
 } from '$lib/agent/compaction'
-import { recordSession, updateSessionTitle, sweepSessions, type SerializedTool } from '$lib/fs/session-recorder'
+import {
+  recordSession,
+  updateSessionTitle,
+  sweepSessions,
+  type SerializedTool,
+  type SessionPayloadEntry,
+} from '$lib/fs/session-recorder'
 
 // ─── Streaming throttle (rAF batching) ───────────────────────────────────────
 // Buffer incoming message_update events and flush at most once per animation
@@ -109,11 +115,29 @@ function convertToLlm(messages: AgentMessage[]): Message[] {
     }
   }
 
-  // Keep thinking blocks only in the last 2 assistant messages to save tokens.
+  // Keep thinking blocks only for assistant messages within the last 2 user-turn
+  // "blocks" (anchored on user message boundaries, not assistant count).
+  //
+  // WHY NOT slice(-2): a tool call adds a new assistant message mid-turn, shifting
+  // the window and redacting an older message that was "recent" in Call #1 but
+  // "old" in Call #2. That changes the content of messages *before* user_N,
+  // breaking the Anthropic prompt cache prefix match between the two LLM calls.
+  //
+  // WHY user boundaries are stable: toolResult messages have role 'toolResult'
+  // (not 'user') in our internal representation, so userIndices doesn't shift
+  // during a tool-call sequence. keepThinkingFromIdx stays the same in Call #1
+  // and Call #2, so the same assistant messages have the same thinking treatment
+  // in both calls → identical prefix → cache hit.
   const assistantIndices = messages
     .map((m, i) => ((m as any).role === 'assistant' ? i : -1))
     .filter((i) => i !== -1)
-  const recentAssistantSet = new Set(assistantIndices.slice(-2))
+  const userIndices = messages
+    .map((m, i) => ((m as any).role === 'user' ? i : -1))
+    .filter((i) => i !== -1)
+  // Start of the second-to-last user turn; keep thinking for all assistant
+  // messages at or after that boundary.
+  const keepThinkingFromIdx = userIndices.length >= 2 ? userIndices[userIndices.length - 2] : 0
+  const recentAssistantSet = new Set(assistantIndices.filter((i) => i >= keepThinkingFromIdx))
 
   const converted = messages.flatMap((m, i) => {
     if (skipSet.has(i)) return []
@@ -223,6 +247,76 @@ function convertToLlm(messages: AgentMessage[]): Message[] {
 
 let _agent: Agent | null = null
 
+/**
+ * Captured LLM request payloads for the current agent run.
+ * Cleared at the start of each prompt() and written to session JSONL on agent_end.
+ */
+let _capturedPayloads: SessionPayloadEntry[] = []
+
+/**
+ * onPayload hook for Anthropic prompt caching stability.
+ *
+ * Adds cache_control breakpoints at stable positions to maximize cache hits:
+ *   - Last tool definition (tools never change → always stable)
+ *   - Second-to-last user message (was the "last" in the previous call)
+ *
+ * Combined with pi-ai's built-in breakpoints (system prompt + last user
+ * message), this gives 4 breakpoints total (Anthropic's max).
+ *
+ * NOTE (2026-03): bianxie.ai load-balances requests across multiple Anthropic
+ * accounts. Anthropic's prompt cache is per-account, so cache hits depend on
+ * whether consecutive requests are routed to the same account. This hook
+ * correctly solves the cache_control marker drift problem; the remaining
+ * inconsistency is due to multi-account routing, not request content.
+ * Direct Anthropic API usage would not have this issue.
+ *
+ * Also captures request payloads for session JSONL debugging.
+ */
+function onAnthropicPayload(payload: unknown): unknown {
+  const params = payload as Record<string, any>
+
+  // Only apply to Anthropic-shaped payloads (has messages array, not Google's contents).
+  if (!params?.messages || !Array.isArray(params.messages)) return payload
+
+  const cc = { type: 'ephemeral' as const }
+
+  // 1. Add cache_control to the last tool definition (always stable).
+  if (Array.isArray(params.tools) && params.tools.length > 0) {
+    params.tools[params.tools.length - 1].cache_control = cc
+  }
+
+  // 2. Add cache_control to the second-to-last user message.
+  //    This was the "last user message" in the previous LLM call and already
+  //    had cache_control. Keeping it ensures byte-identical prefix.
+  const userIndices: number[] = []
+  for (let i = 0; i < params.messages.length; i++) {
+    if (params.messages[i].role === 'user') userIndices.push(i)
+  }
+  if (userIndices.length >= 2) {
+    const idx = userIndices[userIndices.length - 2]
+    const msg = params.messages[idx]
+    if (Array.isArray(msg.content)) {
+      const lastBlock = msg.content[msg.content.length - 1]
+      if (lastBlock) lastBlock.cache_control = cc
+    } else if (typeof msg.content === 'string') {
+      msg.content = [{ type: 'text', text: msg.content, cache_control: cc }]
+    }
+  }
+
+  // Capture a deep copy of the final params for session recording / debugging.
+  try {
+    _capturedPayloads.push({
+      type: 'payload',
+      timestamp: Date.now(),
+      params: JSON.parse(JSON.stringify(params)),
+    })
+  } catch {
+    // Non-fatal — don't break the agent if serialization fails.
+  }
+
+  return params
+}
+
 function getAgent(): Agent {
   if (!_agent) {
     _agent = new Agent({
@@ -231,6 +325,7 @@ function getAgent(): Agent {
         systemPrompt: '',
       },
       convertToLlm,
+      onPayload: onAnthropicPayload,
     })
     // Resolve api key dynamically so runtime changes are picked up.
     _agent.getApiKey = async (provider: string) => {
@@ -328,7 +423,7 @@ let _memUpdateCoveredIds = new Set<string>()
 
 /** Refresh the conversation-level memory baseline. Call on conversation select/create and after compaction. */
 function refreshConvMemSnapshot(): void {
-  const all = memories.all()
+  const all = memories.all().filter((m) => (m.tier ?? 'general') === 'core')
   _convMemSnapshot = formatMemoriesForPrompt(all)
   _convMemSnapshotIds = new Set(all.map((m) => m.id))
   _memUpdateCoveredIds = new Set()
@@ -425,6 +520,7 @@ async function persistSessionSnapshot(): Promise<void> {
     systemPrompt,
     messages,
     tools,
+    _capturedPayloads.length > 0 ? _capturedPayloads : undefined,
   )
 }
 
@@ -464,7 +560,7 @@ async function appendMemoryUpdateIfNeeded(): Promise<void> {
   const convId = get(activeConversationId)
   if (!convId) return
 
-  const allMems = memories.all()
+  const allMems = memories.all().filter((m) => (m.tier ?? 'general') === 'core')
   const newMems = allMems.filter(
     (m) => !_convMemSnapshotIds.has(m.id) && !_memUpdateCoveredIds.has(m.id),
   )
@@ -760,6 +856,7 @@ export async function sendMessage(content: string, images: ImageContent[] = []):
   pendingUserMessage.set(userMsgContent)
 
   try {
+    _capturedPayloads = [] // Clear previous payloads before new agent run
     await agent.prompt(content, images.length > 0 ? images : undefined)
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)

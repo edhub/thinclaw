@@ -61,6 +61,19 @@ export const MODELS: Model<'anthropic-messages' | 'google-generative-ai' | 'open
       maxTokens: 16000,
     },
 
+    {
+      id: 'claude-sonnet-4-6-thinking',
+      name: 'Claude Sonnet 4.6 (Thinking) · bianxie',
+      api: 'anthropic-messages',
+      provider: 'bianxie',
+      baseUrl: 'https://api.bianxie.ai',
+      reasoning: true,
+      input: ['text', 'image'],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 200000,
+      maxTokens: 16000,
+    },
+
     // ── Google Gemini (via bianxie.ai) ────────────────────────────────────────
     {
       id: 'gemini-3.1-flash-lite-preview',
@@ -85,19 +98,6 @@ export const MODELS: Model<'anthropic-messages' | 'google-generative-ai' | 'open
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
       contextWindow: 1000000,
       maxTokens: 8192,
-    },
-
-    {
-      id: 'claude-sonnet-4-6-thinking',
-      name: 'Claude Sonnet 4.6 (Thinking) · bianxie',
-      api: 'anthropic-messages',
-      provider: 'bianxie',
-      baseUrl: 'https://api.bianxie.ai',
-      reasoning: true,
-      input: ['text', 'image'],
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-      contextWindow: 200000,
-      maxTokens: 16000,
     },
 
     // ── OpenAI (via bianxie.ai) ───────────────────────────────────────────────
