@@ -108,19 +108,6 @@
     })
   })
 
-  // Scroll to bottom during streaming / when new messages arrive.
-  // No rAF needed here — messages append incrementally and layout is already stable.
-  $effect(() => {
-    const _a = $activeMessages.length
-    const _b = $streamingMessage
-    const _c = $pendingUserMessage
-    void _a
-    void _b
-    void _c
-    const behavior = $streamingMessage ? 'instant' : 'smooth'
-    chatEndEl?.scrollIntoView({ behavior, block: 'end' })
-  })
-
   // Focus input when modal opens
   $effect(() => {
     if (chatInputOpen) {
@@ -280,7 +267,9 @@
           {/if}
 
           <!-- Persisted messages -->
-          {#each $activeMessages as msg, i (keyOf(msg))}
+          <!-- compactionSummary and memoryUpdate are internal bookkeeping messages;
+               they are intentionally excluded from the visible chat UI. -->
+          {#each $activeMessages.filter(m => (m as any).role !== 'compactionSummary' && (m as any).role !== 'memoryUpdate') as msg, i (keyOf(msg))}
             <ChatMessage
               message={msg}
               isStreaming={false}

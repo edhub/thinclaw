@@ -6,6 +6,17 @@
  *   2. Persona    — optional temporary role for this conversation (locked after first message)
  *   3. Memory     — persistent facts saved across conversations (IndexedDB)
  *   4. Custom     — optional extra instructions from the user (Settings)
+ *
+ * ── Prompt caching note ──────────────────────────────────────────────────────
+ * Anthropic prompt caching keys on the exact prefix up to each cache_control
+ * breakpoint. Including memories in the system prompt means any memory_save
+ * call busts the cache on the very next request (write → miss → write → …).
+ *
+ * To keep the system prompt stable, memories are injected by the chat store's
+ * convertToLlm() as a synthetic (user / assistant) message pair at the start
+ * of every conversation instead. Call buildSystemPrompt() with an empty
+ * memoriesText to produce the cache-stable variant.
+ * ────────────────────────────────────────────────────────────────────────────
  */
 import type { Memory } from '$lib/db'
 
@@ -59,7 +70,7 @@ export function buildSystemPrompt(
   parts.push(`## How You Operate
 
 - Your soul is your identity. When it needs to evolve, call \`soul_update\` with the full new content — then tell the user what changed and why.
-- When the user shares something worth keeping (name, preferences, projects, context), call \`memory_save\`. Don't rely on conversation context alone; write it down.
+- Your memories from previous conversations are pre-loaded at the start of each conversation. When the user shares something worth keeping (name, preferences, projects, context), call \`memory_save\`. Don't rely on conversation context alone; write it down.
 - Use \`memory_recall\` to search past memories when you need context from earlier conversations.
 - Use \`memory_delete\` to remove stale or wrong memories.
 - Available tools: \`calculate\`, \`get_datetime\`, \`soul_update\`, \`soul_read\`, \`memory_save\`, \`memory_recall\`, \`memory_delete\``)

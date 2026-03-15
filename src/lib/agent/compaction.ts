@@ -15,7 +15,7 @@
 import { completeSimple, type Message, type Model, type Usage } from '@mariozechner/pi-ai'
 import type { AgentMessage } from '@mariozechner/pi-agent-core'
 
-// ─── Custom message type ──────────────────────────────────────────────────────
+// ─── Custom message types ─────────────────────────────────────────────────────
 
 export interface CompactionSummaryMessage {
   role: 'compactionSummary'
@@ -26,10 +26,31 @@ export interface CompactionSummaryMessage {
   timestamp: number
 }
 
-// Extend pi-agent-core's union type so AgentMessage includes our custom message.
+/**
+ * Injected after a turn in which memory_save was called.
+ *
+ * Stored as a real entry in agent.state.messages (and persisted to IndexedDB)
+ * so its position in the message array is fixed forever.  convertToLlm expands
+ * it to a synthetic user/assistant pair at that exact position so the LLM sees
+ * a clear "[Memory updated]" marker at the point where new memories were saved.
+ *
+ * Using a fixed position (instead of dynamically prepending an updated full-
+ * memory block at position 0 each turn) keeps the entire conversation-history
+ * prefix stable.  The Anthropic cache can keep serving hits on all content
+ * before this message even after memory grows.
+ */
+export interface MemoryUpdateMessage {
+  role: 'memoryUpdate'
+  /** Formatted text of the newly added memories (delta only, not the full list). */
+  memText: string
+  timestamp: number
+}
+
+// Extend pi-agent-core's union type so AgentMessage includes our custom messages.
 declare module '@mariozechner/pi-agent-core' {
   interface CustomAgentMessages {
     compactionSummary: CompactionSummaryMessage
+    memoryUpdate: MemoryUpdateMessage
   }
 }
 
@@ -40,6 +61,38 @@ export const RESERVE_TOKENS = 16_384
 
 /** Recent tokens to keep verbatim (not summarized). */
 export const KEEP_RECENT_TOKENS = 50_000
+
+/**
+ * Proactive compaction threshold.
+ *
+ * When context exceeds this, compaction is worth considering — but only if
+ * the Anthropic prompt cache has likely expired (see CACHE_TTL_MS).
+ *
+ * In an active continuous session every new turn is a cheap cache-hit: only
+ * the 2k or so of new tokens are billed at full price while the growing prefix
+ * is served from the 5-minute cache.  Compacting mid-session would throw away
+ * that cached prefix and force a full-price write of the ~50k compacted history.
+ *
+ * Therefore proactive compaction is only triggered at the START of a new turn
+ * (in sendMessage) when the last message is older than CACHE_TTL_MS — meaning
+ * the cache has certainly expired and paying full price for 50k is cheaper than
+ * paying full price for 80k+.
+ */
+export const PROACTIVE_COMPACT_TOKENS = 80_000
+
+/**
+ * Anthropic ephemeral cache TTL.
+ * Proactive compaction is only triggered when the idle gap exceeds this value,
+ * i.e. the conversation-history cache has certainly expired already.
+ */
+export const CACHE_TTL_MS = 5 * 60 * 1_000 // 5 minutes
+
+/**
+ * Minimum number of user turns in the uncompacted slice before the
+ * cross-day heuristic fires.  Below this threshold the conversation is
+ * too short to be worth summarising even if it started yesterday.
+ */
+export const CROSS_DAY_MIN_EXCHANGES = 5
 
 // ─── Token estimation ─────────────────────────────────────────────────────────
 
@@ -104,6 +157,9 @@ export function estimateTokens(message: AgentMessage): number {
     case 'compactionSummary':
       return estimateStringTokens((msg as CompactionSummaryMessage).summary)
 
+    case 'memoryUpdate':
+      return estimateStringTokens((msg as MemoryUpdateMessage).memText)
+
     default:
       return 0
   }
@@ -135,7 +191,65 @@ export function estimateContextTokens(messages: AgentMessage[]): number {
 
 /** Return true when compaction should trigger. */
 export function shouldCompact(contextTokens: number, model: Model<any>): boolean {
+  // Safety net only: always compact when approaching the model's hard context limit.
+  // Proactive compaction (PROACTIVE_COMPACT_TOKENS) is intentionally NOT checked here
+  // because this function runs post-turn (after agent_end) when the cache is still warm.
+  // Compacting mid-session would bust the growing prefix cache and force a full-price
+  // write of ~50k tokens — more expensive than just continuing.
+  // Pre-send proactive compaction (with cache-expiry gating) lives in shouldCompactProactive.
   return contextTokens > model.contextWindow - RESERVE_TOKENS
+}
+
+/**
+ * Return true when proactive compaction should fire at the START of a new turn.
+ *
+ * Unlike the post-turn safety net, this is only triggered when the cache has
+ * almost certainly expired (idleMs > CACHE_TTL_MS).  At that point the full
+ * conversation history must be re-sent at full price anyway, so shrinking it
+ * from ~80k to ~50k tokens is a net saving.
+ *
+ * @param contextTokens - Estimated context size before the new turn.
+ * @param idleMs        - Milliseconds since the last message in this conversation.
+ */
+export function shouldCompactProactive(contextTokens: number, idleMs: number): boolean {
+  return contextTokens > PROACTIVE_COMPACT_TOKENS && idleMs > CACHE_TTL_MS
+}
+
+/**
+ * Return true when the conversation should be compacted based on time alone,
+ * regardless of token count.
+ *
+ * Heuristic: if the oldest uncompacted message is from a previous calendar
+ * day AND the uncompacted slice contains more than CROSS_DAY_MIN_EXCHANGES
+ * user turns, the early history is stale enough to summarise.  This catches
+ * returning users whose session hasn't yet hit the token threshold but whose
+ * old messages would still cost full input-token price (cache already expired).
+ *
+ * The function intentionally ignores any leading CompactionSummaryMessage so
+ * that iterative compaction is handled correctly: only the messages *after*
+ * the last summary are evaluated.
+ */
+export function shouldCompactByTime(messages: AgentMessage[]): boolean {
+  if (messages.length === 0) return false
+
+  // Skip an existing compaction summary — only look at the uncompacted tail.
+  const startIdx = (messages[0] as any)?.role === 'compactionSummary' ? 1 : 0
+  const slice = messages.slice(startIdx)
+  if (slice.length < 2) return false
+
+  // The timestamp of the first uncompacted message.
+  const firstTs = (slice[0] as any).timestamp as number | undefined
+  if (!firstTs) return false
+
+  const firstDay = new Date(firstTs).toDateString()
+  const today = new Date().toDateString()
+
+  // All uncompacted messages are from today — no time-based trigger needed.
+  if (firstDay === today) return false
+
+  // Only compact when there is enough history to justify it.
+  const userTurns = slice.filter((m) => (m as any).role === 'user').length
+  return userTurns > CROSS_DAY_MIN_EXCHANGES
 }
 
 // ─── Cut-point detection ──────────────────────────────────────────────────────
@@ -223,6 +337,23 @@ function toSummaryMessages(messages: AgentMessage[]): Message[] {
             role: 'user' as const,
             content: [
               { type: 'text', text: `[Previous context summary]\n\n${msg.summary as string}` },
+            ],
+            timestamp: msg.timestamp as number,
+          },
+        ]
+      case 'memoryUpdate':
+        // Expand to a single user message for the summarizer.
+        // Note: convertToLlm expands the same message to TWO messages (user + assistant ack)
+        // to maintain Anthropic's strict user/assistant alternation.  The summarizer only
+        // needs the semantic content, so the ack is omitted here.
+        return [
+          {
+            role: 'user' as const,
+            content: [
+              {
+                type: 'text',
+                text: `[Memory update]\n\n${(msg as unknown as MemoryUpdateMessage).memText}`,
+              },
             ],
             timestamp: msg.timestamp as number,
           },

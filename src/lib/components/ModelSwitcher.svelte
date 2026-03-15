@@ -1,5 +1,11 @@
 <script lang="ts">
-  import { settings, MODELS, modelKey, getAvailableModels, updateSettings } from '$lib/stores/settings'
+  import {
+    settings,
+    MODELS,
+    modelKey,
+    getAvailableModels,
+    updateSettings,
+  } from '$lib/stores/settings'
   import { get } from 'svelte/store'
 
   let open = $state(false)
@@ -68,18 +74,6 @@
           onclick={() => select(modelKey(model))}
         >
           {model.name}
-          {#if modelKey(model) === $settings.model}
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.5"
-            >
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
-          {/if}
         </button>
       {/each}
     </div>
@@ -115,7 +109,7 @@
     position: absolute;
     top: calc(100% + 6px);
     right: 0;
-    min-width: 220px;
+    min-width: 260px;
     background: var(--surface-elevated);
     border: 1px solid var(--border);
     border-radius: 10px;
@@ -127,12 +121,13 @@
   .option {
     display: flex;
     align-items: center;
+    white-space: nowrap;
     justify-content: space-between;
     width: 100%;
     background: none;
     border: none;
     border-radius: 7px;
-    padding: 8px 10px;
+    padding: 6px 8px;
     font-size: 0.85rem;
     color: var(--text-secondary);
     cursor: pointer;
@@ -148,5 +143,6 @@
 
   .option.selected {
     color: var(--accent);
+    font-weight: 600;
   }
 </style>

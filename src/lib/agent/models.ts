@@ -50,7 +50,7 @@ export const MODELS: Model<'anthropic-messages' | 'google-generative-ai' | 'open
     // ── Anthropic (via bianxie.ai) ────────────────────────────────────────────
     {
       id: 'claude-haiku-4-5-20251001-thinking',
-      name: 'Claude Haiku 4.5 (Thinking) · 边界',
+      name: 'Claude Haiku 4.5 (Thinking) · bianxie',
       api: 'anthropic-messages',
       provider: 'bianxie',
       baseUrl: 'https://api.bianxie.ai', // SDK appends /v1/messages
@@ -64,7 +64,7 @@ export const MODELS: Model<'anthropic-messages' | 'google-generative-ai' | 'open
     // ── Google Gemini (via bianxie.ai) ────────────────────────────────────────
     {
       id: 'gemini-3.1-flash-lite-preview',
-      name: 'Gemini 3.1 Flash Lite (Thinking) · 边界',
+      name: 'Gemini 3.1 Flash Lite (Thinking) · bianxie',
       api: 'google-generative-ai',
       provider: 'bianxie',
       baseUrl: 'https://api.bianxie.ai/v1beta',
@@ -76,7 +76,7 @@ export const MODELS: Model<'anthropic-messages' | 'google-generative-ai' | 'open
     },
     {
       id: 'gemini-3-flash-preview-thinking',
-      name: 'Gemini 3 Flash (Thinking) · 边界',
+      name: 'Gemini 3 Flash (Thinking) · bianxie',
       api: 'google-generative-ai',
       provider: 'bianxie',
       baseUrl: 'https://api.bianxie.ai/v1beta',
@@ -87,10 +87,23 @@ export const MODELS: Model<'anthropic-messages' | 'google-generative-ai' | 'open
       maxTokens: 8192,
     },
 
+    {
+      id: 'claude-sonnet-4-6-thinking',
+      name: 'Claude Sonnet 4.6 (Thinking) · bianxie',
+      api: 'anthropic-messages',
+      provider: 'bianxie',
+      baseUrl: 'https://api.bianxie.ai',
+      reasoning: true,
+      input: ['text', 'image'],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 200000,
+      maxTokens: 16000,
+    },
+
     // ── OpenAI (via bianxie.ai) ───────────────────────────────────────────────
     {
       id: 'gpt-5.4',
-      name: 'GPT-5.4 · 边界',
+      name: 'GPT-5.4 · bianxie',
       api: 'openai-completions',
       provider: 'bianxie',
       baseUrl: 'https://api.bianxie.ai/v1',
