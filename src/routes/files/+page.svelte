@@ -275,4 +275,11 @@
       color: var(--text-primary);
     }
   }
+
+  @media print {
+    .mobile-header,
+    .mobile-backdrop {
+      display: none !important;
+    }
+  }
 </style>

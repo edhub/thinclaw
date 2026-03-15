@@ -287,6 +287,8 @@
     .editor {
       padding: 0;
       font-size: 0.875rem;
+      width: 100%;
+      max-width: 100%;
     }
     .markdown-body {
       padding: 0;

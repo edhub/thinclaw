@@ -391,4 +391,10 @@
   .chevron.open {
     transform: rotate(90deg);
   }
+
+  @media print {
+    .sidebar {
+      display: none;
+    }
+  }
 </style>
