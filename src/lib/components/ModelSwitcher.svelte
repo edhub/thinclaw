@@ -1,14 +1,23 @@
 <script lang="ts">
-  import { settings, MODELS, modelKey, getAvailableModels } from '$lib/stores/settings'
+  import { settings, MODELS, modelKey, getAvailableModels, updateSettings } from '$lib/stores/settings'
+  import { get } from 'svelte/store'
 
   let open = $state(false)
   let btnEl = $state<HTMLButtonElement | undefined>(undefined)
 
-  const availableModels = $derived(getAvailableModels($settings))
-  const currentModel = $derived(MODELS.find((m) => modelKey(m) === $settings.model) ?? availableModels[0] ?? MODELS[0])
+  // Use $state + $effect instead of $derived so that store changes from other
+  // pages (e.g. /settings) are always reflected when the dropdown opens.
+  let availableModels = $state(getAvailableModels(get(settings)))
+  $effect(() => {
+    availableModels = getAvailableModels($settings)
+  })
+
+  const currentModel = $derived(
+    MODELS.find((m) => modelKey(m) === $settings.model) ?? availableModels[0] ?? MODELS[0],
+  )
 
   function select(key: string) {
-    settings.update((s) => ({ ...s, model: key }))
+    updateSettings({ model: key })
     open = false
   }
 

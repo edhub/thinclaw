@@ -75,59 +75,66 @@
     return (entry as { type: string }).type
   }
 
-  // ── Summary extraction (one-liner per entry) ──────────────────────────────
+  // ── Two-line layout helpers ───────────────────────────────────────────────
 
-  function summarize(entry: SessionEntry): string {
+  /**
+   * First line: role badge + timestamp + token usage (for assistant).
+   * Returns empty string if no meaningful metadata.
+   */
+  function entryMeta(entry: SessionEntry): string {
+    const parts: string[] = []
+    if (entry.type === 'message') {
+      const msg = (entry as any).message
+      const ts: number | undefined = msg?.timestamp
+      if (ts) parts.push(fmtDate(new Date(ts).toISOString()))
+      if (msg?.role === 'assistant' && msg.usage) {
+        const u = msg.usage
+        const tp: string[] = []
+        if (u.input > 0 || u.output > 0)
+          tp.push(`↑${u.input.toLocaleString()} ↓${u.output.toLocaleString()}`)
+        if (u.cacheRead > 0) tp.push(`⚡${u.cacheRead.toLocaleString()}`)
+        if (u.cacheWrite > 0) tp.push(`⬡${u.cacheWrite.toLocaleString()}`)
+        if (tp.length) parts.push(tp.join(' '))
+      }
+    } else if (entry.type === 'session') {
+      const h = entry as any
+      if (h.timestamp) parts.push(fmtDate(h.timestamp))
+    }
+    return parts.join('  ·  ')
+  }
+
+  /**
+   * Second line: message content only (no token/time info).
+   */
+  function entryContent(entry: SessionEntry): string {
     try {
       if (entry.type === 'session') {
         const h = entry as any
-        const spLen = (h.systemPrompt as string | undefined)?.length ?? 0
         const parts = [
           `"${h.conversationTitle}"`,
           h.model,
           `thinking: ${h.thinkingLevel ?? 'off'}`,
           ...(h.personaId ? [`persona: ${h.personaId}`] : []),
-          `created ${fmtDate(new Date(h.createdAt).toISOString())}`,
-          ...(spLen > 0 ? [`system prompt ${spLen.toLocaleString()} chars`] : []),
         ]
         return parts.join('  ·  ')
       }
       if (entry.type === 'message') {
         const msg = (entry as any).message
         const role: string = msg?.role ?? '?'
-
-        if (role === 'user') {
-          return snippet(textOf(msg.content))
-        }
+        if (role === 'user') return snippet(textOf(msg.content))
         if (role === 'assistant') {
-          const texts = (msg.content ?? [])
-            .filter((b: any) => b.type === 'text')
-            .map((b: any) => b.text as string)
+          const texts = (msg.content ?? []).filter((b: any) => b.type === 'text').map((b: any) => b.text as string)
           const thinking = (msg.content ?? []).filter((b: any) => b.type === 'thinking')
           const tools = (msg.content ?? []).filter((b: any) => b.type === 'toolCall')
           const parts: string[] = []
-          if (thinking.length)
-            parts.push(`💭 ${thinking.length} thinking block${thinking.length > 1 ? 's' : ''}`)
+          if (thinking.length) parts.push(`💭 ${thinking.length} thinking block${thinking.length > 1 ? 's' : ''}`)
           if (tools.length) parts.push(`🔧 ${tools.map((t: any) => t.name).join(', ')}`)
           if (texts.length) parts.push(snippet(texts.join('')))
-          if (msg.usage) {
-            const u = msg.usage
-            const usageParts: string[] = []
-            if (u.input > 0 || u.output > 0) {
-              usageParts.push(`↑${u.input.toLocaleString()} ↓${u.output.toLocaleString()}`)
-            }
-            if (u.cacheRead > 0) usageParts.push(`⚡r:${u.cacheRead.toLocaleString()}`)
-            if (u.cacheWrite > 0) usageParts.push(`⬡w:${u.cacheWrite.toLocaleString()}`)
-            if (usageParts.length) parts.push(`[${usageParts.join(' ')}]`)
-          }
           return parts.join('  ·  ') || '(empty)'
         }
         if (role === 'toolResult') {
-          const resultText = (msg.content ?? [])
-            .filter((b: any) => b.type === 'text')
-            .map((b: any) => b.text as string)
-            .join('')
-          const err = msg.isError ? '❌ error  ·  ' : ''
+          const resultText = (msg.content ?? []).filter((b: any) => b.type === 'text').map((b: any) => b.text as string).join('')
+          const err = msg.isError ? '❌  ' : ''
           return `${msg.toolName}  ·  ${err}${snippet(resultText)}`
         }
         if (role === 'compactionSummary') {
@@ -135,9 +142,7 @@
         }
         return snippet(JSON.stringify(msg))
       }
-    } catch {
-      // fall through
-    }
+    } catch { /* fall through */ }
     return ''
   }
 
@@ -221,14 +226,20 @@
   {#each entries as entry, i (i)}
     {@const kind = badgeKind(entry)}
     {@const label = badgeLabel(entry)}
-    {@const summary = summarize(entry)}
+    {@const meta = entryMeta(entry)}
+    {@const content = entryContent(entry)}
     {@const open = expanded.has(i)}
 
     <div class="entry" class:open>
       <!-- Summary row -->
       <button class="entry-row" onclick={() => toggle(i)} type="button">
-        <span class="badge badge-{kind}">{label}</span>
-        <span class="summary">{summary}</span>
+        <div class="entry-main">
+          <div class="entry-header-line">
+            <span class="badge badge-{kind}">{label}</span>
+            {#if meta}<span class="entry-meta">{meta}</span>{/if}
+          </div>
+          {#if content}<span class="entry-content">{content}</span>{/if}
+        </div>
         <svg
           class="chevron"
           class:open
@@ -306,19 +317,19 @@
   .inspector {
     flex: 1;
     overflow-y: auto;
-    padding: 12px 16px;
+    padding: 8px 10px;
     display: flex;
     flex-direction: column;
     gap: 2px;
   }
 
   .entry-count {
-    font-size: 0.7rem;
+    font-size: 0.68rem;
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     font-weight: 600;
-    padding: 0 4px 6px;
+    padding: 0 4px 4px;
     flex-shrink: 0;
   }
 
@@ -328,8 +339,8 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 4px;
-    padding: 6px 8px;
-    margin-bottom: 6px;
+    padding: 5px 8px;
+    margin-bottom: 4px;
     background: var(--surface-elevated);
     border: 1px solid var(--border);
     border-radius: 6px;
@@ -342,14 +353,14 @@
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    font-size: 0.68rem;
+    font-size: 0.65rem;
     margin-right: 2px;
   }
 
   .usage-stat {
     color: var(--text-secondary);
     font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace;
-    font-size: 0.72rem;
+    font-size: 0.7rem;
   }
 
   .usage-cache-hit {
@@ -369,7 +380,7 @@
   /* ── Entry card ── */
   .entry {
     border: 1px solid transparent;
-    border-radius: 6px;
+    border-radius: 5px;
     transition: border-color 0.1s;
   }
 
@@ -380,14 +391,14 @@
 
   .entry-row {
     display: flex;
-    align-items: baseline;
-    gap: 10px;
+    align-items: flex-start;
+    gap: 8px;
     width: 100%;
     background: none;
     border: none;
     cursor: pointer;
-    padding: 6px 8px;
-    border-radius: 6px;
+    padding: 5px 6px;
+    border-radius: 5px;
     text-align: left;
     transition: background 0.08s;
   }
@@ -397,17 +408,51 @@
   }
 
   .entry.open .entry-row {
-    border-radius: 6px 6px 0 0;
+    border-radius: 5px 5px 0 0;
+  }
+
+  /* Two-line inner layout */
+  .entry-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .entry-header-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .entry-meta {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .entry-content {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
   }
 
   /* ── Type badge ── */
   .badge {
-    font-size: 0.68rem;
+    font-size: 0.64rem;
     font-weight: 700;
     font-family: monospace;
     letter-spacing: 0.03em;
-    padding: 2px 6px;
-    border-radius: 4px;
+    padding: 1px 5px;
+    border-radius: 3px;
     flex-shrink: 0;
     text-transform: lowercase;
   }
@@ -435,17 +480,6 @@
   .badge-other {
     background: var(--surface-elevated);
     color: var(--text-muted);
-  }
-
-  /* ── Summary text ── */
-  .summary {
-    flex: 1;
-    font-size: 0.82rem;
-    color: var(--text-secondary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    line-height: 1.4;
   }
 
   /* ── Chevron ── */
