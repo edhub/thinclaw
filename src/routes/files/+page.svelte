@@ -281,5 +281,22 @@
     .mobile-backdrop {
       display: none !important;
     }
+
+    /* Let the layout expand to full content height for printing */
+    :global(body),
+    :global(html) {
+      height: auto !important;
+      overflow: visible !important;
+    }
+
+    .layout {
+      height: auto !important;
+      overflow: visible !important;
+    }
+
+    .main {
+      overflow: visible !important;
+      height: auto !important;
+    }
   }
 </style>

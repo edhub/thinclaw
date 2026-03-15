@@ -38,7 +38,38 @@ import {
   shouldCompact,
   type CompactionSummaryMessage,
 } from '$lib/agent/compaction'
-import { recordSession, updateSessionTitle, sweepSessions } from '$lib/fs/session-recorder'
+import { recordSession, updateSessionTitle, sweepSessions, type SerializedTool } from '$lib/fs/session-recorder'
+
+// ─── Streaming throttle (rAF batching) ───────────────────────────────────────
+// Buffer incoming message_update events and flush at most once per animation
+// frame. On fast models this cuts mobile re-renders from hundreds/sec to ~60.
+
+/** Flush streaming updates at most twice per second — plenty for reading, easy on mobile. */
+const STREAM_THROTTLE_MS = 500
+
+let _pendingStreamMsg: AgentMessage | null = null
+let _streamTimerId: ReturnType<typeof setTimeout> | null = null
+
+function scheduleStreamingUpdate(msg: AgentMessage): void {
+  _pendingStreamMsg = msg
+  if (_streamTimerId === null) {
+    _streamTimerId = setTimeout(() => {
+      _streamTimerId = null
+      if (_pendingStreamMsg) {
+        streamingMessage.set({ ..._pendingStreamMsg })
+        _pendingStreamMsg = null
+      }
+    }, STREAM_THROTTLE_MS)
+  }
+}
+
+function cancelStreamingRaf(): void {
+  if (_streamTimerId !== null) {
+    clearTimeout(_streamTimerId)
+    _streamTimerId = null
+  }
+  _pendingStreamMsg = null
+}
 
 // ─── Singleton agent ──────────────────────────────────────────────────────────
 
@@ -191,11 +222,13 @@ function handleAgentEvent(event: AgentEvent) {
 
     case 'message_update':
       if (event.message.role === 'assistant') {
-        streamingMessage.set({ ...event.message })
+        scheduleStreamingUpdate(event.message)
       }
       break
 
     case 'message_end':
+      // Cancel any pending rAF flush — the message is now finalised.
+      cancelStreamingRaf()
       streamingMessage.set(null)
       activeMessages.set([...getAgent().state.messages])
       // User message is now in agent.state.messages — clear the optimistic placeholder.
@@ -214,6 +247,7 @@ function handleAgentEvent(event: AgentEvent) {
 
     case 'agent_end':
       isStreaming.set(false)
+      cancelStreamingRaf()
       streamingMessage.set(null)
       activeMessages.set([...getAgent().state.messages])
       queueLength.set(0) // safety reset — all follow-ups have been processed
@@ -254,6 +288,11 @@ async function persistSessionSnapshot(): Promise<void> {
   const systemPrompt = agent.state.systemPrompt ?? ''
   const messages = agent.state.messages
   if (messages.length === 0) return
+  const tools: SerializedTool[] = (agent.state.tools ?? []).map((t) => ({
+    name: t.name,
+    description: t.description,
+    parameters: t.parameters,
+  }))
   await recordSession(
     convId,
     title,
@@ -263,6 +302,7 @@ async function persistSessionSnapshot(): Promise<void> {
     conv?.personaId,
     systemPrompt,
     messages,
+    tools,
   )
 }
 

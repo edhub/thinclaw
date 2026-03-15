@@ -15,6 +15,8 @@
   }
   let { onSend, onAbort, open = true, onClose, isModal = false }: Props = $props()
 
+  const DRAFT_KEY = 'thinclaw:input-draft'
+
   let value = $state('')
   let images = $state<ImageContent[]>([])
   let textareaEl = $state<HTMLTextAreaElement | undefined>(undefined)
@@ -51,6 +53,21 @@
 
   onMount(() => {
     isMobile = window.matchMedia('(max-width: 639px)').matches
+    // Restore unsent draft
+    const saved = localStorage.getItem(DRAFT_KEY)
+    if (saved) {
+      value = saved
+      setTimeout(resizeTextarea, 0)
+    }
+  })
+
+  // Persist draft to localStorage whenever value changes
+  $effect(() => {
+    if (value) {
+      localStorage.setItem(DRAFT_KEY, value)
+    } else {
+      localStorage.removeItem(DRAFT_KEY)
+    }
   })
 
   /** Focus the textarea from outside (called by parent via bind:this). */
@@ -334,6 +351,7 @@
 
     // Reset UI eagerly — prevents double-sends while awaiting file reads.
     value = ''
+    localStorage.removeItem(DRAFT_KEY)
     images = []
     fileChips = []
     showDropdown = false
@@ -373,6 +391,12 @@
     const el = e.target as HTMLTextAreaElement
     el.style.height = 'auto'
     el.style.height = Math.min(el.scrollHeight, 200) + 'px'
+  }
+
+  function resizeTextarea() {
+    if (!textareaEl) return
+    textareaEl.style.height = 'auto'
+    textareaEl.style.height = Math.min(textareaEl.scrollHeight, 200) + 'px'
   }
 
   function openFilePicker() {
@@ -570,68 +594,74 @@
         onpaste={handlePaste}
       ></textarea>
 
-      <!-- Attach image button -->
-      <button class="attach-btn" type="button" onclick={openFilePicker} title="附加图片">
-        <svg
-          width="17"
-          height="17"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <path
-            d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"
-          />
-        </svg>
-      </button>
+      <div class="toolbar">
+        <div class="toolbar-left">
+          <!-- Attach image button -->
+          <button class="attach-btn" type="button" onclick={openFilePicker} title="附加图片">
+            <svg
+              width="17"
+              height="17"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+              <circle cx="8.5" cy="8.5" r="1.5" />
+              <polyline points="21 15 16 10 5 21" />
+            </svg>
+          </button>
 
-      <!-- Upload local text file button -->
-      <button
-        class="attach-btn"
-        type="button"
-        onclick={openTextFilePicker}
-        title="上传本地文本文件到工作区"
-      >
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-          <polyline points="14 2 14 8 20 8" />
-          <line x1="12" y1="18" x2="12" y2="12" />
-          <polyline points="9 15 12 12 15 15" />
-        </svg>
-      </button>
+          <!-- Upload local text file button -->
+          <button
+            class="attach-btn"
+            type="button"
+            onclick={openTextFilePicker}
+            title="上传本地文本文件到工作区"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="12" y1="18" x2="12" y2="12" />
+              <polyline points="9 15 12 12 15 15" />
+            </svg>
+          </button>
+        </div>
 
-      <!-- Stop button — only visible while streaming -->
-      {#if $isStreaming}
-        <button class="stop-btn" onclick={onAbort} title="停止" type="button">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-            <rect x="6" y="6" width="12" height="12" rx="2" />
-          </svg>
-        </button>
-      {/if}
+        <div class="toolbar-right">
+          <!-- Stop button — only visible while streaming -->
+          {#if $isStreaming}
+            <button class="stop-btn" onclick={onAbort} title="停止" type="button">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="6" y="6" width="12" height="12" rx="2" />
+              </svg>
+            </button>
+          {/if}
 
-      <!-- Send button — queues when streaming -->
-      <button
-        class="send-btn"
-        disabled={!canSend}
-        onclick={submit}
-        title={$isStreaming ? '排队发送' : '发送'}
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
-        </svg>
-      </button>
+          <!-- Send button — queues when streaming -->
+          <button
+            class="send-btn"
+            disabled={!canSend}
+            onclick={submit}
+            title={$isStreaming ? '排队发送' : '发送'}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+            </svg>
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -773,12 +803,11 @@
   /* Input box */
   .input-box {
     display: flex;
-    align-items: flex-end;
-    gap: 6px;
+    flex-direction: column;
     background: var(--surface-input);
     border: 1px solid var(--border);
     border-radius: 12px;
-    padding: 10px 12px;
+    padding: 10px 12px 8px;
     transition: border-color 0.15s;
   }
 
@@ -792,7 +821,7 @@
   }
 
   textarea {
-    flex: 1;
+    width: 100%;
     background: none;
     border: none;
     outline: none;
@@ -807,6 +836,21 @@
 
   textarea::placeholder {
     color: var(--text-muted);
+  }
+
+  /* Bottom toolbar: attachments left, actions right */
+  .toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 6px;
+  }
+
+  .toolbar-left,
+  .toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 2px;
   }
 
   /* Attach button */

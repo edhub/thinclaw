@@ -284,15 +284,36 @@
     .toolbar {
       display: none;
     }
+
+    /* Remove all overflow/height clipping so full content prints */
+    .content {
+      overflow: visible !important;
+      height: auto !important;
+      flex: none !important;
+    }
+
     .editor {
+      overflow: visible !important;
+      height: auto !important;
       padding: 0;
-      font-size: 0.875rem;
+      font-size: 0.75rem;
       width: 100%;
       max-width: 100%;
     }
+
     .markdown-body {
+      overflow: visible !important;
+      height: auto !important;
       padding: 0;
       max-width: none;
+      font-size: 0.825rem;
+    }
+
+    /* Ink-friendly: raw editor textarea uses light background */
+    .editor {
+      background: #f4f4f4 !important;
+      color: #1a1a1a !important;
+      border: 1px solid #cccccc !important;
     }
   }
 </style>

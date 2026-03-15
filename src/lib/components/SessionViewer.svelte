@@ -282,6 +282,18 @@
                 <pre class="sysprompt-text">{h.systemPrompt}</pre>
               </div>
             {/if}
+            {#if h.tools && h.tools.length > 0}
+              <div class="tools-block">
+                <div class="tools-header">tools ({h.tools.length})</div>
+                {#each h.tools as tool}
+                  <div class="tool-item">
+                    <div class="tool-name">{tool.name}</div>
+                    <div class="tool-desc">{tool.description}</div>
+                    <pre class="tool-params">{JSON.stringify(tool.parameters, null, 2)}</pre>
+                  </div>
+                {/each}
+              </div>
+            {/if}
           </div>
         {:else}
           {@const img = extractGeneratedImage(entry)}
@@ -558,6 +570,59 @@
     word-break: break-word;
     border-left: 2px solid var(--border);
     margin-left: 14px;
+  }
+
+  /* ── Tools block in session header ── */
+  .tools-block {
+    border-top: 1px solid var(--border);
+    padding: 8px 14px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .tools-header {
+    font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    letter-spacing: 0.03em;
+    padding-bottom: 2px;
+  }
+
+  .tool-item {
+    border-left: 2px solid var(--border);
+    margin-left: 6px;
+    padding-left: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .tool-name {
+    font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--accent);
+  }
+
+  .tool-desc {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+  }
+
+  .tool-params {
+    margin: 4px 0 0;
+    font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    white-space: pre-wrap;
+    word-break: break-all;
+    line-height: 1.5;
+    background: var(--surface-main);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 8px;
   }
 
   /* ── Generated image in session ── */

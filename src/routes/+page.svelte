@@ -818,8 +818,7 @@
     left: 50%;
     transform: translateX(-50%);
     z-index: 70;
-    width: 90%;
-    max-width: 600px;
+    width: min(92vw, 760px);
     background: var(--surface-main);
     border: 1px solid var(--border);
     border-radius: 16px;

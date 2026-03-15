@@ -71,6 +71,11 @@
   let errorExpanded = $state(false)
 
   $effect(() => {
+    // During streaming, skip markdown rendering entirely — show plain text instead.
+    // Markdown is rendered once after streaming completes (isStreaming flips to false).
+    if (isStreaming) {
+      return
+    }
     const combined = textBlocks.map((b) => b.text).join('')
     if (!combined) {
       renderedHtml = ''
@@ -209,7 +214,10 @@
       {/each}
 
       <!-- Main text -->
-      {#if renderedHtml}
+      {#if isStreaming && textBlocks.length > 0}
+        <!-- Plain text during streaming — no markdown overhead, much faster on mobile -->
+        <div class="streaming-plain">{textBlocks.map((b) => b.text).join('')}</div>
+      {:else if renderedHtml}
         <!-- eslint-disable-next-line svelte/no-at-html-tags -->
         <div class="markdown-body">{@html renderedHtml}</div>
       {:else if isStreaming && thinkingBlocks.length === 0 && toolCallBlocks.length === 0}
@@ -510,6 +518,15 @@
     border-top: 1px solid color-mix(in srgb, var(--error) 30%, transparent);
     white-space: pre-wrap;
     word-break: break-word;
+  }
+
+  /* Plain text shown during streaming (no markdown overhead) */
+  .streaming-plain {
+    color: var(--text-primary);
+    line-height: 1.7;
+    font-size: 0.9375rem;
+    word-break: break-word;
+    white-space: pre-wrap;
   }
 
   /* Markdown body — typography rules are in app.css */

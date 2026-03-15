@@ -21,6 +21,14 @@ export const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
 
 // ─── Entry types ──────────────────────────────────────────────────────────────
 
+/** Serialisable subset of AgentTool (strips the non-serialisable execute fn). */
+export interface SerializedTool {
+  name: string
+  description: string
+  /** TypeBox schema object describing the tool's input parameters. */
+  parameters: unknown
+}
+
 export interface SessionHeader {
   type: 'session'
   conversationId: string
@@ -36,6 +44,8 @@ export interface SessionHeader {
   personaId?: string
   /** Full system prompt active at the time of the last agent_end. */
   systemPrompt: string
+  /** Tool definitions active at the time of the last agent_end. */
+  tools?: SerializedTool[]
 }
 
 export interface SessionMessageEntry {
@@ -98,6 +108,7 @@ export async function recordSession(
   personaId: string | undefined,
   systemPrompt: string,
   messages: AgentMessage[],
+  tools?: SerializedTool[],
 ): Promise<void> {
   await sweepSessions() // lazy sweep before first write
 
@@ -111,6 +122,7 @@ export async function recordSession(
     thinkingLevel,
     ...(personaId ? { personaId } : {}),
     systemPrompt,
+    ...(tools && tools.length > 0 ? { tools } : {}),
   }
 
   const lines = [

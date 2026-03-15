@@ -273,3 +273,83 @@ select {
   border-top: 1px solid var(--border);
   margin: 1em 0;
 }
+
+/* ─── Print: ink-friendly overrides ─── */
+/* Goal: eliminate large dark-filled areas (code blocks, dark-theme surfaces)  */
+/* that waste ink. Use light backgrounds + dark-grey (not pure black) text.    */
+@media print {
+  /* Force light-mode tokens regardless of user's theme preference */
+  :root,
+  [data-theme='dark'] {
+    --surface-main: #ffffff;
+    --surface-sidebar: #ffffff;
+    --surface-elevated: #f5f5f5;
+    --surface-hover: #f0f0f0;
+    --surface-active: #ebebf5;
+    --surface-input: #f8f8f8;
+
+    --text-primary: #1a1a1a;
+    --text-secondary: #444444;
+    --text-muted: #777777;
+
+    --border: #cccccc;
+
+    /* Code blocks: swap near-black → very light grey */
+    --code-bg: #f4f4f4;
+    --code-inline-bg: #f0f0f0;
+    --code-inline-color: #9333ea;
+
+    --accent: #4a56cc;
+    --error: #b91c1c;
+    --error-bg: #fff5f5;
+  }
+
+  /* Base page */
+  html,
+  body {
+    background: #ffffff !important;
+    color: #1a1a1a !important;
+  }
+
+  /* Prevent browsers from printing background colours by default.      */
+  /* We explicitly set the backgrounds we *want* (light grey for code). */
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* highlight.js dark theme → invert to light */
+  .hljs {
+    background: #f4f4f4 !important;
+    color: #1a1a1a !important;
+  }
+
+  /* Code blocks */
+  .markdown-body pre {
+    background: #f4f4f4 !important;
+    border: 1px solid #cccccc !important;
+    color: #1a1a1a !important;
+  }
+
+  /* Tables */
+  .markdown-body th {
+    background: #eeeeee !important;
+  }
+
+  /* Blockquote accent */
+  .markdown-body blockquote {
+    border-left-color: #4a56cc !important;
+    color: #444444 !important;
+  }
+
+  /* No shadows or blurred outlines */
+  * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  /* Hide scrollbars */
+  ::-webkit-scrollbar {
+    display: none;
+  }
+}
