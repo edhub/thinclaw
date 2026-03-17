@@ -11,10 +11,9 @@ AgentMessage = UserMessage
              | AssistantMessage
              | ToolResultMessage
              | CompactionSummaryMessage   ← ThinClaw 自定义
-             | MemoryUpdateMessage        ← ThinClaw 自定义
 ```
 
-前三种来自 `@mariozechner/pi-ai`，后两种在 `src/lib/agent/compaction.ts` 通过 declaration merging 注入 `CustomAgentMessages`。
+前三种来自 `@mariozechner/pi-ai`，`CompactionSummaryMessage` 在 `src/lib/agent/compaction.ts` 通过 declaration merging 注入 `CustomAgentMessages`。
 
 | role | 来源 | IDB 持久化 | 显示到 UI | `convertToLlm` 展开结果 |
 |---|---|---|---|---|
@@ -22,7 +21,6 @@ AgentMessage = UserMessage
 | `assistant` | LLM 响应 | ✅ | ✅ | 原样透传（老 thinking block → redacted） |
 | `toolResult` | 工具执行结果 | ✅ | ✅（折叠） | 原样透传 |
 | `compactionSummary` | 压缩后摘要，替换旧消息 | ✅ | ❌ 过滤 | → 1 条 `user` 消息 |
-| `memoryUpdate` | `memory_save` 后追加 | ✅ | ❌ 过滤 | → 2 条 `user`+`assistant` 消息 |
 
 ---
 
@@ -79,7 +77,7 @@ interface Usage {
 | `toolCall` | `id`, `name`, `arguments` | 工具调用请求 |
 
 **thinking block 的特殊处理（见 `convertToLlm`）：**
-- 最近 2 条 assistant 消息：原样传回（保留完整 thinking 文本）
+- 最近 3 个 user turn 内的 assistant 消息：原样传回（保留完整 thinking 文本）
 - 更早的消息：
   - 有 `thinkingSignature` → 转为 redacted 形式 `{ ...block, thinking: '', redacted: true }`（Anthropic 合规紧凑格式，只传签名）
   - 无签名（如 stream 中断）→ 整个 block 丢弃
@@ -140,43 +138,6 @@ interface CompactionSummaryMessage {
 
 ---
 
-### MemoryUpdateMessage
-
-```ts
-interface MemoryUpdateMessage {
-  role: 'memoryUpdate'
-  memText: string   // 格式化后的新记忆文本（仅 delta，不含历史记忆）
-  timestamp: number
-}
-```
-
-**创建时机：** `onAgentEnd` → `appendMemoryUpdateIfNeeded()` 检测到本轮有新的 `memory_save(tier='core')` 调用时追加（仅 delta：不在 `_convMemSnapshotIds` 且不在 `_memUpdateCoveredIds` 中的 core 记忆）。`general` 记忆不触发此追加——它们仅通过 `memory_recall` 按需检索。
-
-**位置规则：**
-- 追加在对应轮次 assistant 消息之后，位置永久固定
-- 同一个 convId 内的记忆 ID 通过 `_memUpdateCoveredIds` 防止重复追加
-
-**`convertToLlm` 展开：**
-```ts
-// MemoryUpdateMessage → 2 条消息（保持 user/assistant 交替格式）
-{
-  role: 'user',
-  content: [{ type: 'text', text: `[Memory updated]\n\n${mu.memText}` }],
-  timestamp: mu.timestamp,
-},
-{
-  role: 'assistant',
-  content: [{ type: 'text', text: "I've noted the memory update." }],
-  timestamp: mu.timestamp,
-} // 合成 ack，只用 role + content，其余字段不被 provider 层读取
-```
-
-**为什么不动态插入：** 如果每轮都重新计算最新记忆并插入，位置随对话增长而漂移，破坏 Anthropic 缓存的前缀匹配。固定位置确保上游所有消息的前缀在后续轮次中完全不变。详见 `docs/caching-and-compaction.md`。
-
-**UI：** 被过滤，不渲染。
-
----
-
 ## 四、内容块类型
 
 ```ts
@@ -222,12 +183,9 @@ interface ToolCall {
                           │     └─→ [ToolResultMessage×N] 写入 agent.state.messages
                           │           └─→ 再次 LLM 调用（循环）
                           └─→ agent_end 触发
-                                ├─→ persistNewMessages()        → IndexedDB
-                                ├─→ appendMemoryUpdateIfNeeded()
-                                │     └─→ [MemoryUpdateMessage] 追加到 agent.state.messages + IndexedDB
+                                ├─→ persistNewMessages()   → IndexedDB
                                 └─→ maybeCompact()
                                       └─→ 若触发：[CompactionSummaryMessage] 替换旧消息
-                                                  refreshConvMemSnapshot()
 ```
 
 ---
@@ -240,10 +198,8 @@ interface ToolCall {
 | `assistant` | ✅ | ✅ | ✅（老 thinking → redacted）|
 | `toolResult` | ✅ | ✅ | ✅ 原样 |
 | `compactionSummary` | ✅ | ✅ | ✅ → 展开为 user |
-| `memoryUpdate` | ✅ | ✅ | ✅ → 展开为 user+ack |
-| memory prefix（base）| ❌ 不存储 | ❌ 不存在 | ✅ `convertToLlm` 动态注入 |
 
-> **memory prefix** 是 `convertToLlm` 在每次 LLM 调用时从 `_convMemSnapshot` 动态构造的合成消息对，仅包含 **core 记忆**，仅存在于发往 provider 的请求中，不写入 `agent.state.messages`，也不持久化。`general` 记忆不在此列，由 AI 通过 `memory_recall` 工具按需检索。
+> **记忆（Memories）** 不作为消息存在。它们通过 `assembleSystemPrompt()` 注入为最后一段 system prompt，每次 `sendMessage()` 前重建。详见 `docs/caching-and-compaction.md`。
 
 ---
 
@@ -251,7 +207,7 @@ interface ToolCall {
 
 | 文件 | 职责 |
 |---|---|
-| `src/lib/agent/compaction.ts` | `CompactionSummaryMessage`、`MemoryUpdateMessage` 类型定义；`estimateTokens`、`toSummaryMessages` 的各 role 处理 |
-| `src/lib/stores/chat.ts` | `convertToLlm`（各 role 展开规则）；`appendMemoryUpdateIfNeeded`（delta 追加）；`refreshConvMemSnapshot`（base 快照刷新）|
-| `src/routes/+page.svelte` | `activeMessages` 渲染过滤（排除 `compactionSummary`、`memoryUpdate`）|
+| `src/lib/agent/compaction.ts` | `CompactionSummaryMessage` 类型定义；`estimateTokens`、`toSummaryMessages` 的各 role 处理 |
+| `src/lib/stores/chat.ts` | `convertToLlm`（各 role 展开规则、redacted thinking 转换）|
+| `src/routes/+page.svelte` | `activeMessages` 渲染过滤（排除 `compactionSummary`）|
 | `src/lib/components/ChatMessage.svelte` | `user`、`assistant`、`toolResult` 三种 role 的 UI 渲染 |

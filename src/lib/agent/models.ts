@@ -99,18 +99,18 @@ export const MODELS: Model<'anthropic-messages' | 'google-generative-ai' | 'open
       contextWindow: 1000000,
       maxTokens: 8192,
     },
-    {
-      id: 'gemini-3.1-pro-preview-thinking',
-      name: 'Gemini 3.1 pro (Thinking) · bianxie',
-      api: 'google-generative-ai',
-      provider: 'bianxie',
-      baseUrl: 'https://api.bianxie.ai/v1beta',
-      reasoning: true,
-      input: ['text', 'image'],
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-      contextWindow: 1000000,
-      maxTokens: 8192,
-    },
+    // {
+    //   id: 'gemini-3.1-pro-preview-thinking',
+    //   name: 'Gemini 3.1 pro (Thinking) · bianxie',
+    //   api: 'google-generative-ai',
+    //   provider: 'bianxie',
+    //   baseUrl: 'https://api.bianxie.ai/v1beta',
+    //   reasoning: true,
+    //   input: ['text', 'image'],
+    //   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    //   contextWindow: 1000000,
+    //   maxTokens: 8192,
+    // },
 
     // ── OpenAI (via bianxie.ai) ───────────────────────────────────────────────
     {
@@ -132,8 +132,8 @@ export function modelKey(m: Model<any>): string {
   return `${m.provider}:${m.id}`
 }
 
-export const DEFAULT_MODEL_KEY = 'laozhang:claude-haiku-4-5-20251001-thinking'
-export const DEFAULT_UTILITY_MODEL_KEY = 'laozhang:gemini-3.1-flash-lite-preview'
+export const DEFAULT_MODEL_KEY = 'bianxie:gemini-3-flash-preview-thinking'
+export const DEFAULT_UTILITY_MODEL_KEY = 'bianxie:gemini-3.1-flash-lite-preview'
 
 export function getModelByKey(
   key: string,

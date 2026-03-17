@@ -20,9 +20,9 @@ src/
 │   ├── agent/
 │   │   ├── models.ts              # MODELS array + getModelById + DEFAULT_*_MODEL_ID
 │   │   ├── personas.ts            # BUILTIN_PERSONAS + getPersonaById
-│   │   ├── prompts.ts             # buildSystemPrompt (soul + persona + memory + custom)
+│   │   ├── prompts.ts             # buildSystemPrompt → SystemPromptParts (soul+persona+custom+memory)
 │   │   ├── soul.ts                # AI identity (localStorage, self-editable via soul_update tool)
-│   │   ├── tools.ts               # Agent tools: calculate, datetime, soul_*, memory_*
+│   │   ├── tools.ts               # Agent tools: calculate, datetime, soul_*, memory_save, memory_delete
 │   │   └── compaction.ts          # Auto-compaction: token estimation + LLM summarisation
 │   ├── fs/
 │   │   ├── opfs.ts                # OPFS abstraction: readFile/writeFile/editFile/listDir/
@@ -73,11 +73,13 @@ src/
 | OPFS tmp files (7-day TTL) | Origin Private File System | `tmp/` |
 | Session snapshots (7-day TTL) | Origin Private File System | `sessions/{convId}.jsonl` |
 
-**Agent loop:** `@mariozechner/pi-agent-core` `Agent` runs entirely in the browser. System prompt is rebuilt before every message from: soul + active persona + memories + user custom instructions. Auto-compaction triggers when context exceeds `contextWindow - reserveTokens`.
+**Agent loop:** `@mariozechner/pi-agent-core` `Agent` runs entirely in the browser. System prompt is rebuilt before every message as an ordered sequence: soul + How-You-Operate → active persona (if any) → custom instructions (if any) → memories (if any). Auto-compaction triggers when context exceeds `contextWindow - reserveTokens`.
 
 **Personas** are selected in `PersonaPicker` before the first message and locked afterwards. Stored as `personaId` on the `Conversation` record.
 
 **@mention** in `ChatInput`: type `@` to open a file picker, selected files are injected as `<file-context path="...">` blocks prepended to the message.
+
+**Memory system:** Single-tier. Only stable identity facts about the user (name, language, key long-term preferences) are persisted via `memory_save`. Memories are injected as the last system prompt block on every turn. `memory_delete` removes stale entries by ID. No `memory_recall` — there is no general/situational tier.
 
 ---
 

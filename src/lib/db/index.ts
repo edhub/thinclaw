@@ -37,12 +37,9 @@ export interface Memory {
   id: string
   content: string
   /**
-   * 'core'    — identity-level facts (name, language, key preferences).
-   *             Always injected into every conversation context.
-   *             Expected to stay small; user manages quality manually.
-   * 'general' — project details, events, situational context.
-   *             Not auto-injected; retrieved on demand via memory_recall.
-   *             Missing tier (legacy records) is treated as 'general'.
+   * Kept for schema compatibility with legacy records. All memories are
+   * treated the same — injected into every conversation via the system prompt.
+   * New entries are always saved as 'core'.
    */
   tier: 'core' | 'general'
   createdAt: number
@@ -198,49 +195,4 @@ export async function deleteMemory(id: string): Promise<void> {
   await db.delete('memories', id)
 }
 
-/**
- * Simple keyword search over memory content.
- * Splits the query into tokens and tries AND matching first;
- * falls back to OR if no AND results are found.
- *
- * @param query   Space-separated keywords.
- * @param options.tier   Filter by tier. Defaults to 'all'. Legacy records
- *                       without a tier field are treated as 'general'.
- * @param options.limit  Maximum results to return. Defaults to 20.
- */
-export async function searchMemories(
-  query: string,
-  options?: { tier?: 'core' | 'general' | 'all'; limit?: number },
-): Promise<Memory[]> {
-  const all = await listMemories()
-  const tier = options?.tier ?? 'all'
-  const limit = options?.limit ?? 20
 
-  // Treat missing tier (legacy records) as 'general'.
-  const candidates =
-    tier === 'all'
-      ? all
-      : all.filter((m) => (m.tier ?? 'general') === tier)
-
-  const tokens = query
-    .toLowerCase()
-    .split(/\s+/)
-    .filter((t) => t.length > 1)
-  if (tokens.length === 0) return candidates.slice(0, limit)
-
-  // AND match first — all tokens must be present.
-  let results = candidates.filter((m) => {
-    const text = m.content.toLowerCase()
-    return tokens.every((t) => text.includes(t))
-  })
-
-  // OR fallback — any single token matches.
-  if (results.length === 0) {
-    results = candidates.filter((m) => {
-      const text = m.content.toLowerCase()
-      return tokens.some((t) => text.includes(t))
-    })
-  }
-
-  return results.slice(0, limit)
-}

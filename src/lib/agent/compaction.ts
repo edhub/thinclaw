@@ -26,31 +26,10 @@ export interface CompactionSummaryMessage {
   timestamp: number
 }
 
-/**
- * Injected after a turn in which memory_save was called.
- *
- * Stored as a real entry in agent.state.messages (and persisted to IndexedDB)
- * so its position in the message array is fixed forever.  convertToLlm expands
- * it to a synthetic user/assistant pair at that exact position so the LLM sees
- * a clear "[Memory updated]" marker at the point where new memories were saved.
- *
- * Using a fixed position (instead of dynamically prepending an updated full-
- * memory block at position 0 each turn) keeps the entire conversation-history
- * prefix stable.  The Anthropic cache can keep serving hits on all content
- * before this message even after memory grows.
- */
-export interface MemoryUpdateMessage {
-  role: 'memoryUpdate'
-  /** Formatted text of the newly added memories (delta only, not the full list). */
-  memText: string
-  timestamp: number
-}
-
 // Extend pi-agent-core's union type so AgentMessage includes our custom messages.
 declare module '@mariozechner/pi-agent-core' {
   interface CustomAgentMessages {
     compactionSummary: CompactionSummaryMessage
-    memoryUpdate: MemoryUpdateMessage
   }
 }
 
@@ -156,9 +135,6 @@ export function estimateTokens(message: AgentMessage): number {
     }
     case 'compactionSummary':
       return estimateStringTokens((msg as CompactionSummaryMessage).summary)
-
-    case 'memoryUpdate':
-      return estimateStringTokens((msg as MemoryUpdateMessage).memText)
 
     default:
       return 0
@@ -337,23 +313,6 @@ function toSummaryMessages(messages: AgentMessage[]): Message[] {
             role: 'user' as const,
             content: [
               { type: 'text', text: `[Previous context summary]\n\n${msg.summary as string}` },
-            ],
-            timestamp: msg.timestamp as number,
-          },
-        ]
-      case 'memoryUpdate':
-        // Expand to a single user message for the summarizer.
-        // Note: convertToLlm expands the same message to TWO messages (user + assistant ack)
-        // to maintain Anthropic's strict user/assistant alternation.  The summarizer only
-        // needs the semantic content, so the ack is omitted here.
-        return [
-          {
-            role: 'user' as const,
-            content: [
-              {
-                type: 'text',
-                text: `[Memory update]\n\n${(msg as unknown as MemoryUpdateMessage).memText}`,
-              },
             ],
             timestamp: msg.timestamp as number,
           },

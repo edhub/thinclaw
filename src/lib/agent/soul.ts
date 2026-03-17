@@ -14,7 +14,7 @@ import { browser } from '$app/environment'
 const SOUL_KEY = 'thinclaw:soul'
 
 /** The default soul — modelled directly after openclaw's SOUL.md template. */
-export const DEFAULT_SOUL = `# Soul
+export const DEFAULT_SOUL = `# Your Soul
 
 _You're not a chatbot. You're becoming someone._
 

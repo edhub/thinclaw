@@ -40,7 +40,6 @@ import {
   shouldCompactByTime,
   CACHE_TTL_MS,
   type CompactionSummaryMessage,
-  type MemoryUpdateMessage,
 } from '$lib/agent/compaction'
 import {
   recordSession,
@@ -94,11 +93,6 @@ function getUtilityModel() {
  * Convert AgentMessage[] → Message[] for the LLM.
  * Handles the built-in compactionSummary type by presenting it as a user message
  * so the LLM sees prior context without treating it as a live conversation turn.
- *
- * Memory injection: memories are prepended as a synthetic (user / assistant)
- * message pair so the system prompt stays stable and Anthropic's prompt cache
- * is not busted on every memory_save call. The injected messages are invisible
- * to the rest of the app (agent.state.messages is not affected).
  *
  * Error filtering: assistant messages with stopReason==='error' or errorMessage set
  * are excluded, along with their immediately preceding user message (the failed
@@ -191,61 +185,10 @@ function convertToLlm(messages: AgentMessage[]): Message[] {
     if (msg.role === 'user' || msg.role === 'toolResult') {
       return [m as Message]
     }
-    if (msg.role === 'memoryUpdate') {
-      // Expand to a synthetic user/assistant pair at this fixed position.
-      // The LLM sees a clear "[Memory updated]" marker at the point where new
-      // memories were saved, without any content floating around between turns.
-      const mu = m as unknown as MemoryUpdateMessage
-      return [
-        {
-          role: 'user' as const,
-          content: [{ type: 'text', text: `[Memory updated]\n\n${mu.memText}` }],
-          timestamp: mu.timestamp,
-        } satisfies Message,
-        {
-          role: 'assistant' as const,
-          content: [{ type: 'text', text: "I've noted the memory update." }],
-          timestamp: mu.timestamp,
-        } as unknown as Message,
-      ]
-    }
     return []
   })
 
-  // Prepend memories as a synthetic message pair so the system prompt stays
-  // cache-stable. Uses _convMemSnapshot (set when the conversation was
-  // selected/created, refreshed after compaction) — stable for the entire
-  // session. Memories saved during this conversation appear as MemoryUpdateMessage
-  // entries woven into the converted history above, at fixed positions.
-  const memText = _convMemSnapshot
-  if (!memText) return converted
-
-  const memPrefix: Message[] = [
-    {
-      role: 'user',
-      content: [
-        {
-          type: 'text',
-          text: `[Your memories from previous conversations]\n\n${memText}`,
-        },
-      ],
-      timestamp: 0,
-    },
-    // Synthetic assistant ack — keeps the user/assistant alternation required by
-    // Anthropic's API. Only `role` and `content` are read by the provider layer;
-    // the remaining AssistantMessage fields are unused for injected messages.
-    {
-      role: 'assistant',
-      content: [
-        {
-          type: 'text',
-          text: 'I have reviewed my memories and will use them throughout this conversation.',
-        },
-      ],
-      timestamp: 0,
-    } as unknown as Message,
-  ]
-  return [...memPrefix, ...converted]
+  return converted
 }
 
 let _agent: Agent | null = null
@@ -259,20 +202,9 @@ let _capturedPayloads: SessionPayloadEntry[] = []
 /**
  * onPayload hook for Anthropic prompt caching.
  *
- * Adds cache_control to the last tool definition — this creates a stable
- * cache prefix covering system prompt + all tools (~3,500 tokens). Since
- * tools never change during a session, every request reuses this prefix.
- *
- * pi-ai also places cache_control on the system prompt (~600 tokens, below
- * Anthropic's 1,024 minimum so effectively a no-op) and the last user
- * message (helps cross-turn caching).
- *
- * We intentionally do NOT mark intermediate user messages. bianxie.ai
- * routes requests across multiple Anthropic accounts (cache is per-account),
- * making volatile message-level breakpoints unreliable. The tools breakpoint
- * provides stable savings regardless of account routing.
- *
- * Also captures request payloads for session JSONL debugging.
+ * Adds cache_control to the last tool definition — creates a stable cache
+ * prefix covering system prompt + all tools. Captures request payloads for
+ * session JSONL debugging.
  */
 function onAnthropicPayload(payload: unknown): unknown {
   const params = payload as Record<string, any>
@@ -326,12 +258,8 @@ function buildTools(imageEnabled: boolean): AgentTool[] {
 }
 
 /**
- * Build the cache-stable system prompt: soul + persona + instructions only.
- *
- * Memories are intentionally excluded here and injected instead as a synthetic
- * message pair at the start of every LLM call by convertToLlm(). This keeps
- * the system prompt byte-for-byte identical across requests so Anthropic's
- * prompt cache is hit on every turn rather than invalidated by memory_save calls.
+ * Assemble the system prompt from soul + persona + custom instructions + memories.
+ * Returns a joined string for agent.setSystemPrompt().
  */
 function assembleSystemPrompt(convId?: string): string {
   const s = get(settings)
@@ -339,8 +267,16 @@ function assembleSystemPrompt(convId?: string): string {
   const id = convId ?? get(activeConversationId)
   const conv = get(conversations).find((c) => c.id === id)
   const persona = conv?.personaId ? getPersonaById(conv.personaId) : undefined
-  // Pass empty memoriesText — memories live in the conversation via convertToLlm.
-  return buildSystemPrompt(soulContent, '', s.systemPrompt, persona?.content)
+  const memoriesText = formatMemoriesForPrompt(memories.all())
+
+  const { stableParts, memoryPart } = buildSystemPrompt(
+    soulContent,
+    persona?.content,
+    s.systemPrompt,
+    memoriesText,
+  )
+
+  return [...stableParts, ...(memoryPart ? [memoryPart] : [])].join('\n\n')
 }
 
 // ─── Svelte stores ────────────────────────────────────────────────────────────
@@ -381,35 +317,6 @@ export const imageToolEnabled = derived(
 // Using a Map prevents cross-conversation pollution when onAgentEnd and
 // selectConversation race on the same module-level variable.
 const _prevMessageCounts = new Map<string, number>()
-
-/**
- * Memory injection state — per-conversation, not per-turn.
- *
- * _convMemSnapshot / _convMemSnapshotIds
- *   Captured when a conversation is selected or created (and refreshed after
- *   compaction).  Injected at position 0 of every LLM request as a stable
- *   base; this prefix never changes mid-session so Anthropic can always cache
- *   it.  Memories saved during *this* conversation are NOT in here — they
- *   appear as MemoryUpdateMessage entries appended at their exact position in
- *   the conversation history (see appendMemoryUpdateIfNeeded).
- *
- * _memUpdateCoveredIds
- *   Tracks which memory IDs have already been appended as MemoryUpdateMessages
- *   in the current conversation so we don't duplicate them on subsequent turns.
- *   Reset whenever _convMemSnapshot is refreshed (selectConversation / after
- *   compaction).
- */
-let _convMemSnapshot = ''
-let _convMemSnapshotIds = new Set<string>()
-let _memUpdateCoveredIds = new Set<string>()
-
-/** Refresh the conversation-level memory baseline. Call on conversation select/create and after compaction. */
-function refreshConvMemSnapshot(): void {
-  const all = memories.all().filter((m) => (m.tier ?? 'general') === 'core')
-  _convMemSnapshot = formatMemoriesForPrompt(all)
-  _convMemSnapshotIds = new Set(all.map((m) => m.id))
-  _memUpdateCoveredIds = new Set()
-}
 
 function handleAgentEvent(event: AgentEvent) {
   switch (event.type) {
@@ -462,7 +369,6 @@ function handleAgentEvent(event: AgentEvent) {
 
 async function onAgentEnd(): Promise<void> {
   await persistNewMessages()
-  await appendMemoryUpdateIfNeeded()
   await loadConversations()
   await maybeCompact()
   // Record session snapshot after compaction so the file reflects the final state.
@@ -524,59 +430,6 @@ async function persistNewMessages(): Promise<void> {
 }
 
 /**
- * After a turn ends, check whether any new memories were saved.
- * If so, append a MemoryUpdateMessage to the agent state and persist it.
- *
- * The message is appended at the current END of the conversation (after the
- * last assistant reply), where it stays permanently.  convertToLlm expands it
- * to a synthetic user/assistant pair at that fixed position so the Anthropic
- * prefix cache is never invalidated by earlier parts of the history.
- *
- * Race condition guard: IDB is written with the convId captured at the start
- * of this call.  After the async write we re-check the active conversation —
- * if the user switched away in the meantime we skip the in-memory / UI update
- * to avoid clobbering the new conversation's agent state.
- */
-async function appendMemoryUpdateIfNeeded(): Promise<void> {
-  const agent = getAgent()
-  const convId = get(activeConversationId)
-  if (!convId) return
-
-  const allMems = memories.all().filter((m) => (m.tier ?? 'general') === 'core')
-  const newMems = allMems.filter(
-    (m) => !_convMemSnapshotIds.has(m.id) && !_memUpdateCoveredIds.has(m.id),
-  )
-  if (newMems.length === 0) return
-
-  const deltaText = formatMemoriesForPrompt(newMems)
-  const updateMsg: MemoryUpdateMessage = {
-    role: 'memoryUpdate',
-    memText: deltaText,
-    timestamp: Date.now(),
-  }
-
-  const currentCount = agent.state.messages.length
-  const newMessages = [...agent.state.messages, updateMsg as AgentMessage]
-
-  // Persist first — IDB always gets the correct convId regardless of any
-  // subsequent conversation switch.
-  await appendMessages(convId, [updateMsg as AgentMessage], currentCount)
-
-  // Skip in-memory / UI update if the user switched away during the async write.
-  if (get(activeConversationId) !== convId) {
-    console.info('[chat] conversation switched during appendMemoryUpdateIfNeeded; IDB updated, in-memory state skipped.')
-    return
-  }
-
-  agent.replaceMessages(newMessages)
-  activeMessages.set([...newMessages])
-  _prevMessageCounts.set(convId, newMessages.length)
-
-  // Mark these IDs as covered so future turns don't re-append them.
-  for (const m of newMems) _memUpdateCoveredIds.add(m.id)
-}
-
-/**
  * Execute compaction: summarize old messages, update agent state + IDB + UI.
  * Called by both the post-turn safety net and the pre-send proactive check.
  */
@@ -605,11 +458,6 @@ async function runCompaction(): Promise<void> {
     agent.replaceMessages(result.messages)
     if (convId) _prevMessageCounts.set(convId, result.messages.length)
     activeMessages.set([...result.messages])
-
-    // After compaction the old MemoryUpdateMessages are gone (they were folded
-    // into the summary).  Refresh the base snapshot so the new base includes
-    // all memories that existed up to this point, clearing the delta tracking.
-    refreshConvMemSnapshot()
 
     console.info(`[compaction] ${result.tokensBefore.toLocaleString()} tokens → compacted.`)
   } catch (err: unknown) {
@@ -693,9 +541,6 @@ export async function selectConversation(id: string): Promise<void> {
   activeMessages.set(msgs)
   streamingMessage.set(null)
   streamError.set(null)
-  // Capture current memory state as the stable base for this conversation session.
-  // Memories saved during this session appear as MemoryUpdateMessages in history.
-  refreshConvMemSnapshot()
 }
 
 export async function createConversation(): Promise<string> {

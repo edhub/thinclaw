@@ -2,10 +2,12 @@
  * Memory store — reactive wrapper around the IndexedDB memories table.
  *
  * Memories are global (cross-conversation), persisted in IndexedDB.
- * The store is loaded once at app start and kept in sync as tools add/remove entries.
+ * Only stable identity facts about the user are stored (name, language, key
+ * long-term preferences). The store is loaded once at app start and kept in
+ * sync as tools add/remove entries.
  */
 import { writable, get } from 'svelte/store'
-import { listMemories, saveMemory, deleteMemory, searchMemories, type Memory } from '$lib/db'
+import { listMemories, saveMemory, deleteMemory, type Memory } from '$lib/db'
 import { nanoid } from '$lib/utils/nanoid'
 
 export type { Memory }
@@ -23,9 +25,9 @@ function createMemoryStore() {
     },
 
     /** Save a new memory entry, update the store. Returns the saved memory. */
-    async add(content: string, tier: 'core' | 'general' = 'general'): Promise<Memory> {
+    async add(content: string): Promise<Memory> {
       const now = Date.now()
-      const mem: Memory = { id: nanoid(), content, tier, createdAt: now, updatedAt: now }
+      const mem: Memory = { id: nanoid(), content, tier: 'core', createdAt: now, updatedAt: now }
       await saveMemory(mem)
       inner.update((list) => [mem, ...list])
       return mem
@@ -35,11 +37,6 @@ function createMemoryStore() {
     async remove(id: string): Promise<void> {
       await deleteMemory(id)
       inner.update((list) => list.filter((m) => m.id !== id))
-    },
-
-    /** Keyword search (delegates to DB). Does not require store to be loaded. */
-    async search(query: string, tier?: 'core' | 'general' | 'all'): Promise<Memory[]> {
-      return searchMemories(query, { tier })
     },
 
     /** Synchronously read the current list (valid after load()). */

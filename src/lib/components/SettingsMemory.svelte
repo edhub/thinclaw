@@ -1,20 +1,16 @@
 <script lang="ts">
   import { memories } from '$lib/stores/memory'
-  import type { Memory } from '$lib/stores/memory'
 
   let memList = $derived([...$memories])
-  let coreList = $derived(memList.filter((m) => (m.tier ?? 'general') === 'core'))
-  let generalList = $derived(memList.filter((m) => (m.tier ?? 'general') === 'general'))
 
   let newContent = $state('')
-  let newTier = $state<'core' | 'general'>('general')
   let adding = $state(false)
 
   async function add() {
     const content = newContent.trim()
     if (!content) return
     adding = true
-    await memories.add(content, newTier)
+    await memories.add(content)
     newContent = ''
     adding = false
   }
@@ -25,25 +21,16 @@
       add()
     }
   }
-
-  function tierLabel(m: Memory) {
-    return (m.tier ?? 'general') === 'core' ? '核心' : '一般'
-  }
 </script>
 
 <p class="description">
-  <strong>核心记忆</strong>（身份信息、长期偏好）每次对话自动注入。
-  <strong>一般记忆</strong>（项目、事件、临时上下文）由 AI 按需通过
-  <code>memory_recall</code> 检索。AI 通过 <code>memory_save</code> /
-  <code>memory_delete</code> 自动管理，您也可以在此手动操作。
+  记忆用于存储用户的稳定身份信息（姓名、语言、长期偏好）。AI 通过
+  <code>memory_save</code> / <code>memory_delete</code> 自动管理，您也可以在此手动操作。
+  记忆在每次对话的 system prompt 中自动注入。
 </p>
 
 <div class="add-row">
   <input type="text" bind:value={newContent} placeholder="添加记忆…" onkeydown={handleKeydown} />
-  <select bind:value={newTier} class="tier-select" aria-label="记忆类型">
-    <option value="general">一般</option>
-    <option value="core">核心</option>
-  </select>
   <button class="btn-add" onclick={add} disabled={adding || !newContent.trim()} type="button">
     添加
   </button>
@@ -52,51 +39,24 @@
 {#if memList.length === 0}
   <p class="empty">暂无记忆。AI 会在对话中自动保存信息。</p>
 {:else}
-  {#if coreList.length > 0}
-    <p class="group-label">核心 · 始终注入</p>
-    <ul class="list">
-      {#each coreList as mem (mem.id)}
-        <li class="item">
-          <span class="badge core">{tierLabel(mem)}</span>
-          <span class="date">{new Date(mem.createdAt).toLocaleDateString('en-CA')}</span>
-          <span class="content">{mem.content}</span>
-          <button
-            class="btn-del"
-            onclick={() => memories.remove(mem.id)}
-            aria-label="删除记忆"
-            type="button"
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-        </li>
-      {/each}
-    </ul>
-  {/if}
-
-  {#if generalList.length > 0}
-    <p class="group-label" class:has-top-gap={coreList.length > 0}>一般 · 按需检索</p>
-    <ul class="list">
-      {#each generalList as mem (mem.id)}
-        <li class="item">
-          <span class="badge general">{tierLabel(mem)}</span>
-          <span class="date">{new Date(mem.createdAt).toLocaleDateString('en-CA')}</span>
-          <span class="content">{mem.content}</span>
-          <button
-            class="btn-del"
-            onclick={() => memories.remove(mem.id)}
-            aria-label="删除记忆"
-            type="button"
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-        </li>
-      {/each}
-    </ul>
-  {/if}
+  <ul class="list">
+    {#each memList as mem (mem.id)}
+      <li class="item">
+        <span class="date">{new Date(mem.createdAt).toLocaleDateString('en-CA')}</span>
+        <span class="content">{mem.content}</span>
+        <button
+          class="btn-del"
+          onclick={() => memories.remove(mem.id)}
+          aria-label="删除记忆"
+          type="button"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </li>
+    {/each}
+  </ul>
 {/if}
 
 <style>
@@ -105,10 +65,6 @@
     color: var(--text-muted);
     margin: 0 0 14px;
     line-height: 1.5;
-  }
-  .description strong {
-    color: var(--text-secondary);
-    font-weight: 600;
   }
   .description code {
     background: var(--surface-elevated);
@@ -141,23 +97,6 @@
     border-color: var(--accent);
   }
 
-  .tier-select {
-    background: var(--surface-input);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 0 10px;
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    font-family: inherit;
-    cursor: pointer;
-    outline: none;
-    transition: border-color 0.15s;
-    white-space: nowrap;
-  }
-  .tier-select:focus {
-    border-color: var(--accent);
-  }
-
   .btn-add {
     background: var(--accent);
     border: none;
@@ -176,18 +115,6 @@
   .btn-add:disabled {
     opacity: 0.4;
     cursor: not-allowed;
-  }
-
-  .group-label {
-    font-size: 0.72rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--text-muted);
-    margin: 0 0 6px;
-  }
-  .group-label.has-top-gap {
-    margin-top: 14px;
   }
 
   .empty {
@@ -215,26 +142,6 @@
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 9px 12px;
-  }
-
-  .badge {
-    font-size: 0.68rem;
-    font-weight: 600;
-    padding: 1px 6px;
-    border-radius: 4px;
-    white-space: nowrap;
-    flex-shrink: 0;
-    margin-top: 1px;
-  }
-  .badge.core {
-    background: color-mix(in srgb, var(--accent) 15%, transparent);
-    color: var(--accent);
-    border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
-  }
-  .badge.general {
-    background: var(--surface-active);
-    color: var(--text-muted);
-    border: 1px solid var(--border);
   }
 
   .date {

@@ -146,6 +146,14 @@
   </svg>
 {/snippet}
 
+{#snippet printIcon()}
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <polyline points="6 9 6 2 18 2 18 9" />
+    <path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2" />
+    <rect x="6" y="14" width="12" height="8" />
+  </svg>
+{/snippet}
+
 <svelte:head>
   <title>ThinClaw</title>
 </svelte:head>
@@ -195,6 +203,16 @@
             🎨
           </button>
         {/if}
+        {#if $activeConversationId}
+          <button
+            class="btn-mobile-settings"
+            onclick={() => window.print()}
+            aria-label="打印 / 保存为 PDF"
+            title="打印 / 保存为 PDF"
+          >
+            {@render printIcon()}
+          </button>
+        {/if}
         <a href="/files" class="btn-mobile-settings" aria-label="文件浏览器" title="文件浏览器" target="_blank" rel="noopener noreferrer">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
@@ -217,6 +235,16 @@
             <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
           </svg>
         </a>
+        {#if $activeConversationId}
+          <button
+            class="btn-settings"
+            onclick={() => window.print()}
+            aria-label="打印 / 保存为 PDF"
+            title="打印 / 保存为 PDF"
+          >
+            {@render printIcon()}
+          </button>
+        {/if}
       </div>
       <ModelSwitcher />
       {#if $activeConversationId && $settings.laozhangApiKey}
@@ -267,9 +295,8 @@
           {/if}
 
           <!-- Persisted messages -->
-          <!-- compactionSummary and memoryUpdate are internal bookkeeping messages;
-               they are intentionally excluded from the visible chat UI. -->
-          {#each $activeMessages.filter(m => (m as any).role !== 'compactionSummary' && (m as any).role !== 'memoryUpdate') as msg, i (keyOf(msg))}
+          <!-- compactionSummary is an internal bookkeeping message; excluded from the visible chat UI. -->
+          {#each $activeMessages.filter(m => (m as any).role !== 'compactionSummary') as msg, i (keyOf(msg))}
             <ChatMessage
               message={msg}
               isStreaming={false}
@@ -863,6 +890,55 @@
     to {
       opacity: 1;
       transform: translateX(-50%) translateY(0);
+    }
+  }
+
+  /* ── Print / Save as PDF ── */
+  @media print {
+    /* Hide everything except the chat messages */
+    :global(body) {
+      background: white !important;
+    }
+
+    .mobile-backdrop,
+    .mobile-header,
+    .chat-controls,
+    .floating-input-btn,
+    .chat-input-backdrop,
+    .chat-input-modal,
+    .compaction-banner {
+      display: none !important;
+    }
+
+    /* Hide sidebar — it lives outside .chat-area */
+    :global(.sidebar) {
+      display: none !important;
+    }
+
+    .app-shell {
+      display: block;
+      height: auto;
+      overflow: visible;
+    }
+
+    .chat-area {
+      display: block;
+      overflow: visible;
+    }
+
+    .messages {
+      overflow: visible;
+      padding: 0 32px;
+    }
+
+    .messages-inner {
+      max-width: 100%;
+      padding: 16px 0 24px;
+    }
+
+    /* Remove the welcome screen if somehow triggered */
+    .welcome {
+      display: none !important;
     }
   }
 </style>
