@@ -2,23 +2,25 @@
  * System prompt builder.
  *
  * Returns a { stableParts, memoryPart } structure so the caller can apply
- * prompt-cache breakpoints only on the stable parts (soul, persona, custom
- * instructions) while leaving the memory block un-cached.  This way, a
- * memory_save call changes only the last system block — earlier blocks stay
- * byte-for-byte identical and keep hitting Anthropic's prefix cache.
+ * prompt-cache breakpoints in the API payload.  The Anthropic onPayload hook
+ * in chat.ts converts this into separate system blocks and adds cache_control
+ * to the last block (memory if present, otherwise the last stable part),
+ * caching the entire system prompt prefix with a single breakpoint.
  *
  * Part layout:
  *   stableParts[0]  Soul + How-You-Operate  (changes only on soul_update)
  *   stableParts[1]  Active Persona          (omitted if none; stable per conversation)
  *   stableParts[2]  Custom Instructions     (omitted if empty; stable per settings)
- *   memoryPart      Memories                (omitted if none; excluded from caching)
+ *   memoryPart      Memories                (omitted if none; cached — changes only
+ *                                            on explicit memory_save/delete calls,
+ *                                            less frequent than persona selection)
  */
 import type { Memory } from '$lib/db'
 
 export interface SystemPromptParts {
   /** Stable parts that should receive cache_control in the API payload. */
   stableParts: string[]
-  /** Memory block — injected last, not cached (changes on every memory_save). */
+  /** Memory block — injected last; cached alongside stable parts (single breakpoint on the last block). */
   memoryPart?: string
 }
 
@@ -50,15 +52,7 @@ export function buildSystemPrompt(
   const stableParts: string[] = []
 
   // Part 1: Soul + How You Operate (always present)
-  stableParts.push(
-    soulContent.trim() +
-      `\n\n## How You Operate
-
-- Your soul is your identity. When it needs to evolve, call \`soul_update\` with the full new content — then tell the user what changed and why.
-- Use \`memory_save\` to persist stable identity facts about the user (name, language, key long-term preferences). Keep this small and high-quality (fewer than ~10 entries).
-- Use \`memory_delete\` to remove stale or incorrect entries. The memory ID is shown in the **Your Memory** section of your context.
-- Available tools: \`calculate\`, \`get_datetime\`, \`soul_update\`, \`soul_read\`, \`memory_save\`, \`memory_delete\``,
-  )
+  stableParts.push(soulContent.trim())
 
   // Part 2: Active Persona (omit if none selected)
   if (personaContent?.trim()) {

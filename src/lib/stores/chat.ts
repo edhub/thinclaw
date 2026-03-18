@@ -200,21 +200,110 @@ let _agent: Agent | null = null
 let _capturedPayloads: SessionPayloadEntry[] = []
 
 /**
- * onPayload hook for Anthropic prompt caching.
- *
- * Adds cache_control to the last tool definition — creates a stable cache
- * prefix covering system prompt + all tools. Captures request payloads for
- * session JSONL debugging.
+ * The most-recently assembled system prompt parts.
+ * Updated by assembleSystemPrompt() and consumed by onPayload() to
+ * reconstruct multi-part system structures before each API call.
  */
-function onAnthropicPayload(payload: unknown): unknown {
+let _currentSystemPromptParts: { stableParts: string[]; memoryPart?: string } | null = null
+
+/**
+ * Unified onPayload hook — splits the system prompt into multiple parts and
+ * applies Anthropic prompt-cache breakpoints.
+ *
+ * Provider routing (detected from payload shape):
+ *
+ *   Google     `params.contents` array present (not `messages`).
+ *              Rewrites `params.config.systemInstruction` from a single string to
+ *              a Content object with one part per prompt section:
+ *                { role: "user", parts: [{ text: soul }, { text: persona }, ...] }
+ *              Google has no inline cache_control — split is structural only.
+ *
+ *   Anthropic  `params.system` is a top-level array of text blocks.
+ *              Rewrites to one block per prompt section with cache_control on the
+ *              last block (covers entire system prefix, 1 of 2 breakpoints).
+ *              Also adds cache_control to tools[-1] (2nd breakpoint) and removes
+ *              the pi-ai auto-injected cache_control on the last user message
+ *              (it shifts every turn, busting the cache each time).
+ *
+ *   OpenAI     `params.messages` present but no `params.system` array.
+ *              System is a `{ role:"system" }` entry inside messages[].
+ *              No cache_control support — passes through untouched.
+ *
+ * Also captures request payloads for session JSONL debugging.
+ */
+function onPayload(payload: unknown): unknown {
   const params = payload as Record<string, any>
 
-  // Only apply to Anthropic-shaped payloads (has messages array, not Google's contents).
-  if (!params?.messages || !Array.isArray(params.messages)) return payload
+  // ── Google ────────────────────────────────────────────────────────────────
+  if (Array.isArray(params.contents)) {
+    if (_currentSystemPromptParts && params.config?.systemInstruction) {
+      const { stableParts, memoryPart } = _currentSystemPromptParts
+      const allParts = [...stableParts, ...(memoryPart ? [memoryPart] : [])]
+      if (allParts.length > 1) {
+        // Replace string with a multi-part Content object so each section is
+        // a distinct part (matching what Google does with a single string, but split).
+        params.config.systemInstruction = {
+          role: 'user',
+          parts: allParts.map((text) => ({ text })),
+        }
+      }
+    }
 
-  // Add cache_control to the last tool definition (always stable).
-  if (Array.isArray(params.tools) && params.tools.length > 0) {
-    params.tools[params.tools.length - 1].cache_control = { type: 'ephemeral' as const }
+    try {
+      _capturedPayloads.push({
+        type: 'payload',
+        timestamp: Date.now(),
+        params: JSON.parse(JSON.stringify(params)),
+      })
+    } catch {
+      // Non-fatal.
+    }
+    return params
+  }
+
+  // ── Anthropic / OpenAI (both use `messages` array) ────────────────────────
+  if (!Array.isArray(params.messages)) return payload
+
+  // Anthropic: top-level `system` is an array of text blocks.
+  // OpenAI:    system is a { role:"system" } message inside `messages[]`.
+  const isAnthropic = Array.isArray(params.system)
+
+  if (isAnthropic) {
+    // Rebuild system as multiple blocks (one per prompt part).
+    // cache_control on the very last block covers the entire system prefix.
+    if (_currentSystemPromptParts) {
+      const { stableParts, memoryPart } = _currentSystemPromptParts
+      const blocks: { type: string; text: string; cache_control?: { type: string } }[] = []
+
+      for (const part of stableParts) {
+        blocks.push({ type: 'text', text: part })
+      }
+      if (memoryPart) {
+        blocks.push({ type: 'text', text: memoryPart })
+      }
+      // cache_control on the last block (memory if present, else last stable part).
+      if (blocks.length > 0) {
+        blocks[blocks.length - 1].cache_control = { type: 'ephemeral' }
+      }
+      if (blocks.length > 0) {
+        params.system = blocks
+      }
+    }
+
+    // Add cache_control to the last tool definition (always stable).
+    if (Array.isArray(params.tools) && params.tools.length > 0) {
+      params.tools[params.tools.length - 1].cache_control = { type: 'ephemeral' as const }
+    }
+
+    // Remove the cache_control that pi-ai auto-injects on the last user message.
+    // That breakpoint shifts on every new turn, so it never actually hits the cache.
+    for (const msg of params.messages) {
+      if (msg.role === 'user' && Array.isArray(msg.content)) {
+        for (const block of msg.content) {
+          delete block.cache_control
+        }
+      }
+    }
   }
 
   // Capture a deep copy of the final params for session recording / debugging.
@@ -239,7 +328,7 @@ function getAgent(): Agent {
         systemPrompt: '',
       },
       convertToLlm,
-      onPayload: onAnthropicPayload,
+      onPayload: onPayload,
     })
     // Resolve api key dynamically so runtime changes are picked up.
     _agent.getApiKey = async (provider: string) => {
@@ -275,6 +364,9 @@ function assembleSystemPrompt(convId?: string): string {
     s.systemPrompt,
     memoriesText,
   )
+
+  // Persist parts so onPayload() can reconstruct multi-block system arrays.
+  _currentSystemPromptParts = { stableParts, memoryPart }
 
   return [...stableParts, ...(memoryPart ? [memoryPart] : [])].join('\n\n')
 }

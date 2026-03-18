@@ -137,16 +137,10 @@
         if (Array.isArray(params.tools)) parts.push(`tools:${params.tools.length}`)
         if (params.thinking) parts.push(`thinking:${JSON.stringify(params.thinking)}`)
         parts.push(`max_tokens:${params.max_tokens ?? '?'}`)
-        // Show cache_control placement summary
+        // Show cache_control placement summary (sys + tools[-1] only)
         const ccPositions: string[] = []
         if (params.system?.[params.system.length - 1]?.cache_control) ccPositions.push('sys')
         if (Array.isArray(params.tools) && params.tools[params.tools.length - 1]?.cache_control) ccPositions.push('tools[-1]')
-        if (Array.isArray(params.messages)) {
-          params.messages.forEach((m: any, i: number) => {
-            const hasCC = Array.isArray(m.content) && m.content.some((b: any) => b.cache_control)
-            if (hasCC) ccPositions.push(`msg[${i}]:${m.role}`)
-          })
-        }
         if (ccPositions.length) parts.push(`cc:[${ccPositions.join(',')}]`)
         return parts.join('  ·  ')
       }
