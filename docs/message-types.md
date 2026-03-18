@@ -208,6 +208,6 @@ interface ToolCall {
 | 文件 | 职责 |
 |---|---|
 | `src/lib/agent/compaction.ts` | `CompactionSummaryMessage` 类型定义；`estimateTokens`、`toSummaryMessages` 的各 role 处理 |
-| `src/lib/stores/chat.ts` | `convertToLlm`（各 role 展开规则、redacted thinking 转换）|
+| `src/lib/agent/convert.ts` | `convertToLlm`（各 role 展开规则、redacted thinking 转换）|
 | `src/routes/+page.svelte` | `activeMessages` 渲染过滤（排除 `compactionSummary`）|
 | `src/lib/components/ChatMessage.svelte` | `user`、`assistant`、`toolResult` 三种 role 的 UI 渲染 |

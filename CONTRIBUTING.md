@@ -28,7 +28,7 @@ These are not negotiable:
 
 ## What Does Not Belong Here
 
-- Messaging channel integrations (Telegram, Discord, etc.) — use [OpenClaw](https://github.com/openclaw/openclaw) instead
+- Messaging channel integrations (Telegram, Discord, etc.)
 - Browser automation / computer-use features
 - Multi-user / shared session features
 - Anything requiring a stateful backend
@@ -58,16 +58,28 @@ Run `pnpm check` before submitting. Fix all TypeScript and Svelte errors.
 
 ---
 
+## Adding a Model
+
+1. Add an entry to `MODELS` in `src/lib/agent/models.ts`.
+2. Choose `api` based on provider — see `docs/bianxie.md`:
+   - Anthropic → `api: 'anthropic-messages'`
+   - Google → `api: 'google-generative-ai'`
+   - OpenAI → `api: 'openai-completions'`
+3. Set `reasoning: true` for thinking models (agent will use `thinkingLevel: 'medium'`).
+4. No other changes needed — the API key is injected at runtime from Settings.
+
+---
+
 ## Adding a Provider
 
-1. `pnpm add @ai-sdk/<provider-name>`
-2. Add model IDs + labels to `MODELS` in `src/lib/stores/settings.ts`
-3. Update `sendMessage` in `src/lib/stores/chat.ts` to branch on provider
-4. Update `src/lib/components/Settings.svelte` if a provider needs extra config (e.g. base URL)
-5. Add a brief entry to `docs/providers.md` noting any CORS requirements
+1. Add a new API key field in `src/lib/stores/settings.ts` (e.g. `newProviderApiKey`).
+2. Update `hasProviderKey()` and `getApiKeyForProvider()` in the same file.
+3. Add model entries in `src/lib/agent/models.ts` with the new provider name.
+4. Add the key input UI in `src/routes/settings/+page.svelte` (Providers section).
+5. Document any CORS requirements in `docs/`.
 
-If a provider blocks browser-origin requests, document the Cloudflare Worker workaround
-in `docs/providers.md`. Do not add a stateful server to solve CORS.
+If a provider blocks browser-origin requests, document the Cloudflare Worker workaround.
+Do not add a stateful server to solve CORS.
 
 ---
 
@@ -88,7 +100,7 @@ Examples:
 If you change the IndexedDB schema:
 1. Bump the version number in `openDB(...)` in `src/lib/db/index.ts`
 2. Add a new `upgrade` case for the new version (do not modify existing cases)
-3. Document the migration in `docs/db-migrations.md`
+3. Document the migration in the header comment of `src/lib/db/index.ts`
 
 ---
 

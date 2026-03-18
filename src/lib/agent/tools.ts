@@ -33,6 +33,39 @@ const calculateParams = Type.Object({
   }),
 })
 
+/**
+ * Safe math evaluator — allows only numeric literals, arithmetic operators,
+ * parentheses, and whitelisted Math.* functions/constants.
+ *
+ * Rejects anything that could be arbitrary JS (identifiers, brackets, braces,
+ * semicolons, assignment, etc.) so the `new Function()` call below is
+ * effectively sandboxed to pure math expressions.
+ */
+function safeMathEval(expr: string): number {
+  // Strip whitespace for easier validation.
+  const stripped = expr.replace(/\s+/g, '')
+  // Split on Math.xxx tokens and validate each segment:
+  //   - Math.xxx tokens must be whitelisted
+  //   - Everything else must be digits, operators, parens, commas (no identifiers)
+  const tokens = stripped.split(/(Math\.\w+)/)
+  for (const token of tokens) {
+    if (!token) continue
+    if (token.startsWith('Math.')) {
+      if (
+        !/^Math\.(abs|acos|acosh|asin|asinh|atan|atan2|atanh|cbrt|ceil|clz32|cos|cosh|exp|expm1|floor|fround|hypot|imul|log|log10|log1p|log2|max|min|pow|random|round|sign|sin|sinh|sqrt|tan|tanh|trunc|PI|E|LN2|LN10|LOG2E|LOG10E|SQRT1_2|SQRT2)$/.test(
+          token,
+        )
+      ) {
+        throw new Error(`Disallowed identifier: ${token}`)
+      }
+    } else if (/[a-zA-Z_$]/.test(token)) {
+      throw new Error(`Disallowed identifier in expression`)
+    }
+  }
+  // eslint-disable-next-line no-new-func
+  return new Function(`"use strict"; return (${expr})`)() as number
+}
+
 export const calculateTool: AgentTool<typeof calculateParams> = {
   name: 'calculate',
   label: 'Calculator',
@@ -41,8 +74,7 @@ export const calculateTool: AgentTool<typeof calculateParams> = {
   parameters: calculateParams,
   execute: async (_id, { expression }) => {
     try {
-      // eslint-disable-next-line no-new-func
-      const result = new Function(`"use strict"; return (${expression})`)()
+      const result = safeMathEval(expression)
       const text =
         typeof result === 'number' && !isFinite(result)
           ? `Error: result is ${result}`
@@ -180,12 +212,12 @@ export const memoryDeleteTool: AgentTool<typeof memoryDeleteParams> = {
 
 // ─── export ───────────────────────────────────────────────────────────────────
 
-export const browserTools: AgentTool[] = [
-  calculateTool as unknown as AgentTool,
-  datetimeTool as unknown as AgentTool,
-  soulUpdateTool as unknown as AgentTool,
-  soulReadTool as unknown as AgentTool,
-  memorySaveTool as unknown as AgentTool,
-  memoryDeleteTool as unknown as AgentTool,
+export const browserTools: AgentTool<any>[] = [
+  calculateTool,
+  datetimeTool,
+  soulUpdateTool,
+  soulReadTool,
+  memorySaveTool,
+  memoryDeleteTool,
   ...fsTools,
 ]

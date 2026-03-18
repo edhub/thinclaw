@@ -18,41 +18,52 @@ src/
 ├── app.css                        # Design tokens (CSS custom properties), light/dark theme
 ├── lib/
 │   ├── agent/
-│   │   ├── models.ts              # MODELS array + getModelById + DEFAULT_*_MODEL_ID
+│   │   ├── models.ts              # MODELS array + getModelByKey + DEFAULT_*_MODEL_KEY
 │   │   ├── personas.ts            # BUILTIN_PERSONAS + getPersonaById
 │   │   ├── prompts.ts             # buildSystemPrompt → SystemPromptParts (soul+persona+custom+memory)
 │   │   ├── soul.ts                # AI identity (localStorage, self-editable via soul_update tool)
 │   │   ├── tools.ts               # Agent tools: calculate, datetime, soul_*, memory_save, memory_delete
+│   │   ├── image.ts               # Image generation tool (Gemini, optional per conversation)
+│   │   ├── title.ts               # AI auto-title generation for conversations
+│   │   ├── convert.ts             # convertToLlm: AgentMessage[] → Message[] (redacted thinking, error filtering)
+│   │   ├── payload.ts             # onPayload hook: provider-specific system prompt splitting + cache_control
 │   │   └── compaction.ts          # Auto-compaction: token estimation + LLM summarisation
 │   ├── fs/
 │   │   ├── opfs.ts                # OPFS abstraction: readFile/writeFile/editFile/listDir/
 │   │   │                          #   searchFiles/statEntry/moveEntry/deleteEntry/outlineFile
 │   │   │                          #   Layout: workspace/ (persistent) + tmp/ (7-day TTL)
-│   │   ├── tools.ts               # Agent tools: fs_read/write/edit/list/search/stat/move/delete
+│   │   ├── tools.ts               # Agent tools: fs_read/write/edit/list/search/outline/stat/move/delete
 │   │   ├── session-recorder.ts    # Writes OPFS sessions/{convId}.jsonl after each agent_end
 │   │   └── mention.ts             # @mention helpers: listWorkspaceFiles + fuzzyFilter + getFilePreview
 │   ├── db/
 │   │   └── index.ts               # IndexedDB v3: conversations + messages + memories (idb)
 │   ├── stores/
 │   │   ├── chat.ts                # Conversation state, Agent lifecycle, streaming, compaction, auto-title
-│   │   ├── settings.ts            # apiKey, model, theme, systemPrompt (localStorage)
+│   │   ├── settings.ts            # apiKeys, model, theme, systemPrompt (localStorage)
 │   │   └── memory.ts              # Reactive memory store (wraps IndexedDB memories table)
 │   ├── components/
 │   │   ├── Sidebar.svelte         # Conversation list: new / select / rename / delete
 │   │   ├── ChatMessage.svelte     # Message bubble: user text, assistant Markdown, tool calls/results
 │   │   ├── ChatInput.svelte       # Textarea + image attach + text file upload + @mention dropdown
-│   │   ├── Settings.svelte        # Modal: General / Soul / Memory tabs
 │   │   ├── ModelSwitcher.svelte   # Inline model picker (top-right of chat area)
 │   │   ├── PersonaPicker.svelte   # Persona selector shown before first message
 │   │   ├── FilePicker.svelte      # @mention dropdown list
-│   │   └── FileContextCard.svelte # File chip preview card
+│   │   ├── FileContextCard.svelte # File chip preview card
+│   │   ├── ToolCard.svelte        # Tool call/result card (expandable)
+│   │   ├── FileTree.svelte        # File browser tree component
+│   │   ├── FileEditor.svelte      # Markdown file editor
+│   │   ├── SessionViewer.svelte   # Session JSONL viewer / debugger
+│   │   ├── SettingsSoul.svelte    # Soul editor section (used by settings page)
+│   │   └── SettingsMemory.svelte  # Memory list section (used by settings page)
 │   └── utils/
 │       ├── markdown.ts            # marked + highlight.js (hljs lazy-loaded on first code block)
 │       └── nanoid.ts              # crypto.getRandomValues ID generator
 └── routes/
     ├── +layout.ts                 # ssr=false, prerender=true — pure SPA
     ├── +layout.svelte             # imports app.css
-    ├── +page.svelte               # Main chat UI: Sidebar + chat thread + Settings modal
+    ├── +page.svelte               # Main chat UI: Sidebar + chat thread + PersonaPicker
+    ├── settings/
+    │   └── +page.svelte           # Settings page: providers, models, appearance, soul, memory
     └── files/
         └── +page.svelte           # File browser: workspace/tmp tree + Markdown editor + SessionViewer
 ```
@@ -61,7 +72,7 @@ src/
 
 ## Architecture
 
-**No server.** `adapter-static` → plain HTML/CSS/JS. All AI calls go browser → `api.bianxie.ai` directly. See `docs/bianxie.md` for provider/endpoint details.
+**No server.** `adapter-static` → plain HTML/CSS/JS. All AI calls go browser → proxy API directly. See `docs/bianxie.md` for provider/endpoint details.
 
 **Storage:**
 
@@ -98,7 +109,7 @@ src/
 ## Adding a Model
 
 1. Add an entry to `MODELS` in `src/lib/agent/models.ts`.
-2. Choose `api` based on provider: `'anthropic-messages'` / `'google-generative-ai'` — see `docs/bianxie.md`.
+2. Choose `api` based on provider: `'anthropic-messages'` / `'google-generative-ai'` / `'openai-completions'` — see `docs/bianxie.md`.
 3. Set `reasoning: true` for thinking models (agent will use `thinkingLevel: 'medium'`).
 4. No other changes needed.
 

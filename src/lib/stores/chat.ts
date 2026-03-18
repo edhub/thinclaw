@@ -12,7 +12,7 @@
 import { writable, derived, get } from 'svelte/store'
 import { Agent } from '@mariozechner/pi-agent-core'
 import type { AgentEvent, AgentMessage, AgentTool } from '@mariozechner/pi-agent-core'
-import type { ImageContent, Message } from '@mariozechner/pi-ai'
+import type { ImageContent } from '@mariozechner/pi-ai'
 import { nanoid } from '$lib/utils/nanoid'
 import { getModelByKey, DEFAULT_UTILITY_MODEL_KEY } from '$lib/agent/models'
 import { buildSystemPrompt, formatMemoriesForPrompt } from '$lib/agent/prompts'
@@ -21,6 +21,13 @@ import { soul } from '$lib/agent/soul'
 import { memories } from '$lib/stores/memory'
 import { browserTools } from '$lib/agent/tools'
 import { imageGenerateTool } from '$lib/agent/image'
+import { convertToLlm } from '$lib/agent/convert'
+import {
+  onPayload,
+  setCurrentSystemPromptParts,
+  capturedPayloads,
+  clearCapturedPayloads,
+} from '$lib/agent/payload'
 import { settings, getApiKeyForProvider } from '$lib/stores/settings'
 import {
   listConversations,
@@ -38,15 +45,11 @@ import {
   shouldCompact,
   shouldCompactProactive,
   shouldCompactByTime,
-  CACHE_TTL_MS,
-  type CompactionSummaryMessage,
 } from '$lib/agent/compaction'
 import {
   recordSession,
   updateSessionTitle,
-  sweepSessions,
   type SerializedTool,
-  type SessionPayloadEntry,
 } from '$lib/fs/session-recorder'
 
 // ─── Streaming throttle (rAF batching) ───────────────────────────────────────
@@ -89,236 +92,7 @@ function getUtilityModel() {
   return getModelByKey(key)
 }
 
-/**
- * Convert AgentMessage[] → Message[] for the LLM.
- * Handles the built-in compactionSummary type by presenting it as a user message
- * so the LLM sees prior context without treating it as a live conversation turn.
- *
- * Error filtering: assistant messages with stopReason==='error' or errorMessage set
- * are excluded, along with their immediately preceding user message (the failed
- * request pair). This prevents broken exchanges from polluting the AI's context.
- */
-function convertToLlm(messages: AgentMessage[]): Message[] {
-  // Build the set of indices to skip: error assistant messages + preceding user messages.
-  const skipSet = new Set<number>()
-  for (let i = 0; i < messages.length; i++) {
-    const msg = messages[i] as any
-    if (msg.role === 'assistant' && (msg.stopReason === 'error' || msg.errorMessage)) {
-      skipSet.add(i)
-      if (i > 0 && messages[i - 1].role === 'user') skipSet.add(i - 1)
-    }
-  }
-
-  // Keep thinking blocks only for assistant messages within the last 3 user-turn
-  // "blocks" (anchored on user message boundaries, not assistant count).
-  //
-  // WHY 3 turns (not 2): Anthropic prompt cache is prefix-based. If a thinking
-  // block changes form between consecutive LLM calls (e.g. from full `thinking`
-  // to `redacted_thinking`), the serialized bytes change, breaking the prefix
-  // match and causing a full cache rewrite. With 2 turns, the boundary shifts
-  // every new user message, causing the oldest kept thinking block to get
-  // redacted — exactly when the prefix needs to stay stable. 3 turns gives a
-  // buffer: blocks only get redacted when they're far enough back that the
-  // prefix up to that point was already cached in a previous call.
-  //
-  // WHY user boundaries (not assistant count): a tool call adds a new assistant
-  // message mid-turn, shifting an assistant-count window. User message indices
-  // are stable within a tool-call sequence, so keepThinkingFromIdx stays the
-  // same in Call #1 (tool call) and Call #2 (tool result) → identical prefix.
-  const assistantIndices = messages
-    .map((m, i) => ((m as any).role === 'assistant' ? i : -1))
-    .filter((i) => i !== -1)
-  const userIndices = messages
-    .map((m, i) => ((m as any).role === 'user' ? i : -1))
-    .filter((i) => i !== -1)
-  // Start of the third-to-last user turn; keep thinking for all assistant
-  // messages at or after that boundary.
-  const keepThinkingFromIdx = userIndices.length >= 3 ? userIndices[userIndices.length - 3] : 0
-  const recentAssistantSet = new Set(assistantIndices.filter((i) => i >= keepThinkingFromIdx))
-
-  const converted = messages.flatMap((m, i) => {
-    if (skipSet.has(i)) return []
-    const msg = m as any
-    if (msg.role === 'compactionSummary') {
-      const cs = m as CompactionSummaryMessage
-      return [
-        {
-          role: 'user' as const,
-          content: [
-            {
-              type: 'text' as const,
-              text: `[Summary of previous conversation]\n\n${cs.summary}`,
-            },
-          ],
-          timestamp: cs.timestamp,
-        } satisfies Message,
-      ]
-    }
-    if (msg.role === 'assistant') {
-      if (recentAssistantSet.has(i)) return [m as Message]
-      // For older assistant messages, we cannot simply strip thinking blocks —
-      // Anthropic requires all thinking blocks to be passed back in subsequent
-      // requests (they carry a cryptographic signature). Stripping them entirely
-      // can cause API errors or degrade reasoning continuity.
-      //
-      // Instead, convert each thinking block to its "redacted" form:
-      //   { ...block, thinking: '', redacted: true }
-      // anthropic.js will then send  { type: "redacted_thinking", data: signature }
-      // which is Anthropic's official compact format (opaque payload only, no text).
-      //
-      // If a block has no signature (e.g. aborted mid-stream), we cannot create a
-      // valid redacted_thinking entry, so we drop it — same as before.
-      const content = (msg.content ?? []).flatMap((b: any) => {
-        if (b.type !== 'thinking') return [b]
-        if (b.thinkingSignature?.trim()) {
-          // Keep signature, discard text content for token efficiency.
-          return [{ ...b, thinking: '', redacted: true }]
-        }
-        // No signature → drop to avoid API rejection.
-        return []
-      })
-      // If stripping left an empty content array, skip the message entirely
-      // (same behaviour as before for all-thinking assistant turns).
-      if (content.length === 0) return []
-      return [{ ...msg, content } as Message]
-    }
-    if (msg.role === 'user' || msg.role === 'toolResult') {
-      return [m as Message]
-    }
-    return []
-  })
-
-  return converted
-}
-
 let _agent: Agent | null = null
-
-/**
- * Captured LLM request payloads for the current agent run.
- * Cleared at the start of each prompt() and written to session JSONL on agent_end.
- */
-let _capturedPayloads: SessionPayloadEntry[] = []
-
-/**
- * The most-recently assembled system prompt parts.
- * Updated by assembleSystemPrompt() and consumed by onPayload() to
- * reconstruct multi-part system structures before each API call.
- */
-let _currentSystemPromptParts: { stableParts: string[]; memoryPart?: string } | null = null
-
-/**
- * Unified onPayload hook — splits the system prompt into multiple parts and
- * applies Anthropic prompt-cache breakpoints.
- *
- * Provider routing (detected from payload shape):
- *
- *   Google     `params.contents` array present (not `messages`).
- *              Rewrites `params.config.systemInstruction` from a single string to
- *              a Content object with one part per prompt section:
- *                { role: "user", parts: [{ text: soul }, { text: persona }, ...] }
- *              Google has no inline cache_control — split is structural only.
- *
- *   Anthropic  `params.system` is a top-level array of text blocks.
- *              Rewrites to one block per prompt section with cache_control on the
- *              last block (covers entire system prefix, 1 of 2 breakpoints).
- *              Also adds cache_control to tools[-1] (2nd breakpoint) and removes
- *              the pi-ai auto-injected cache_control on the last user message
- *              (it shifts every turn, busting the cache each time).
- *
- *   OpenAI     `params.messages` present but no `params.system` array.
- *              System is a `{ role:"system" }` entry inside messages[].
- *              No cache_control support — passes through untouched.
- *
- * Also captures request payloads for session JSONL debugging.
- */
-function onPayload(payload: unknown): unknown {
-  const params = payload as Record<string, any>
-
-  // ── Google ────────────────────────────────────────────────────────────────
-  if (Array.isArray(params.contents)) {
-    if (_currentSystemPromptParts && params.config?.systemInstruction) {
-      const { stableParts, memoryPart } = _currentSystemPromptParts
-      const allParts = [...stableParts, ...(memoryPart ? [memoryPart] : [])]
-      if (allParts.length > 1) {
-        // Replace string with a multi-part Content object so each section is
-        // a distinct part (matching what Google does with a single string, but split).
-        params.config.systemInstruction = {
-          role: 'user',
-          parts: allParts.map((text) => ({ text })),
-        }
-      }
-    }
-
-    try {
-      _capturedPayloads.push({
-        type: 'payload',
-        timestamp: Date.now(),
-        params: JSON.parse(JSON.stringify(params)),
-      })
-    } catch {
-      // Non-fatal.
-    }
-    return params
-  }
-
-  // ── Anthropic / OpenAI (both use `messages` array) ────────────────────────
-  if (!Array.isArray(params.messages)) return payload
-
-  // Anthropic: top-level `system` is an array of text blocks.
-  // OpenAI:    system is a { role:"system" } message inside `messages[]`.
-  const isAnthropic = Array.isArray(params.system)
-
-  if (isAnthropic) {
-    // Rebuild system as multiple blocks (one per prompt part).
-    // cache_control on the very last block covers the entire system prefix.
-    if (_currentSystemPromptParts) {
-      const { stableParts, memoryPart } = _currentSystemPromptParts
-      const blocks: { type: string; text: string; cache_control?: { type: string } }[] = []
-
-      for (const part of stableParts) {
-        blocks.push({ type: 'text', text: part })
-      }
-      if (memoryPart) {
-        blocks.push({ type: 'text', text: memoryPart })
-      }
-      // cache_control on the last block (memory if present, else last stable part).
-      if (blocks.length > 0) {
-        blocks[blocks.length - 1].cache_control = { type: 'ephemeral' }
-      }
-      if (blocks.length > 0) {
-        params.system = blocks
-      }
-    }
-
-    // Add cache_control to the last tool definition (always stable).
-    if (Array.isArray(params.tools) && params.tools.length > 0) {
-      params.tools[params.tools.length - 1].cache_control = { type: 'ephemeral' as const }
-    }
-
-    // Remove the cache_control that pi-ai auto-injects on the last user message.
-    // That breakpoint shifts on every new turn, so it never actually hits the cache.
-    for (const msg of params.messages) {
-      if (msg.role === 'user' && Array.isArray(msg.content)) {
-        for (const block of msg.content) {
-          delete block.cache_control
-        }
-      }
-    }
-  }
-
-  // Capture a deep copy of the final params for session recording / debugging.
-  try {
-    _capturedPayloads.push({
-      type: 'payload',
-      timestamp: Date.now(),
-      params: JSON.parse(JSON.stringify(params)),
-    })
-  } catch {
-    // Non-fatal — don't break the agent if serialization fails.
-  }
-
-  return params
-}
 
 function getAgent(): Agent {
   if (!_agent) {
@@ -366,7 +140,7 @@ function assembleSystemPrompt(convId?: string): string {
   )
 
   // Persist parts so onPayload() can reconstruct multi-block system arrays.
-  _currentSystemPromptParts = { stableParts, memoryPart }
+  setCurrentSystemPromptParts({ stableParts, memoryPart })
 
   return [...stableParts, ...(memoryPart ? [memoryPart] : [])].join('\n\n')
 }
@@ -500,7 +274,7 @@ async function persistSessionSnapshot(): Promise<void> {
     systemPrompt,
     messages,
     tools,
-    _capturedPayloads.length > 0 ? _capturedPayloads : undefined,
+    capturedPayloads.length > 0 ? capturedPayloads : undefined,
   )
 }
 
@@ -775,7 +549,7 @@ export async function sendMessage(content: string, images: ImageContent[] = []):
   pendingUserMessage.set(userMsgContent)
 
   try {
-    _capturedPayloads = [] // Clear previous payloads before new agent run
+    clearCapturedPayloads() // Clear previous payloads before new agent run
     await agent.prompt(content, images.length > 0 ? images : undefined)
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)

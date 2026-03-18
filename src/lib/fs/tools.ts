@@ -440,14 +440,14 @@ export const fsOutlineTool: AgentTool<typeof fsOutlineParams> = {
 
 // ─── export ───────────────────────────────────────────────────────────────────
 
-export const fsTools: AgentTool[] = [
-  fsReadTool as unknown as AgentTool,
-  fsWriteTool as unknown as AgentTool,
-  fsEditTool as unknown as AgentTool,
-  fsListTool as unknown as AgentTool,
-  fsSearchTool as unknown as AgentTool,
-  fsOutlineTool as unknown as AgentTool, // structural overview — use before read/search on large files
-  fsStatTool as unknown as AgentTool,
-  fsMoveTool as unknown as AgentTool,
-  fsDeleteTool as unknown as AgentTool,
+export const fsTools: AgentTool<any>[] = [
+  fsReadTool,
+  fsWriteTool,
+  fsEditTool,
+  fsListTool,
+  fsSearchTool,
+  fsOutlineTool, // structural overview — use before read/search on large files
+  fsStatTool,
+  fsMoveTool,
+  fsDeleteTool,
 ]
