@@ -28,8 +28,8 @@
     "vite-plugin-pwa": "^1.2.0"
   },
   "dependencies": {
-    "@mariozechner/pi-agent-core": "^0.59.0",
-    "@mariozechner/pi-ai": "^0.59.0",
+    "@mariozechner/pi-agent-core": "^0.60.0",
+    "@mariozechner/pi-ai": "^0.60.0",
     "highlight.js": "^11.11.1",
     "idb": "^8.0.3",
     "marked": "^17.0.4"

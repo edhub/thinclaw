@@ -22,6 +22,7 @@ export interface Settings {
   laozhangApiKey: string
   bianxieApiKey: string
   lingyaaiApiKey: string
+  qiniuApiKey: string
   enabledModelKeys: string[]   // [] means all models of providers with keys
   model: string                // active model key: `${provider}:${modelId}`
   utilityModelKey: string      // utility model key (compaction / auto-title)
@@ -35,6 +36,7 @@ const DEFAULTS: Settings = {
   laozhangApiKey: '',
   bianxieApiKey: '',
   lingyaaiApiKey: '',
+  qiniuApiKey: '',
   enabledModelKeys: [],
   model: DEFAULT_MODEL_KEY,
   utilityModelKey: DEFAULT_UTILITY_MODEL_KEY,
@@ -49,6 +51,7 @@ function hasProviderKey(provider: string, s: Settings): boolean {
   if (provider === 'laozhang') return !!s.laozhangApiKey
   if (provider === 'bianxie') return !!s.bianxieApiKey
   if (provider === 'lingyaai') return !!s.lingyaaiApiKey
+  if (provider === 'qiniu') return !!s.qiniuApiKey
   return false
 }
 
@@ -57,6 +60,7 @@ export function getApiKeyForProvider(provider: string, s: Settings): string | un
   if (provider === 'laozhang') return s.laozhangApiKey || undefined
   if (provider === 'bianxie') return s.bianxieApiKey || undefined
   if (provider === 'lingyaai') return s.lingyaaiApiKey || undefined
+  if (provider === 'qiniu') return s.qiniuApiKey || undefined
   return undefined
 }
 

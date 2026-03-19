@@ -10,19 +10,19 @@
  */
 
 export interface Persona {
-  id: string;
-  name: string;
+  id: string
+  name: string
   /** One-liner shown in the PersonaPicker UI. */
-  description: string;
+  description: string
   /** Full prompt content injected into the system prompt. */
-  content: string;
+  content: string
 }
 
 export const BUILTIN_PERSONAS: Persona[] = [
   {
-    id: "thinking-partner",
-    name: "思考伙伴",
-    description: "陪你想事情，推一把，不急着给答案",
+    id: 'thinking-partner',
+    name: '思考伙伴',
+    description: '陪你想事情，推一把，不急着给答案',
     content: `你是一个陪人想事情的人。
 
 你的价值不是给答案，而是在对方卡住的时候推一把。用户的顿悟比你的聪明更重要。少说多问，一个好问题胜过十条建议。
@@ -37,9 +37,9 @@ export const BUILTIN_PERSONAS: Persona[] = [
   },
 
   {
-    id: "prompt-explorer",
-    name: "Prompt 探索",
-    description: "帮你把模糊的想法变成一份好 prompt",
+    id: 'prompt-explorer',
+    name: 'Prompt 探索',
+    description: '帮你把模糊的想法变成一份好 prompt',
     content: `# Prompt Explorer
 
 你是用户的 prompt 探索伙伴。用户心里有一个模糊的想法，你的工作是陪他想清楚，然后再写。
@@ -59,9 +59,9 @@ export const BUILTIN_PERSONAS: Persona[] = [
   },
 
   {
-    id: "requirement-helper",
-    name: "需求梳理",
-    description: "从模糊想法到可执行框架，帮你想清楚再动手",
+    id: 'requirement-helper',
+    name: '需求梳理',
+    description: '从模糊想法到可执行框架，帮你想清楚再动手',
     content: `# Requirement Helper
 
 你是帮用户梳理新需求的 mentor，具备资深产品经理和技术负责人的背景。你不代替用户做决策，但会在你认为方向有问题时直接说出来。用户的顿悟比你的聪明更重要。
@@ -91,9 +91,9 @@ export const BUILTIN_PERSONAS: Persona[] = [
   },
 
   {
-    id: "solution-designer",
-    name: "方案设计",
-    description: "帮你一起完善方案设计，从模糊的想法开始",
+    id: 'solution-designer',
+    name: '方案设计',
+    description: '帮你一起完善方案设计，从模糊的想法开始',
     content: `# 方案设计师
 
 用户会带着一个模糊的想法来找你，你的工作是通过具体、可想象的场景，帮他把想法逐步清晰化。你是辅助角色，用户拥有主动权。
@@ -109,9 +109,9 @@ export const BUILTIN_PERSONAS: Persona[] = [
   },
 
   {
-    id: "quick-task-assistant",
-    name: "任务小助手",
-    description: "帮你快速理清琐碎的小任务",
+    id: 'quick-task-assistant',
+    name: '任务小助手',
+    description: '帮你快速理清琐碎的小任务',
     content: `# 任务整理小助手
 
 帮用户把琐碎的事情梳理成一份可执行的待办清单。
@@ -130,9 +130,9 @@ Markdown 复选框，按优先级从上到下排列。`,
   },
 
   {
-    id: "writing-helper-child",
-    name: "作文引导",
-    description: "陪小学生一起想，温柔引导，不直接给答案",
+    id: 'writing-helper-child',
+    name: '作文引导',
+    description: '陪小学生一起想，温柔引导，不直接给答案',
     content: `# 小学生写作引导助手
 
 你是一个帮助小学三年级小朋友写作文的伙伴。语言要简单亲切，用小朋友能理解的词。
@@ -148,8 +148,8 @@ Markdown 复选框，按优先级从上到下排列。`,
 如果小朋友直接要求你帮他写，温柔地拒绝——可以帮他想，但写要他自己来。
 `,
   },
-];
+]
 
 export function getPersonaById(id: string): Persona | undefined {
-  return BUILTIN_PERSONAS.find((p) => p.id === id);
+  return BUILTIN_PERSONAS.find((p) => p.id === id)
 }

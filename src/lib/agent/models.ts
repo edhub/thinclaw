@@ -150,6 +150,20 @@ export const MODELS: Model<'anthropic-messages' | 'google-generative-ai' | 'open
       maxTokens: 16000,
     },
 
+    // ── Anthropic (via qiniu) ─────────────────────────────────────────────────
+    {
+      id: 'claude-sonnet-4-6',
+      name: 'Claude Sonnet 4.6 (Thinking) · 七牛',
+      api: 'anthropic-messages',
+      provider: 'qiniu',
+      baseUrl: 'https://api.qnaigc.com', // SDK appends /v1/messages
+      reasoning: true,
+      input: ['text', 'image'],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 200000,
+      maxTokens: 16000,
+    },
+
     // ── OpenAI (via bianxie.ai) ───────────────────────────────────────────────
     // {
     //   id: 'gpt-5.4',

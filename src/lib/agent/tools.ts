@@ -3,10 +3,7 @@
  * All tools run entirely in the browser — no network calls, no file system access beyond OPFS.
  *
  * Tools:
- *   calculate       — evaluate JS math expressions
- *   get_datetime    — current local date/time
- *   soul_update     — AI rewrites its own soul (identity evolution)
- *   soul_read       — AI reads its current soul
+ *   run_js          — write and execute an arbitrary JS snippet (replaces calculate + get_datetime)
  *   memory_save     — persist a stable identity fact across conversations
  *   memory_delete   — remove a specific memory by id
  *
@@ -21,147 +18,103 @@
  */
 import { Type } from '@mariozechner/pi-ai'
 import type { AgentTool } from '@mariozechner/pi-agent-core'
-import { soul } from '$lib/agent/soul'
 import { memories } from '$lib/stores/memory'
 import { fsTools } from '$lib/fs/tools'
 
-// ─── calculate ────────────────────────────────────────────────────────────────
+// ─── run_js ───────────────────────────────────────────────────────────────────
 
-const calculateParams = Type.Object({
-  expression: Type.String({
-    description: 'JS math expression to evaluate, e.g. "2 + 2 * 3" or "Math.sqrt(144)"',
+const runJsParams = Type.Object({
+  code: Type.String({
+    description: [
+      'JavaScript code to execute in an async function context.',
+      'Use `return` to produce a result value.',
+      'Use `console.log()` / `console.error()` etc. to emit output lines.',
+      'Supports `await`. Has access to all standard browser globals (Date, Math, fetch, crypto, …).',
+      'Execution is time-limited to 10 seconds.',
+      'Examples:',
+      '  • Get current time:  return new Date().toLocaleString()',
+      '  • Calculate:        const r = Math.sqrt(144); return `sqrt(144) = ${r}`',
+      '  • Async work:       const d = await fetch("https://…").then(r=>r.json()); return d',
+    ].join('\n'),
   }),
 })
 
-/**
- * Safe math evaluator — allows only numeric literals, arithmetic operators,
- * parentheses, and whitelisted Math.* functions/constants.
- *
- * Rejects anything that could be arbitrary JS (identifiers, brackets, braces,
- * semicolons, assignment, etc.) so the `new Function()` call below is
- * effectively sandboxed to pure math expressions.
- */
-function safeMathEval(expr: string): number {
-  // Strip whitespace for easier validation.
-  const stripped = expr.replace(/\s+/g, '')
-  // Split on Math.xxx tokens and validate each segment:
-  //   - Math.xxx tokens must be whitelisted
-  //   - Everything else must be digits, operators, parens, commas (no identifiers)
-  const tokens = stripped.split(/(Math\.\w+)/)
-  for (const token of tokens) {
-    if (!token) continue
-    if (token.startsWith('Math.')) {
-      if (
-        !/^Math\.(abs|acos|acosh|asin|asinh|atan|atan2|atanh|cbrt|ceil|clz32|cos|cosh|exp|expm1|floor|fround|hypot|imul|log|log10|log1p|log2|max|min|pow|random|round|sign|sin|sinh|sqrt|tan|tanh|trunc|PI|E|LN2|LN10|LOG2E|LOG10E|SQRT1_2|SQRT2)$/.test(
-          token,
-        )
-      ) {
-        throw new Error(`Disallowed identifier: ${token}`)
-      }
-    } else if (/[a-zA-Z_$]/.test(token)) {
-      throw new Error(`Disallowed identifier in expression`)
-    }
+type ConsoleMethods = 'log' | 'info' | 'warn' | 'error' | 'debug'
+const CONSOLE_METHODS: ConsoleMethods[] = ['log', 'info', 'warn', 'error', 'debug']
+const TIMEOUT_MS = 10_000
+
+function serialize(value: unknown): string {
+  if (value === undefined) return 'undefined'
+  if (value === null) return 'null'
+  if (typeof value === 'string') return value
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return String(value)
   }
-  // eslint-disable-next-line no-new-func
-  return new Function(`"use strict"; return (${expr})`)() as number
 }
 
-export const calculateTool: AgentTool<typeof calculateParams> = {
-  name: 'calculate',
-  label: 'Calculator',
+export const runJsTool: AgentTool<typeof runJsParams> = {
+  name: 'run_js',
+  label: 'Run JS',
   description:
-    'Evaluate a mathematical expression. Supports arithmetic, exponentiation, and JS Math functions (Math.sqrt, Math.PI, etc.). Use for calculations, unit conversions, and percentages.',
-  parameters: calculateParams,
-  execute: async (_id, { expression }) => {
+    'Write and execute a JavaScript snippet in the browser. Useful for calculations, date/time queries, string manipulation, data transformation, quick API calls, and anything else expressible in JS. Supports async/await. Use `return` to return a value; use `console.log()` to emit output.',
+  parameters: runJsParams,
+  execute: async (_id, { code }) => {
+    const logs: string[] = []
+
+    // Temporarily redirect console output so we can capture it.
+    const originals = {} as Record<ConsoleMethods, (...a: unknown[]) => void>
+    for (const method of CONSOLE_METHODS) {
+      originals[method] = console[method].bind(console)
+      ;(console as unknown as Record<string, unknown>)[method] = (...args: unknown[]) => {
+        const line = `[${method}] ${args.map(serialize).join(' ')}`
+        logs.push(line)
+        originals[method](...args) // still emit to devtools
+      }
+    }
+
+    let result: unknown
+    let errorMsg: string | undefined
+
     try {
-      const result = safeMathEval(expression)
-      const text =
-        typeof result === 'number' && !isFinite(result)
-          ? `Error: result is ${result}`
-          : `${expression} = ${result}`
+      // Wrap in async IIFE so `await` and `return` both work naturally.
+      // eslint-disable-next-line no-new-func
+      const fn = new Function(`"use strict"; return (async () => { ${code} })()`)
+
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`Script timed out after ${TIMEOUT_MS / 1000} seconds`)),
+          TIMEOUT_MS,
+        ),
+      )
+
+      result = await Promise.race([fn() as Promise<unknown>, timeout])
+    } catch (e) {
+      errorMsg = e instanceof Error ? e.message : String(e)
+    } finally {
+      // Always restore console.
+      for (const method of CONSOLE_METHODS) {
+        ;(console as unknown as Record<string, unknown>)[method] = originals[method]
+      }
+    }
+
+    if (errorMsg !== undefined) {
+      const text = logs.length > 0 ? `${logs.join('\n')}\nError: ${errorMsg}` : `Error: ${errorMsg}`
       return {
         content: [{ type: 'text' as const, text }],
-        details: { expression, result },
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      return {
-        content: [{ type: 'text' as const, text: `Error evaluating "${expression}": ${msg}` }],
-        details: { expression, error: msg },
+        details: { error: errorMsg, logs },
       }
     }
-  },
-}
 
-// ─── get_datetime ─────────────────────────────────────────────────────────────
+    const parts: string[] = []
+    if (logs.length > 0) parts.push(logs.join('\n'))
+    if (result !== undefined) parts.push(`=> ${serialize(result)}`)
 
-const datetimeParams = Type.Object({})
-
-export const datetimeTool: AgentTool<typeof datetimeParams> = {
-  name: 'get_datetime',
-  label: 'Date & Time',
-  description: "Get the current date and time in the user's local timezone.",
-  parameters: datetimeParams,
-  execute: async () => {
-    const now = new Date()
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
-    const local = now.toLocaleString(undefined, {
-      timeZone: tz,
-      dateStyle: 'full',
-      timeStyle: 'long',
-    })
-    const iso = now.toISOString()
+    const text = parts.length > 0 ? parts.join('\n') : '(no output)'
     return {
-      content: [{ type: 'text' as const, text: `${local} (${tz})` }],
-      details: { iso, local, timezone: tz },
-    }
-  },
-}
-
-// ─── soul_update ──────────────────────────────────────────────────────────────
-
-const soulUpdateParams = Type.Object({
-  content: Type.String({
-    description:
-      'The new soul content (full replacement, Markdown). Write the complete soul — not just a diff.',
-  }),
-})
-
-export const soulUpdateTool: AgentTool<typeof soulUpdateParams> = {
-  name: 'soul_update',
-  label: 'Update Soul',
-  description:
-    'Update your soul — your core identity, values, and operating principles. Use when something about who you are needs to evolve. Always tell the user what changed and why after calling this tool.',
-  parameters: soulUpdateParams,
-  execute: async (_id, { content }) => {
-    soul.set(content)
-    return {
-      content: [
-        {
-          type: 'text' as const,
-          text: `Soul updated (${content.length} chars). Remember to tell the user what changed.`,
-        },
-      ],
-      details: { length: content.length },
-    }
-  },
-}
-
-// ─── soul_read ────────────────────────────────────────────────────────────────
-
-const soulReadParams = Type.Object({})
-
-export const soulReadTool: AgentTool<typeof soulReadParams> = {
-  name: 'soul_read',
-  label: 'Read Soul',
-  description:
-    'Read your current soul. Useful mid-conversation when you want to reference or reflect on your identity before deciding whether to update it.',
-  parameters: soulReadParams,
-  execute: async () => {
-    const content = soul.current()
-    return {
-      content: [{ type: 'text' as const, text: content }],
-      details: { length: content.length },
+      content: [{ type: 'text' as const, text }],
+      details: { result, logs },
     }
   },
 }
@@ -171,7 +124,7 @@ export const soulReadTool: AgentTool<typeof soulReadParams> = {
 const memorySaveParams = Type.Object({
   content: Type.String({
     description:
-      "The memory to save. One fact per entry, concise and specific. E.g. \"User's name is Alice\", \"Prefers Chinese\", \"Occupation: software engineer\".",
+      'The memory to save. One fact per entry, concise and specific. E.g. "User\'s name is Alice", "Prefers Chinese", "Occupation: software engineer".',
   }),
 })
 
@@ -179,7 +132,7 @@ export const memorySaveTool: AgentTool<typeof memorySaveParams> = {
   name: 'memory_save',
   label: 'Save Memory',
   description:
-    "Persist a memory only for stable identity facts about the user (name, language, key long-term preferences). Keep the total count small and high-quality. Do NOT save project details, events, or temporary context.",
+    'Persist a memory only for stable identity facts about the user (name, language, key long-term preferences). Keep the total count small and high-quality. Do NOT save project details, events, or temporary context.',
   parameters: memorySaveParams,
   execute: async (_id, { content }) => {
     const mem = await memories.add(content)
@@ -193,7 +146,9 @@ export const memorySaveTool: AgentTool<typeof memorySaveParams> = {
 // ─── memory_delete ────────────────────────────────────────────────────────────
 
 const memoryDeleteParams = Type.Object({
-  id: Type.String({ description: 'ID of the memory to delete (shown in the Your Memory section of your context).' }),
+  id: Type.String({
+    description: 'ID of the memory to delete (shown in the Your Memory section of your context).',
+  }),
 })
 
 export const memoryDeleteTool: AgentTool<typeof memoryDeleteParams> = {
@@ -213,10 +168,9 @@ export const memoryDeleteTool: AgentTool<typeof memoryDeleteParams> = {
 // ─── export ───────────────────────────────────────────────────────────────────
 
 export const browserTools: AgentTool<any>[] = [
-  calculateTool,
-  datetimeTool,
-  soulUpdateTool,
-  soulReadTool,
+  runJsTool,
+  // soulUpdateTool,
+  // soulReadTool,
   memorySaveTool,
   memoryDeleteTool,
   ...fsTools,

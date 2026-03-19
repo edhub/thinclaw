@@ -53,7 +53,9 @@
   let showLaozhang = $state(false)
 
   // Keep local draft in sync if the store is updated externally (e.g. auto-correct).
-  $effect(() => { laozhangKey = $settings.laozhangApiKey })
+  $effect(() => {
+    laozhangKey = $settings.laozhangApiKey
+  })
 
   function saveLaozhangKey() {
     updateSettings({ laozhangApiKey: laozhangKey })
@@ -63,7 +65,9 @@
   let showBianxie = $state(false)
 
   // Keep local draft in sync if the store is updated externally.
-  $effect(() => { bianxieKey = $settings.bianxieApiKey })
+  $effect(() => {
+    bianxieKey = $settings.bianxieApiKey
+  })
 
   function saveBianxieKey() {
     updateSettings({ bianxieApiKey: bianxieKey })
@@ -72,10 +76,23 @@
   let lingyaaiKey = $state($settings.lingyaaiApiKey)
   let showLingyaai = $state(false)
 
-  $effect(() => { lingyaaiKey = $settings.lingyaaiApiKey })
+  $effect(() => {
+    lingyaaiKey = $settings.lingyaaiApiKey
+  })
 
   function saveLingyaaiKey() {
     updateSettings({ lingyaaiApiKey: lingyaaiKey })
+  }
+
+  let qiniuKey = $state($settings.qiniuApiKey)
+  let showQiniu = $state(false)
+
+  $effect(() => {
+    qiniuKey = $settings.qiniuApiKey
+  })
+
+  function saveQiniuKey() {
+    updateSettings({ qiniuApiKey: qiniuKey })
   }
 
   // ── Model toggles ─────────────────────────────────────────────────────────
@@ -83,14 +100,12 @@
   const laozhangModels = $derived(MODELS.filter((m) => m.provider === 'laozhang'))
   const bianxieModels = $derived(MODELS.filter((m) => m.provider === 'bianxie'))
   const lingyaaiModels = $derived(MODELS.filter((m) => m.provider === 'lingyaai'))
+  const qiniuModels = $derived(MODELS.filter((m) => m.provider === 'qiniu'))
 
   function toggleModel(key: string): void {
     const s = $settings
     const keyed = getKeyedModels(s).map(modelKey)
-    const effective =
-      s.enabledModelKeys.length === 0
-        ? keyed
-        : s.enabledModelKeys
+    const effective = s.enabledModelKeys.length === 0 ? keyed : s.enabledModelKeys
 
     let next: string[]
     if (effective.includes(key)) {
@@ -135,7 +150,14 @@
   <header class="topbar">
     <h1 class="page-title">设置</h1>
     <button class="btn-close" onclick={closeSettings} type="button" aria-label="关闭设置">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2.5"
+      >
         <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
       </svg>
     </button>
@@ -180,18 +202,17 @@
 
     <!-- Content -->
     <main class="content">
-
       <!-- ── 模型 & 供应商 ─────────────────────────────────────────── -->
       {#if activeSection === 'providers'}
         <div class="section">
           <h2 class="section-title">模型 & 供应商</h2>
-          <p class="section-desc">选择默认对话模型和工具模型，配置各供应商密钥并选择要启用的模型。</p>
+          <p class="section-desc">
+            选择默认对话模型和工具模型，配置各供应商密钥并选择要启用的模型。
+          </p>
 
           <!-- 模型配置 -->
           {#if availableModels.length === 0}
-            <div class="empty-notice">
-              没有可用模型。请先在下方配置 API 密钥。
-            </div>
+            <div class="empty-notice">没有可用模型。请先在下方配置 API 密钥。</div>
           {:else}
             <div class="field">
               <label for="default-model">默认对话模型</label>
@@ -212,7 +233,8 @@
               <select
                 id="utility-model"
                 value={$settings.utilityModelKey}
-                onchange={(e) => updateSettings({ utilityModelKey: (e.target as HTMLSelectElement).value })}
+                onchange={(e) =>
+                  updateSettings({ utilityModelKey: (e.target as HTMLSelectElement).value })}
               >
                 {#each availableModels as m (modelKey(m))}
                   <option value={modelKey(m)}>{m.name}</option>
@@ -251,7 +273,11 @@
                   spellcheck="false"
                   onblur={saveLaozhangKey}
                 />
-                <button class="btn-toggle" type="button" onclick={() => (showLaozhang = !showLaozhang)}>
+                <button
+                  class="btn-toggle"
+                  type="button"
+                  onclick={() => (showLaozhang = !showLaozhang)}
+                >
                   {showLaozhang ? '隐藏' : '显示'}
                 </button>
               </div>
@@ -287,16 +313,14 @@
           <div class="provider-card">
             <div class="provider-header">
               <div class="provider-name">
-                边界 · bianxie.ai
+                便携 · bianxie.ai
                 <span class="provider-status" class:ok={!!$settings.bianxieApiKey}>
                   {$settings.bianxieApiKey ? '✓ 已配置' : '未配置'}
                 </span>
               </div>
             </div>
             {#if !$settings.bianxieApiKey}
-              <div class="provider-notice">
-                ⚠ 未配置密钥，该供应商下的模型不可用。
-              </div>
+              <div class="provider-notice">⚠ 未配置密钥，该供应商下的模型不可用。</div>
             {/if}
             <div class="field">
               <label for="bianxie-key">API 密钥</label>
@@ -310,7 +334,11 @@
                   spellcheck="false"
                   onblur={saveBianxieKey}
                 />
-                <button class="btn-toggle" type="button" onclick={() => (showBianxie = !showBianxie)}>
+                <button
+                  class="btn-toggle"
+                  type="button"
+                  onclick={() => (showBianxie = !showBianxie)}
+                >
                   {showBianxie ? '隐藏' : '显示'}
                 </button>
               </div>
@@ -352,9 +380,7 @@
               </div>
             </div>
             {#if !$settings.lingyaaiApiKey}
-              <div class="provider-notice">
-                ⚠ 未配置密钥，该供应商下的模型不可用。
-              </div>
+              <div class="provider-notice">⚠ 未配置密钥，该供应商下的模型不可用。</div>
             {/if}
             <div class="field">
               <label for="lingyaai-key">API 密钥</label>
@@ -368,7 +394,11 @@
                   spellcheck="false"
                   onblur={saveLingyaaiKey}
                 />
-                <button class="btn-toggle" type="button" onclick={() => (showLingyaai = !showLingyaai)}>
+                <button
+                  class="btn-toggle"
+                  type="button"
+                  onclick={() => (showLingyaai = !showLingyaai)}
+                >
                   {showLingyaai ? '隐藏' : '显示'}
                 </button>
               </div>
@@ -398,9 +428,70 @@
               {/each}
             </ul>
           </div>
+
+          <!-- qiniu -->
+          <div class="section-divider"></div>
+          <div class="provider-card">
+            <div class="provider-header">
+              <div class="provider-name">
+                七牛 · qnaigc.com
+                <span class="provider-status" class:ok={!!$settings.qiniuApiKey}>
+                  {$settings.qiniuApiKey ? '✓ 已配置' : '未配置'}
+                </span>
+              </div>
+            </div>
+            {#if !$settings.qiniuApiKey}
+              <div class="provider-notice">⚠ 未配置密钥，该供应商下的模型不可用。</div>
+            {/if}
+            <div class="field">
+              <label for="qiniu-key">API 密钥</label>
+              <div class="key-wrap">
+                <input
+                  id="qiniu-key"
+                  type={showQiniu ? 'text' : 'password'}
+                  bind:value={qiniuKey}
+                  placeholder="sk-..."
+                  autocomplete="off"
+                  spellcheck="false"
+                  onblur={saveQiniuKey}
+                />
+                <button
+                  class="btn-toggle"
+                  type="button"
+                  onclick={() => (showQiniu = !showQiniu)}
+                >
+                  {showQiniu ? '隐藏' : '显示'}
+                </button>
+              </div>
+              <p class="hint">密钥仅存储在您的浏览器本地，直接发送至 api.qnaigc.com。</p>
+            </div>
+
+            <div class="model-list-label">模型</div>
+            <ul class="model-list">
+              {#each qiniuModels as m (modelKey(m))}
+                {@const enabled = isModelEnabled(m, $settings)}
+                {@const hasKey = !!$settings.qiniuApiKey}
+                <li class="model-row" class:disabled={!hasKey}>
+                  <label class="model-label">
+                    <input
+                      type="checkbox"
+                      checked={enabled}
+                      disabled={!hasKey}
+                      onchange={() => toggleModel(modelKey(m))}
+                    />
+                    <span class="model-name">{m.name}</span>
+                    <span class="model-meta">
+                      {#if m.reasoning}<span class="tag tag-reason">reasoning</span>{/if}
+                      <span class="tag">{(m.contextWindow / 1000).toFixed(0)}K ctx</span>
+                    </span>
+                  </label>
+                </li>
+              {/each}
+            </ul>
+          </div>
         </div>
 
-      <!-- ── 外观 & 指令 ─────────────────────────────────────────────── -->
+        <!-- ── 外观 & 指令 ─────────────────────────────────────────────── -->
       {:else if activeSection === 'appearance'}
         <div class="section">
           <h2 class="section-title">外观 & 指令</h2>
@@ -437,21 +528,20 @@
           </div>
         </div>
 
-      <!-- ── 灵魂 ──────────────────────────────────────────────────── -->
+        <!-- ── 灵魂 ──────────────────────────────────────────────────── -->
       {:else if activeSection === 'soul'}
         <div class="section">
           <h2 class="section-title">灵魂</h2>
           <SettingsSoul />
         </div>
 
-      <!-- ── 记忆 ──────────────────────────────────────────────────── -->
+        <!-- ── 记忆 ──────────────────────────────────────────────────── -->
       {:else if activeSection === 'memory'}
         <div class="section">
           <h2 class="section-title">记忆</h2>
           <SettingsMemory />
         </div>
       {/if}
-
     </main>
   </div>
 </div>

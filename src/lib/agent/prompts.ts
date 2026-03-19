@@ -3,8 +3,8 @@
  *
  * Assembles all parts (soul, persona, custom instructions, memories) into a
  * single string passed to agent.setSystemPrompt(). Prompt caching is handled
- * automatically by the Anthropic API via the top-level cache_control field in
- * the request payload (see payload.ts).
+ * automatically by pi-ai (cacheRetention="short" default), which adds
+ * cache_control to system blocks, tools, and the last user message.
  */
 import type { Memory } from '$lib/db'
 
