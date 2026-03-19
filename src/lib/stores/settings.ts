@@ -21,6 +21,7 @@ export type Theme = 'light' | 'dark' | 'system'
 export interface Settings {
   laozhangApiKey: string
   bianxieApiKey: string
+  lingyaaiApiKey: string
   enabledModelKeys: string[]   // [] means all models of providers with keys
   model: string                // active model key: `${provider}:${modelId}`
   utilityModelKey: string      // utility model key (compaction / auto-title)
@@ -33,6 +34,7 @@ const STORAGE_KEY = 'thinclaw:settings'
 const DEFAULTS: Settings = {
   laozhangApiKey: '',
   bianxieApiKey: '',
+  lingyaaiApiKey: '',
   enabledModelKeys: [],
   model: DEFAULT_MODEL_KEY,
   utilityModelKey: DEFAULT_UTILITY_MODEL_KEY,
@@ -46,6 +48,7 @@ const DEFAULTS: Settings = {
 function hasProviderKey(provider: string, s: Settings): boolean {
   if (provider === 'laozhang') return !!s.laozhangApiKey
   if (provider === 'bianxie') return !!s.bianxieApiKey
+  if (provider === 'lingyaai') return !!s.lingyaaiApiKey
   return false
 }
 
@@ -53,6 +56,7 @@ function hasProviderKey(provider: string, s: Settings): boolean {
 export function getApiKeyForProvider(provider: string, s: Settings): string | undefined {
   if (provider === 'laozhang') return s.laozhangApiKey || undefined
   if (provider === 'bianxie') return s.bianxieApiKey || undefined
+  if (provider === 'lingyaai') return s.lingyaaiApiKey || undefined
   return undefined
 }
 

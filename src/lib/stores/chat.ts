@@ -12,7 +12,8 @@
 import { writable, derived, get } from 'svelte/store'
 import { Agent } from '@mariozechner/pi-agent-core'
 import type { AgentEvent, AgentMessage, AgentTool } from '@mariozechner/pi-agent-core'
-import type { ImageContent } from '@mariozechner/pi-ai'
+import type { ImageContent, Model } from '@mariozechner/pi-ai'
+import { streamSimple } from '@mariozechner/pi-ai'
 import { nanoid } from '$lib/utils/nanoid'
 import { getModelByKey, DEFAULT_UTILITY_MODEL_KEY } from '$lib/agent/models'
 import { buildSystemPrompt, formatMemoriesForPrompt } from '$lib/agent/prompts'
@@ -24,7 +25,6 @@ import { imageGenerateTool } from '$lib/agent/image'
 import { convertToLlm } from '$lib/agent/convert'
 import {
   onPayload,
-  setCurrentSystemPromptParts,
   capturedPayloads,
   clearCapturedPayloads,
 } from '$lib/agent/payload'
@@ -94,6 +94,32 @@ function getUtilityModel() {
 
 let _agent: Agent | null = null
 
+/**
+ * Custom stream function that injects `Authorization: Bearer` headers for providers
+ * (e.g. lingyaai) whose google-generative-ai proxy does not recognise the
+ * `x-goog-api-key` header used by the @google/genai SDK.
+ *
+ * For every other model the call is passed through unchanged.
+ */
+function makeStreamFn() {
+  return function customStreamFn(
+    model: Model<any>,
+    context: Parameters<typeof streamSimple>[1],
+    options: Parameters<typeof streamSimple>[2],
+  ) {
+    if (model.api === 'google-generative-ai' && model.provider === 'lingyaai') {
+      const apiKey = getApiKeyForProvider(model.provider, get(settings))
+      if (apiKey) {
+        model = {
+          ...model,
+          headers: { Authorization: `Bearer ${apiKey}`, ...(model.headers ?? {}) },
+        }
+      }
+    }
+    return streamSimple(model, context, options)
+  }
+}
+
 function getAgent(): Agent {
   if (!_agent) {
     _agent = new Agent({
@@ -103,6 +129,7 @@ function getAgent(): Agent {
       },
       convertToLlm,
       onPayload: onPayload,
+      streamFn: makeStreamFn(),
     })
     // Resolve api key dynamically so runtime changes are picked up.
     _agent.getApiKey = async (provider: string) => {
@@ -121,8 +148,7 @@ function buildTools(imageEnabled: boolean): AgentTool[] {
 }
 
 /**
- * Assemble the system prompt from soul + persona + custom instructions + memories.
- * Returns a joined string for agent.setSystemPrompt().
+ * Assemble the full system prompt string for agent.setSystemPrompt().
  */
 function assembleSystemPrompt(convId?: string): string {
   const s = get(settings)
@@ -132,17 +158,7 @@ function assembleSystemPrompt(convId?: string): string {
   const persona = conv?.personaId ? getPersonaById(conv.personaId) : undefined
   const memoriesText = formatMemoriesForPrompt(memories.all())
 
-  const { stableParts, memoryPart } = buildSystemPrompt(
-    soulContent,
-    persona?.content,
-    s.systemPrompt,
-    memoriesText,
-  )
-
-  // Persist parts so onPayload() can reconstruct multi-block system arrays.
-  setCurrentSystemPromptParts({ stableParts, memoryPart })
-
-  return [...stableParts, ...(memoryPart ? [memoryPart] : [])].join('\n\n')
+  return buildSystemPrompt(soulContent, persona?.content, s.systemPrompt, memoriesText)
 }
 
 // ─── Svelte stores ────────────────────────────────────────────────────────────

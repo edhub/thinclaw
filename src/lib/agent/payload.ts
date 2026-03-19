@@ -1,39 +1,24 @@
 /**
- * onPayload hook — splits the system prompt into multiple parts and
- * applies provider-specific cache breakpoints before each API call.
- *
- * Also captures request payloads for session JSONL debugging.
+ * onPayload hook — applies provider-specific cache settings before each API call,
+ * and captures request payloads for session JSONL debugging.
  *
  * Provider routing (detected from payload shape):
  *
- *   Google     `params.contents` array present (not `messages`).
- *              Rewrites `params.config.systemInstruction` from a single string to
- *              a Content object with one part per prompt section.
+ *   Google     `params.contents` array present.
+ *              Passes through unchanged — system prompt is already a single string
+ *              set via agent.setSystemPrompt().
  *
  *   Anthropic  `params.system` is a top-level array of text blocks.
- *              Rewrites to one block per prompt section with cache_control on the
- *              last block. Also adds cache_control to tools[-1] and removes
- *              pi-ai auto-injected cache_control on the last user message.
+ *              Adds a cache_control breakpoint on the last tool definition so the
+ *              stable tools prefix (~2,420 tokens) is always cached. pi-ai's own
+ *              breakpoints on the system block and last user message are left
+ *              untouched (system is a no-op due to token threshold; last user
+ *              message enables incremental conversation-history caching).
  *
  *   OpenAI     `params.messages` present but no `params.system` array.
  *              No cache_control support — passes through untouched.
  */
 import type { SessionPayloadEntry } from '$lib/fs/session-recorder'
-
-export interface SystemPromptParts {
-  stableParts: string[]
-  memoryPart?: string
-}
-
-/**
- * Mutable state shared between the payload hook and the chat store.
- * Updated by assembleSystemPrompt() in chat.ts before each agent.prompt().
- */
-export let currentSystemPromptParts: SystemPromptParts | null = null
-
-export function setCurrentSystemPromptParts(parts: SystemPromptParts | null): void {
-  currentSystemPromptParts = parts
-}
 
 /**
  * Captured LLM request payloads for the current agent run.
@@ -53,17 +38,6 @@ export function onPayload(payload: unknown): unknown {
 
   // ── Google ────────────────────────────────────────────────────────────────
   if (Array.isArray(params.contents)) {
-    if (currentSystemPromptParts && params.config?.systemInstruction) {
-      const { stableParts, memoryPart } = currentSystemPromptParts
-      const allParts = [...stableParts, ...(memoryPart ? [memoryPart] : [])]
-      if (allParts.length > 1) {
-        params.config.systemInstruction = {
-          role: 'user',
-          parts: allParts.map((text) => ({ text })),
-        }
-      }
-    }
-
     try {
       capturedPayloads.push({
         type: 'payload',
@@ -82,39 +56,10 @@ export function onPayload(payload: unknown): unknown {
   const isAnthropic = Array.isArray(params.system)
 
   if (isAnthropic) {
-    // Rebuild system as multiple blocks (one per prompt part).
-    if (currentSystemPromptParts) {
-      const { stableParts, memoryPart } = currentSystemPromptParts
-      const blocks: { type: string; text: string; cache_control?: { type: string } }[] = []
-
-      for (const part of stableParts) {
-        blocks.push({ type: 'text', text: part })
-      }
-      if (memoryPart) {
-        blocks.push({ type: 'text', text: memoryPart })
-      }
-      // cache_control on the last block (memory if present, else last stable part).
-      if (blocks.length > 0) {
-        blocks[blocks.length - 1].cache_control = { type: 'ephemeral' }
-      }
-      if (blocks.length > 0) {
-        params.system = blocks
-      }
-    }
-
-    // Add cache_control to the last tool definition (always stable).
-    if (Array.isArray(params.tools) && params.tools.length > 0) {
-      params.tools[params.tools.length - 1].cache_control = { type: 'ephemeral' as const }
-    }
-
-    // Remove the cache_control that pi-ai auto-injects on the last user message.
-    for (const msg of params.messages) {
-      if (msg.role === 'user' && Array.isArray(msg.content)) {
-        for (const block of msg.content) {
-          delete block.cache_control
-        }
-      }
-    }
+    // Strip all cache_control from tools and message content blocks.
+    // Only the system-level breakpoint (placed by pi-ai on system[-1]) is kept.
+    // This avoids proxy services that reject requests with >N cache_control blocks.
+    stripCacheControl(params)
   }
 
   // Capture a deep copy of the final params for session recording / debugging.
@@ -129,4 +74,27 @@ export function onPayload(payload: unknown): unknown {
   }
 
   return params
+}
+
+/**
+ * Strip cache_control from all tools and message content blocks.
+ * Leaves system blocks untouched — the top-level system breakpoint is the
+ * only one retained, avoiding proxy rejections on the 4-block limit.
+ */
+function stripCacheControl(params: Record<string, any>): void {
+  if (Array.isArray(params.tools)) {
+    for (const tool of params.tools) {
+      delete tool.cache_control
+    }
+  }
+
+  if (Array.isArray(params.messages)) {
+    for (const msg of params.messages) {
+      if (Array.isArray(msg?.content)) {
+        for (const block of msg.content) {
+          delete block.cache_control
+        }
+      }
+    }
+  }
 }

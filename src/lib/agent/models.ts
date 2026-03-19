@@ -99,6 +99,18 @@ export const MODELS: Model<'anthropic-messages' | 'google-generative-ai' | 'open
       contextWindow: 1000000,
       maxTokens: 8192,
     },
+    {
+      id: 'gemini-3.1-pro-preview-thinking',
+      name: 'Gemini 3.1 Pro (Thinking) · bianxie',
+      api: 'google-generative-ai',
+      provider: 'bianxie',
+      baseUrl: 'https://api.bianxie.ai/v1beta',
+      reasoning: true,
+      input: ['text', 'image'],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 1000000,
+      maxTokens: 8192,
+    },
     // {
     //   id: 'gemini-3.1-pro-preview-thinking',
     //   name: 'Gemini 3.1 pro (Thinking) · bianxie',
@@ -112,19 +124,45 @@ export const MODELS: Model<'anthropic-messages' | 'google-generative-ai' | 'open
     //   maxTokens: 8192,
     // },
 
-    // ── OpenAI (via bianxie.ai) ───────────────────────────────────────────────
+    // ── Anthropic (via lingyaai.cn) ───────────────────────────────────────────
     {
-      id: 'gpt-5.4',
-      name: 'GPT-5.4 · bianxie',
-      api: 'openai-completions',
-      provider: 'bianxie',
-      baseUrl: 'https://api.bianxie.ai/v1',
+      id: 'claude-sonnet-4-6-thinking',
+      name: 'Claude Sonnet 4.6 (thinking) · 灵芽',
+      api: 'anthropic-messages',
+      provider: 'lingyaai',
+      baseUrl: 'https://api.lingyaai.cn', // SDK appends /v1/messages
+      reasoning: true,
+      input: ['text', 'image'],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 200000,
+      maxTokens: 16000,
+    },
+    {
+      id: 'gemini-3-flash-preview-search',
+      name: 'Gemini 3 Flash Search · 灵芽',
+      api: 'google-generative-ai',
+      provider: 'lingyaai',
+      baseUrl: 'https://api.lingyaai.cn/v1beta',
       reasoning: false,
       input: ['text', 'image'],
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-      contextWindow: 128000,
-      maxTokens: 16384,
+      contextWindow: 1000000,
+      maxTokens: 16000,
     },
+
+    // ── OpenAI (via bianxie.ai) ───────────────────────────────────────────────
+    // {
+    //   id: 'gpt-5.4',
+    //   name: 'GPT-5.4 · bianxie',
+    //   api: 'openai-completions',
+    //   provider: 'bianxie',
+    //   baseUrl: 'https://api.bianxie.ai/v1',
+    //   reasoning: false,
+    //   input: ['text', 'image'],
+    //   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    //   contextWindow: 128000,
+    //   maxTokens: 16384,
+    // },
   ]
 
 /** Unique app-level key for a (model × provider) combination. */

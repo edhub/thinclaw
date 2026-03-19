@@ -69,10 +69,20 @@
     updateSettings({ bianxieApiKey: bianxieKey })
   }
 
+  let lingyaaiKey = $state($settings.lingyaaiApiKey)
+  let showLingyaai = $state(false)
+
+  $effect(() => { lingyaaiKey = $settings.lingyaaiApiKey })
+
+  function saveLingyaaiKey() {
+    updateSettings({ lingyaaiApiKey: lingyaaiKey })
+  }
+
   // ── Model toggles ─────────────────────────────────────────────────────────
 
   const laozhangModels = $derived(MODELS.filter((m) => m.provider === 'laozhang'))
   const bianxieModels = $derived(MODELS.filter((m) => m.provider === 'bianxie'))
+  const lingyaaiModels = $derived(MODELS.filter((m) => m.provider === 'lingyaai'))
 
   function toggleModel(key: string): void {
     const s = $settings
@@ -312,6 +322,64 @@
               {#each bianxieModels as m (modelKey(m))}
                 {@const enabled = isModelEnabled(m, $settings)}
                 {@const hasKey = !!$settings.bianxieApiKey}
+                <li class="model-row" class:disabled={!hasKey}>
+                  <label class="model-label">
+                    <input
+                      type="checkbox"
+                      checked={enabled}
+                      disabled={!hasKey}
+                      onchange={() => toggleModel(modelKey(m))}
+                    />
+                    <span class="model-name">{m.name}</span>
+                    <span class="model-meta">
+                      {#if m.reasoning}<span class="tag tag-reason">reasoning</span>{/if}
+                      <span class="tag">{(m.contextWindow / 1000).toFixed(0)}K ctx</span>
+                    </span>
+                  </label>
+                </li>
+              {/each}
+            </ul>
+          </div>
+          <!-- lingyaai -->
+          <div class="section-divider"></div>
+          <div class="provider-card">
+            <div class="provider-header">
+              <div class="provider-name">
+                灵芽 · lingyaai.cn
+                <span class="provider-status" class:ok={!!$settings.lingyaaiApiKey}>
+                  {$settings.lingyaaiApiKey ? '✓ 已配置' : '未配置'}
+                </span>
+              </div>
+            </div>
+            {#if !$settings.lingyaaiApiKey}
+              <div class="provider-notice">
+                ⚠ 未配置密钥，该供应商下的模型不可用。
+              </div>
+            {/if}
+            <div class="field">
+              <label for="lingyaai-key">API 密钥</label>
+              <div class="key-wrap">
+                <input
+                  id="lingyaai-key"
+                  type={showLingyaai ? 'text' : 'password'}
+                  bind:value={lingyaaiKey}
+                  placeholder="sk-..."
+                  autocomplete="off"
+                  spellcheck="false"
+                  onblur={saveLingyaaiKey}
+                />
+                <button class="btn-toggle" type="button" onclick={() => (showLingyaai = !showLingyaai)}>
+                  {showLingyaai ? '隐藏' : '显示'}
+                </button>
+              </div>
+              <p class="hint">密钥仅存储在您的浏览器本地，直接发送至 api.lingyaai.cn。</p>
+            </div>
+
+            <div class="model-list-label">模型</div>
+            <ul class="model-list">
+              {#each lingyaaiModels as m (modelKey(m))}
+                {@const enabled = isModelEnabled(m, $settings)}
+                {@const hasKey = !!$settings.lingyaaiApiKey}
                 <li class="model-row" class:disabled={!hasKey}>
                   <label class="model-label">
                     <input
