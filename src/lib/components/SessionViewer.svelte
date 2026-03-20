@@ -5,6 +5,7 @@
   Goal: readable at a glance, full data accessible on demand.
 -->
 <script lang="ts">
+  import { ChevronRight } from 'lucide-svelte'
   import type { SessionEntry } from '$lib/fs/session-recorder'
 
   interface Props {
@@ -12,10 +13,7 @@
   }
   let { entries }: Props = $props()
 
-  // Track which entries are expanded (by index)
   let expanded = $state<Set<number>>(new Set())
-
-  // ── Aggregate token usage across all assistant turns ─────────────────────
 
   interface UsageTotals {
     input: number
@@ -48,8 +46,6 @@
     expanded = next
   }
 
-  // ── Type badge config ────────────────────────────────────────────────────
-
   type BadgeKind = 'session' | 'user' | 'assistant' | 'tool-result' | 'compaction' | 'other'
 
   function badgeKind(entry: SessionEntry): BadgeKind {
@@ -77,12 +73,6 @@
     return (entry as { type: string }).type
   }
 
-  // ── Two-line layout helpers ───────────────────────────────────────────────
-
-  /**
-   * First line: role badge + timestamp + token usage (for assistant).
-   * Returns empty string if no meaningful metadata.
-   */
   function entryMeta(entry: SessionEntry): string {
     const parts: string[] = []
     if (entry.type === 'message') {
@@ -112,36 +102,29 @@
     return parts.join('  ·  ')
   }
 
-  /**
-   * Second line: message content only (no token/time info).
-   */
   function entryContent(entry: SessionEntry): string {
     try {
       if (entry.type === 'session') {
         const h = entry as any
-        const parts = [
+        return [
           `"${h.conversationTitle}"`,
           h.model,
           `thinking: ${h.thinkingLevel ?? 'off'}`,
           ...(h.personaId ? [`persona: ${h.personaId}`] : []),
-        ]
-        return parts.join('  ·  ')
+        ].join('  ·  ')
       }
       if (entry.type === 'payload') {
         const params = (entry as any).params ?? {}
         const parts: string[] = []
-        if (params.system) {
-          const sysLen = JSON.stringify(params.system).length
-          parts.push(`sys:${sysLen}c`)
-        }
+        if (params.system) parts.push(`sys:${JSON.stringify(params.system).length}c`)
         if (Array.isArray(params.tools)) parts.push(`tools:${params.tools.length}`)
         if (params.thinking) parts.push(`thinking:${JSON.stringify(params.thinking)}`)
         parts.push(`max_tokens:${params.max_tokens ?? '?'}`)
-        // Show cache_control placement summary (sys + tools[-1] only)
-        const ccPositions: string[] = []
-        if (params.system?.[params.system.length - 1]?.cache_control) ccPositions.push('sys')
-        if (Array.isArray(params.tools) && params.tools[params.tools.length - 1]?.cache_control) ccPositions.push('tools[-1]')
-        if (ccPositions.length) parts.push(`cc:[${ccPositions.join(',')}]`)
+        const ccPos: string[] = []
+        if (params.system?.[params.system.length - 1]?.cache_control) ccPos.push('sys')
+        if (Array.isArray(params.tools) && params.tools[params.tools.length - 1]?.cache_control)
+          ccPos.push('tools[-1]')
+        if (ccPos.length) parts.push(`cc:[${ccPos.join(',')}]`)
         return parts.join('  ·  ')
       }
       if (entry.type === 'message') {
@@ -149,37 +132,43 @@
         const role: string = msg?.role ?? '?'
         if (role === 'user') return snippet(textOf(msg.content))
         if (role === 'assistant') {
-          const texts = (msg.content ?? []).filter((b: any) => b.type === 'text').map((b: any) => b.text as string)
+          const texts = (msg.content ?? [])
+            .filter((b: any) => b.type === 'text')
+            .map((b: any) => b.text as string)
           const thinking = (msg.content ?? []).filter((b: any) => b.type === 'thinking')
           const tools = (msg.content ?? []).filter((b: any) => b.type === 'toolCall')
           const parts: string[] = []
-          if (thinking.length) parts.push(`💭 ${thinking.length} thinking block${thinking.length > 1 ? 's' : ''}`)
+          if (thinking.length)
+            parts.push(`💭 ${thinking.length} thinking block${thinking.length > 1 ? 's' : ''}`)
           if (tools.length) parts.push(`🔧 ${tools.map((t: any) => t.name).join(', ')}`)
           if (texts.length) parts.push(snippet(texts.join('')))
           return parts.join('  ·  ') || '(empty)'
         }
         if (role === 'toolResult') {
-          const resultText = (msg.content ?? []).filter((b: any) => b.type === 'text').map((b: any) => b.text as string).join('')
-          const err = msg.isError ? '❌  ' : ''
-          return `${msg.toolName}  ·  ${err}${snippet(resultText)}`
+          const txt = (msg.content ?? [])
+            .filter((b: any) => b.type === 'text')
+            .map((b: any) => b.text as string)
+            .join('')
+          return `${msg.toolName}  ·  ${msg.isError ? '❌  ' : ''}${snippet(txt)}`
         }
         if (role === 'compactionSummary') {
           return `~${msg.tokensBefore?.toLocaleString() ?? '?'} tokens → ${snippet(msg.summary ?? '')}`
         }
         return snippet(JSON.stringify(msg))
       }
-    } catch { /* fall through */ }
+    } catch {
+      /* fall through */
+    }
     return ''
   }
 
   function textOf(content: unknown): string {
     if (typeof content === 'string') return content
-    if (Array.isArray(content)) {
+    if (Array.isArray(content))
       return content
         .filter((b: any) => b.type === 'text')
         .map((b: any) => b.text as string)
         .join('')
-    }
     return ''
   }
 
@@ -201,54 +190,77 @@
     }
   }
 
-  // ── Pretty-print JSON (truncate large base64 blobs) ────────────────────────
-
   function prettyJson(entry: SessionEntry): string {
-    // Deep-clone via JSON round-trip, then truncate any long base64-like strings
-    // (e.g. generated image data stored in tool result details).
-    return JSON.stringify(entry, (_key, value) => {
-      if (typeof value === 'string' && value.length > 200 && /^[A-Za-z0-9+/=]+$/.test(value)) {
-        return `[base64 ~${Math.round(value.length / 1024)}KB — truncated]`
-      }
-      return value
-    }, 2)
+    return JSON.stringify(
+      entry,
+      (_key, value) => {
+        if (typeof value === 'string' && value.length > 200 && /^[A-Za-z0-9+/=]+$/.test(value))
+          return `[base64 ~${Math.round(value.length / 1024)}KB — truncated]`
+        return value
+      },
+      2,
+    )
   }
 
-  /** Extract a generated image from a tool-result entry, if present. */
-  function extractGeneratedImage(entry: SessionEntry): { imageData: string; mimeType: string; prompt: string; aspectRatio: string; imageSize: string } | null {
+  function extractGeneratedImage(entry: SessionEntry): {
+    imageData: string
+    mimeType: string
+    prompt: string
+    aspectRatio: string
+    imageSize: string
+  } | null {
     if (entry.type !== 'message') return null
     const msg = (entry as any).message
     if (msg?.role !== 'toolResult' || msg?.toolName !== 'generate_image') return null
     const d = msg?.details
-    if (!d?.imageData) return null
-    return d
+    return d?.imageData ? d : null
   }
 </script>
 
-<div class="inspector">
-  <div class="entry-count">{entries.length} entries</div>
+<!-- ── Inspector container ───────────────────────────────────────────────── -->
+<div class="flex-1 overflow-y-auto px-2.5 py-2 flex flex-col gap-0.5">
+  <div
+    class="text-[0.68rem] text-fg-muted uppercase tracking-[0.06em] font-semibold
+              px-1 pb-1 flex-shrink-0"
+  >
+    {entries.length} entries
+  </div>
 
-  <!-- Session-wide token usage summary -->
+  <!-- Usage summary -->
   {#if totalUsage.turns > 0}
-    <div class="usage-bar">
-      <span class="usage-label">Token 用量</span>
-      <span class="usage-stat">↑ {totalUsage.input.toLocaleString()} input</span>
-      <span class="usage-sep">·</span>
-      <span class="usage-stat">↓ {totalUsage.output.toLocaleString()} output</span>
+    <div
+      class="flex flex-wrap items-center gap-1 px-2 py-1.5 mb-1 bg-surface-elevated
+                border border-line rounded-md text-[0.72rem] flex-shrink-0"
+    >
+      <span class="font-semibold text-fg-muted uppercase tracking-[0.05em] text-[0.65rem] mr-0.5">
+        Token 用量
+      </span>
+      <span class="text-fg-sub font-mono text-[0.7rem]"
+        >↑ {totalUsage.input.toLocaleString()} input</span
+      >
+      <span class="text-line text-[0.7rem]">·</span>
+      <span class="text-fg-sub font-mono text-[0.7rem]"
+        >↓ {totalUsage.output.toLocaleString()} output</span
+      >
       {#if totalUsage.cacheRead > 0}
-        <span class="usage-sep">·</span>
-        <span class="usage-stat usage-cache-hit">⚡ {totalUsage.cacheRead.toLocaleString()} cache read</span>
+        <span class="text-line text-[0.7rem]">·</span>
+        <span class="text-accent font-mono text-[0.7rem]"
+          >⚡ {totalUsage.cacheRead.toLocaleString()} cache read</span
+        >
       {:else}
-        <span class="usage-sep">·</span>
-        <span class="usage-stat usage-cache-miss">⚡ cache: 0</span>
+        <span class="text-line text-[0.7rem]">·</span>
+        <span class="text-fg-muted opacity-70 font-mono text-[0.7rem]">⚡ cache: 0</span>
       {/if}
       {#if totalUsage.cacheWrite > 0}
-        <span class="usage-sep">·</span>
-        <span class="usage-stat">⬡ {totalUsage.cacheWrite.toLocaleString()} cache write</span>
+        <span class="text-line text-[0.7rem]">·</span>
+        <span class="text-fg-sub font-mono text-[0.7rem]"
+          >⬡ {totalUsage.cacheWrite.toLocaleString()} cache write</span
+        >
       {/if}
     </div>
   {/if}
 
+  <!-- Entry list -->
   {#each entries as entry, i (i)}
     {@const kind = badgeKind(entry)}
     {@const label = badgeLabel(entry)}
@@ -256,38 +268,60 @@
     {@const content = entryContent(entry)}
     {@const open = expanded.has(i)}
 
-    <div class="entry" class:open>
+    <div
+      class="border rounded-[5px] transition-colors duration-100"
+      class:border-transparent={!open}
+      class:border-line={open}
+      class:bg-surface-elevated={open}
+    >
       <!-- Summary row -->
-      <button class="entry-row" onclick={() => toggle(i)} type="button">
-        <div class="entry-main">
-          <div class="entry-header-line">
-            <span class="badge badge-{kind}">{label}</span>
-            {#if meta}<span class="entry-meta">{meta}</span>{/if}
+      <button
+        class="flex items-start gap-2 w-full bg-transparent border-none cursor-pointer
+               px-1.5 py-[5px] text-left transition-colors duration-[80ms]
+               hover:bg-surface-hover"
+        class:rounded-md={!open}
+        class:rounded-t-md={open}
+        onclick={() => toggle(i)}
+        type="button"
+      >
+        <div class="flex-1 min-w-0 flex flex-col gap-0.5">
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <span class="sv-badge sv-badge-{kind}">{label}</span>
+            {#if meta}
+              <span
+                class="text-[0.68rem] text-fg-muted font-mono whitespace-nowrap
+                           overflow-hidden text-ellipsis"
+              >
+                {meta}
+              </span>
+            {/if}
           </div>
-          {#if content}<span class="entry-content">{content}</span>{/if}
+          {#if content}
+            <span
+              class="text-[0.78rem] text-fg-sub whitespace-nowrap overflow-hidden
+                         text-ellipsis block"
+            >
+              {content}
+            </span>
+          {/if}
         </div>
-        <svg
-          class="chevron"
-          class:open
-          width="10"
-          height="10"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.5"
-        >
-          <polyline points="9 18 15 12 9 6" />
-        </svg>
+        <ChevronRight
+          size={10}
+          class="flex-shrink-0 text-fg-muted transition-transform duration-150 mt-px
+                 {open ? 'rotate-90' : ''}"
+        />
       </button>
 
-      <!-- Expanded view -->
+      <!-- Expanded body -->
       {#if open}
         {#if entry.type === 'session'}
-          <!-- Session header: split metadata + system prompt for readability -->
           {@const h = entry as any}
-          <div class="session-expanded">
-            <div class="meta-block">
-              <pre class="raw-json no-border">{JSON.stringify(
+          <div class="border-t border-line rounded-b-md overflow-hidden">
+            <!-- Metadata JSON -->
+            <div class="border-b border-line">
+              <pre
+                class="m-0 px-3.5 py-2.5 pb-1 font-mono text-[0.78rem] leading-[1.6]
+                           text-fg whitespace-pre-wrap break-all overflow-x-auto">{JSON.stringify(
                   {
                     type: h.type,
                     conversationId: h.conversationId,
@@ -302,20 +336,35 @@
                   2,
                 )}</pre>
             </div>
+            <!-- System prompt -->
             {#if h.systemPrompt}
-              <div class="sysprompt-block">
-                <div class="sysprompt-label">systemPrompt</div>
-                <pre class="sysprompt-text">{h.systemPrompt}</pre>
+              <div class="flex flex-col">
+                <span
+                  class="sysprompt-label font-mono text-[0.72rem] text-fg-muted
+                              px-3.5 pt-1.5 pb-0.5 tracking-[0.03em]"
+                >
+                  systemPrompt
+                </span>
+                <pre
+                  class="m-0 ml-3.5 px-3.5 pb-3.5 pt-1 pl-2.5 font-mono text-[0.78rem]
+                             leading-[1.65] text-fg whitespace-pre-wrap break-words
+                             border-l-2 border-line">{h.systemPrompt}</pre>
               </div>
             {/if}
+            <!-- Tools -->
             {#if h.tools && h.tools.length > 0}
-              <div class="tools-block">
-                <div class="tools-header">tools ({h.tools.length})</div>
+              <div class="border-t border-line px-3.5 py-2 pb-3 flex flex-col gap-2.5">
+                <div class="font-mono text-[0.72rem] text-fg-muted tracking-[0.03em] pb-0.5">
+                  tools ({h.tools.length})
+                </div>
                 {#each h.tools as tool}
-                  <div class="tool-item">
-                    <div class="tool-name">{tool.name}</div>
-                    <div class="tool-desc">{tool.description}</div>
-                    <pre class="tool-params">{JSON.stringify(tool.parameters, null, 2)}</pre>
+                  <div class="border-l-2 border-line ml-1.5 pl-2.5 flex flex-col gap-0.5">
+                    <div class="font-mono text-[0.8rem] font-semibold text-accent">{tool.name}</div>
+                    <div class="text-[0.78rem] text-fg-sub leading-[1.5]">{tool.description}</div>
+                    <pre
+                      class="mt-1 mb-0 font-mono text-[0.72rem] text-fg-muted whitespace-pre-wrap
+                                 break-all leading-[1.5] bg-surface border border-line rounded
+                                 px-2 py-1.5">{JSON.stringify(tool.parameters, null, 2)}</pre>
                   </div>
                 {/each}
               </div>
@@ -324,376 +373,47 @@
         {:else}
           {@const img = extractGeneratedImage(entry)}
           {#if img}
-            <div class="generated-image-block">
+            <div class="border-t border-line px-3.5 py-2.5">
               <img
                 src="data:{img.mimeType};base64,{img.imageData}"
                 alt={img.prompt}
-                class="session-generated-image"
+                class="block max-w-full rounded-md border border-line"
               />
-              <div class="session-image-footer">
-                <span class="session-image-meta">{img.aspectRatio} · {img.imageSize}</span>
+              <div class="flex items-center justify-between mt-1.5">
+                <span class="text-[0.72rem] text-fg-muted font-mono">
+                  {img.aspectRatio} · {img.imageSize}
+                </span>
                 <a
                   href="data:{img.mimeType};base64,{img.imageData}"
-                  download="generated-{(entry as any).message?.timestamp ?? Date.now()}.{img.mimeType.split('/')[1] ?? 'png'}"
-                  class="session-download-link"
-                >↓ 保存图片</a>
+                  download="generated-{(entry as any).message?.timestamp ??
+                    Date.now()}.{img.mimeType.split('/')[1] ?? 'png'}"
+                  class="text-[0.75rem] text-accent no-underline px-1.5 py-0.5 rounded
+                         transition-colors duration-100 hover:bg-surface-active">↓ 保存图片</a
+                >
               </div>
             </div>
           {/if}
-          <pre class="raw-json">{prettyJson(entry)}</pre>
+          <pre
+            class="m-0 px-3.5 py-2.5 pb-3 font-mono text-[0.78rem] leading-[1.6] text-fg
+                   whitespace-pre-wrap break-all overflow-x-auto border-t border-line rounded-b-md">{prettyJson(
+              entry,
+            )}</pre>
         {/if}
       {/if}
     </div>
   {/each}
 
   {#if entries.length === 0}
-    <div class="empty">No entries found.</div>
+    <div class="text-fg-muted text-sm text-center py-10">No entries found.</div>
   {/if}
 </div>
 
 <style>
-  .inspector {
-    flex: 1;
-    overflow-y: auto;
-    padding: 8px 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .entry-count {
-    font-size: 0.68rem;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    font-weight: 600;
-    padding: 0 4px 4px;
-    flex-shrink: 0;
-  }
-
-  /* ── Usage summary bar ── */
-  .usage-bar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 4px;
-    padding: 5px 8px;
-    margin-bottom: 4px;
-    background: var(--surface-elevated);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    font-size: 0.72rem;
-    flex-shrink: 0;
-  }
-
-  .usage-label {
-    font-weight: 600;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    font-size: 0.65rem;
-    margin-right: 2px;
-  }
-
-  .usage-stat {
-    color: var(--text-secondary);
-    font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace;
-    font-size: 0.7rem;
-  }
-
-  .usage-cache-hit {
-    color: var(--accent);
-  }
-
-  .usage-cache-miss {
-    color: var(--text-muted);
-    opacity: 0.7;
-  }
-
-  .usage-sep {
-    color: var(--border);
-    font-size: 0.7rem;
-  }
-
-  /* ── Entry card ── */
-  .entry {
-    border: 1px solid transparent;
-    border-radius: 5px;
-    transition: border-color 0.1s;
-  }
-
-  .entry.open {
-    border-color: var(--border);
-    background: var(--surface-elevated);
-  }
-
-  .entry-row {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    width: 100%;
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 5px 6px;
-    border-radius: 5px;
-    text-align: left;
-    transition: background 0.08s;
-  }
-
-  .entry-row:hover {
-    background: var(--surface-hover);
-  }
-
-  .entry.open .entry-row {
-    border-radius: 5px 5px 0 0;
-  }
-
-  /* Two-line inner layout */
-  .entry-main {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .entry-header-line {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-  }
-
-  .entry-meta {
-    font-size: 0.68rem;
-    color: var(--text-muted);
-    font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .entry-content {
-    font-size: 0.78rem;
-    color: var(--text-secondary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: block;
-  }
-
-  /* ── Type badge ── */
-  .badge {
-    font-size: 0.64rem;
-    font-weight: 700;
-    font-family: monospace;
-    letter-spacing: 0.03em;
-    padding: 1px 5px;
-    border-radius: 3px;
-    flex-shrink: 0;
-    text-transform: lowercase;
-  }
-
-  .badge-session {
-    background: var(--badge-session-bg);
-    color: var(--badge-session-fg);
-  }
-  .badge-user {
-    background: var(--badge-user-bg);
-    color: var(--badge-user-fg);
-  }
-  .badge-assistant {
-    background: var(--badge-assistant-bg);
-    color: var(--badge-assistant-fg);
-  }
-  .badge-tool-result {
-    background: var(--badge-tool-bg);
-    color: var(--badge-tool-fg);
-  }
-  .badge-compaction {
-    background: var(--badge-compaction-bg);
-    color: var(--badge-compaction-fg);
-  }
-  .badge-other {
-    background: var(--surface-elevated);
-    color: var(--text-muted);
-  }
-
-  /* ── Chevron ── */
-  .chevron {
-    flex-shrink: 0;
-    color: var(--text-muted);
-    transition: transform 0.15s;
-    transform: rotate(0deg);
-  }
-
-  .chevron.open {
-    transform: rotate(90deg);
-  }
-
-  /* ── Raw JSON ── */
-  .raw-json {
-    margin: 0;
-    padding: 10px 14px 12px;
-    font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace;
-    font-size: 0.78rem;
-    line-height: 1.6;
-    color: var(--text-primary);
-    white-space: pre-wrap;
-    word-break: break-all;
-    overflow-x: auto;
-    border-top: 1px solid var(--border);
-    border-radius: 0 0 6px 6px;
-  }
-
-  .raw-json.no-border {
-    border-top: none;
-    border-radius: 0;
-    padding-bottom: 4px;
-  }
-
-  /* ── Session header expanded layout ── */
-  .session-expanded {
-    border-top: 1px solid var(--border);
-    border-radius: 0 0 6px 6px;
-    overflow: hidden;
-  }
-
-  .meta-block {
-    border-bottom: 1px solid var(--border);
-  }
-
-  .sysprompt-block {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .sysprompt-label {
-    font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace;
-    font-size: 0.72rem;
-    color: var(--text-muted);
-    padding: 6px 14px 2px;
-    letter-spacing: 0.03em;
-  }
-
+  /* ::before/::after pseudo-content — not expressible with Tailwind */
   .sysprompt-label::before {
     content: '"';
   }
-
   .sysprompt-label::after {
     content: '":';
-  }
-
-  .sysprompt-text {
-    margin: 0;
-    padding: 4px 14px 14px 20px;
-    font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace;
-    font-size: 0.78rem;
-    line-height: 1.65;
-    color: var(--text-primary);
-    white-space: pre-wrap;
-    word-break: break-word;
-    border-left: 2px solid var(--border);
-    margin-left: 14px;
-  }
-
-  /* ── Tools block in session header ── */
-  .tools-block {
-    border-top: 1px solid var(--border);
-    padding: 8px 14px 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .tools-header {
-    font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace;
-    font-size: 0.72rem;
-    color: var(--text-muted);
-    letter-spacing: 0.03em;
-    padding-bottom: 2px;
-  }
-
-  .tool-item {
-    border-left: 2px solid var(--border);
-    margin-left: 6px;
-    padding-left: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .tool-name {
-    font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace;
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: var(--accent);
-  }
-
-  .tool-desc {
-    font-size: 0.78rem;
-    color: var(--text-secondary);
-    line-height: 1.5;
-  }
-
-  .tool-params {
-    margin: 4px 0 0;
-    font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace;
-    font-size: 0.72rem;
-    color: var(--text-muted);
-    white-space: pre-wrap;
-    word-break: break-all;
-    line-height: 1.5;
-    background: var(--surface-main);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 6px 8px;
-  }
-
-  /* ── Generated image in session ── */
-  .generated-image-block {
-    border-top: 1px solid var(--border);
-    padding: 10px 14px;
-  }
-
-  .session-generated-image {
-    display: block;
-    max-width: 100%;
-    border-radius: 6px;
-    border: 1px solid var(--border);
-  }
-
-  .session-image-footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-top: 6px;
-  }
-
-  .session-image-meta {
-    font-size: 0.72rem;
-    color: var(--text-muted);
-    font-family: monospace;
-  }
-
-  .session-download-link {
-    font-size: 0.75rem;
-    color: var(--accent);
-    text-decoration: none;
-    padding: 2px 6px;
-    border-radius: 4px;
-    transition: background 0.1s;
-  }
-  .session-download-link:hover {
-    background: var(--surface-active);
-  }
-
-  /* ── Empty ── */
-  .empty {
-    color: var(--text-muted);
-    font-size: 0.875rem;
-    text-align: center;
-    padding: 40px 0;
   }
 </style>

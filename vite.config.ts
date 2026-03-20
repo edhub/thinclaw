@@ -61,6 +61,11 @@ export default defineConfig({
     sveltekit(),
     VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: null,       // disable HTML injection — SvelteKit SSG overwrites it anyway
+                                   // registration is handled via virtual:pwa-register in layout
+      devOptions: {
+        enabled: true,            // serve manifest + SW in dev
+      },
       // Precache all static assets emitted by the build.
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
@@ -73,8 +78,8 @@ export default defineConfig({
         name: 'ThinClaw',
         short_name: 'ThinClaw',
         description: 'Lightweight AI chat — runs entirely in your browser',
-        theme_color: '#5b6af5',
-        background_color: '#0d0d10',
+        theme_color: '#FF9940',
+        background_color: '#FAFAFA',
         display: 'standalone',
         start_url: '/',
         scope: '/',
@@ -91,7 +96,6 @@ export default defineConfig({
             purpose: 'any',
           },
           {
-            // Same file, marked maskable so Android can apply its own shape.
             src: 'icon-512.png',
             sizes: '512x512',
             type: 'image/png',

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { X, Plus } from 'lucide-svelte'
   import { memories } from '$lib/stores/memory'
 
   let memList = $derived([...$memories])
@@ -23,156 +24,70 @@
   }
 </script>
 
-<p class="description">
+<p class="text-[0.825rem] text-fg-muted mb-3.5 leading-[1.5]">
   记忆用于存储用户的稳定身份信息（姓名、语言、长期偏好）。AI 通过
-  <code>memory_save</code> / <code>memory_delete</code> 自动管理，您也可以在此手动操作。
-  记忆在每次对话的 system prompt 中自动注入。
+  <code
+    class="bg-surface-elevated border border-line rounded px-1.5 py-px text-[0.8rem] text-fg-sub"
+    >memory_save</code
+  >
+  /
+  <code
+    class="bg-surface-elevated border border-line rounded px-1.5 py-px text-[0.8rem] text-fg-sub"
+    >memory_delete</code
+  >
+  自动管理，您也可以在此手动操作。 记忆在每次对话的 system prompt 中自动注入。
 </p>
 
-<div class="add-row">
-  <input type="text" bind:value={newContent} placeholder="添加记忆…" onkeydown={handleKeydown} />
-  <button class="btn-add" onclick={add} disabled={adding || !newContent.trim()} type="button">
+<div class="flex gap-2 mb-3.5">
+  <input
+    type="text"
+    bind:value={newContent}
+    placeholder="添加记忆…"
+    class="flex-1 bg-surface-input border border-line rounded-lg px-3 py-2 text-[0.9rem]
+           text-fg font-[inherit] outline-none transition-colors duration-150 box-border
+           focus:border-accent"
+    onkeydown={handleKeydown}
+  />
+  <button
+    class="flex items-center gap-1.5 bg-accent border-none rounded-lg px-4 text-[0.875rem]
+           cursor-pointer text-white font-medium whitespace-nowrap transition-opacity duration-100
+           hover:opacity-85 disabled:opacity-40 disabled:cursor-not-allowed"
+    onclick={add}
+    disabled={adding || !newContent.trim()}
+    type="button"
+  >
+    <Plus size={14} />
     添加
   </button>
 </div>
 
 {#if memList.length === 0}
-  <p class="empty">暂无记忆。AI 会在对话中自动保存信息。</p>
+  <p class="text-[0.85rem] text-fg-muted text-center py-6 m-0">
+    暂无记忆。AI 会在对话中自动保存信息。
+  </p>
 {:else}
-  <ul class="list">
+  <ul class="list-none m-0 p-0 flex flex-col gap-1.5">
     {#each memList as mem (mem.id)}
-      <li class="item">
-        <span class="date">{new Date(mem.createdAt).toLocaleDateString('en-CA')}</span>
-        <span class="content">{mem.content}</span>
+      <li
+        class="flex items-start gap-2 bg-surface-elevated border border-line rounded-lg
+                 px-3 py-2.5"
+      >
+        <span class="text-[0.72rem] text-fg-muted whitespace-nowrap pt-px tabular-nums">
+          {new Date(mem.createdAt).toLocaleDateString('en-CA')}
+        </span>
+        <span class="flex-1 text-[0.85rem] text-fg leading-[1.5] break-words">
+          {mem.content}
+        </span>
         <button
-          class="btn-del"
+          class="bg-transparent border-none cursor-pointer text-fg-muted p-0.5 rounded
+                 flex flex-shrink-0 transition-all duration-100 hover:text-error hover:bg-error-bg"
           onclick={() => memories.remove(mem.id)}
           aria-label="删除记忆"
           type="button"
         >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
+          <X size={13} />
         </button>
       </li>
     {/each}
   </ul>
 {/if}
-
-<style>
-  .description {
-    font-size: 0.825rem;
-    color: var(--text-muted);
-    margin: 0 0 14px;
-    line-height: 1.5;
-  }
-  .description code {
-    background: var(--surface-elevated);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 1px 5px;
-    font-size: 0.8rem;
-    color: var(--text-secondary);
-  }
-
-  .add-row {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 14px;
-  }
-  .add-row input {
-    flex: 1;
-    background: var(--surface-input);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 9px 12px;
-    font-size: 0.9rem;
-    color: var(--text-primary);
-    font-family: inherit;
-    outline: none;
-    transition: border-color 0.15s;
-    box-sizing: border-box;
-  }
-  .add-row input:focus {
-    border-color: var(--accent);
-  }
-
-  .btn-add {
-    background: var(--accent);
-    border: none;
-    border-radius: 8px;
-    padding: 0 18px;
-    font-size: 0.875rem;
-    cursor: pointer;
-    color: white;
-    font-weight: 500;
-    white-space: nowrap;
-    transition: opacity 0.1s;
-  }
-  .btn-add:hover:not(:disabled) {
-    opacity: 0.85;
-  }
-  .btn-add:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-
-  .empty {
-    font-size: 0.85rem;
-    color: var(--text-muted);
-    margin: 0;
-    text-align: center;
-    padding: 24px 0;
-  }
-
-  .list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .item {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    background: var(--surface-elevated);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 9px 12px;
-  }
-
-  .date {
-    font-size: 0.72rem;
-    color: var(--text-muted);
-    white-space: nowrap;
-    padding-top: 1px;
-    font-variant-numeric: tabular-nums;
-  }
-
-  .content {
-    flex: 1;
-    font-size: 0.85rem;
-    color: var(--text-primary);
-    line-height: 1.5;
-    word-break: break-word;
-  }
-
-  .btn-del {
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: var(--text-muted);
-    padding: 2px;
-    border-radius: 4px;
-    display: flex;
-    flex-shrink: 0;
-    transition: all 0.1s;
-  }
-  .btn-del:hover {
-    color: var(--error);
-    background: var(--error-bg);
-  }
-</style>

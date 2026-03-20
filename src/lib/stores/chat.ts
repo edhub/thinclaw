@@ -23,11 +23,7 @@ import { memories } from '$lib/stores/memory'
 import { browserTools } from '$lib/agent/tools'
 import { imageGenerateTool } from '$lib/agent/image'
 import { convertToLlm } from '$lib/agent/convert'
-import {
-  onPayload,
-  capturedPayloads,
-  clearCapturedPayloads,
-} from '$lib/agent/payload'
+import { onPayload, capturedPayloads, clearCapturedPayloads } from '$lib/agent/payload'
 import { settings, getApiKeyForProvider } from '$lib/stores/settings'
 import {
   listConversations,
@@ -46,11 +42,7 @@ import {
   shouldCompactProactive,
   shouldCompactByTime,
 } from '$lib/agent/compaction'
-import {
-  recordSession,
-  updateSessionTitle,
-  type SerializedTool,
-} from '$lib/fs/session-recorder'
+import { recordSession, updateSessionTitle, type SerializedTool } from '$lib/fs/session-recorder'
 
 // ─── Streaming throttle (rAF batching) ───────────────────────────────────────
 // Buffer incoming message_update events and flush at most once per animation
@@ -83,7 +75,34 @@ function cancelStreamingRaf(): void {
   _pendingStreamMsg = null
 }
 
-// ─── Singleton agent ──────────────────────────────────────────────────────────
+// ─── API call rate limiter ────────────────────────────────────────────────────
+// Tracks the timestamp of the most recent outgoing LLM API call.
+// The custom streamFn enforces a minimum gap between consecutive calls so that
+// rapid tool-call loops don't hit provider rate limits.
+
+let _lastApiCallMs = 0
+
+/**
+ * Enforce the configured inter-call delay.
+ * Waits until `toolCallDelay` seconds have elapsed since the previous call,
+ * then records the new call time.
+ */
+async function throttleApiCall(delayMs: number): Promise<void> {
+  const now = Date.now()
+  const elapsed = now - _lastApiCallMs
+  if (_lastApiCallMs > 0 && elapsed < delayMs) {
+    await new Promise<void>((resolve) => setTimeout(resolve, delayMs - elapsed))
+  }
+  _lastApiCallMs = Date.now()
+}
+
+/**
+ * Reset the rate limiter — called at the start of each fresh user prompt so
+ * the very first API call in a new conversation turn is never artificially delayed.
+ */
+function resetApiCallThrottle(): void {
+  _lastApiCallMs = 0
+}
 
 /** Return the utility model used for background tasks (compaction, auto-title). */
 function getUtilityModel() {
@@ -102,7 +121,7 @@ let _agent: Agent | null = null
  * For every other model the call is passed through unchanged.
  */
 function makeStreamFn() {
-  return function customStreamFn(
+  return async function customStreamFn(
     model: Model<any>,
     context: Parameters<typeof streamSimple>[1],
     options: Parameters<typeof streamSimple>[2],
@@ -116,6 +135,9 @@ function makeStreamFn() {
         }
       }
     }
+    // Enforce minimum inter-call delay to avoid provider rate limits.
+    const delayMs = (get(settings).toolCallDelay ?? 4) * 1000
+    await throttleApiCall(delayMs)
     return streamSimple(model, context, options)
   }
 }
@@ -566,6 +588,7 @@ export async function sendMessage(content: string, images: ImageContent[] = []):
 
   try {
     clearCapturedPayloads() // Clear previous payloads before new agent run
+    resetApiCallThrottle() // First API call of a fresh turn is never delayed
     await agent.prompt(content, images.length > 0 ? images : undefined)
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)

@@ -25,13 +25,15 @@
     "tailwindcss": "^4.2.1",
     "typescript": "^5.9.3",
     "vite": "^7.3.1",
-    "vite-plugin-pwa": "^1.2.0"
+    "vite-plugin-pwa": "^1.2.0",
+    "workbox-window": "^7.4.0"
   },
   "dependencies": {
     "@mariozechner/pi-agent-core": "^0.60.0",
     "@mariozechner/pi-ai": "^0.60.0",
     "highlight.js": "^11.11.1",
     "idb": "^8.0.3",
+    "lucide-svelte": "^0.577.0",
     "marked": "^17.0.4"
   },
   "pnpm": {

@@ -10,50 +10,21 @@
   }
 </script>
 
-<div class="persona-picker">
-  <label class="label" for="persona-select">角色</label>
-  <select id="persona-select" value={currentPersonaId ?? ''} onchange={handleChange}>
+<div class="flex items-center gap-2.5 pt-8 justify-center">
+  <label class="text-xs text-fg-muted opacity-70 whitespace-nowrap" for="persona-select">
+    角色
+  </label>
+  <select
+    id="persona-select"
+    value={currentPersonaId ?? ''}
+    onchange={handleChange}
+    class="bg-surface-input text-fg border border-line rounded-lg px-2.5 py-1.5 text-[0.82rem]
+           cursor-pointer outline-none transition-colors duration-150 max-w-[260px]
+           hover:border-accent focus:border-accent"
+  >
     <option value="">无（默认）</option>
     {#each BUILTIN_PERSONAS as persona (persona.id)}
       <option value={persona.id}>{persona.name} — {persona.description}</option>
     {/each}
   </select>
 </div>
-
-<style>
-  .persona-picker {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 32px 0 0;
-    justify-content: center;
-  }
-
-  .label {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    opacity: 0.7;
-    white-space: nowrap;
-  }
-
-  select {
-    background: var(--surface-input);
-    color: var(--text-primary);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 5px 10px;
-    font-size: 0.82rem;
-    cursor: pointer;
-    outline: none;
-    transition: border-color 0.15s;
-    max-width: 260px;
-  }
-
-  select:hover {
-    border-color: var(--accent);
-  }
-
-  select:focus {
-    border-color: var(--accent);
-  }
-</style>

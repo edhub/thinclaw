@@ -1,21 +1,21 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
+  import { Menu, X } from 'lucide-svelte'
   import { readFile, writeFile } from '$lib/fs/opfs'
   import { renderMarkdown } from '$lib/utils/markdown'
-  import {
-    readSessionFile,
-    parseSessionJsonl,
-    type SessionEntry,
-  } from '$lib/fs/session-recorder'
+  import { readSessionFile, parseSessionJsonl, type SessionEntry } from '$lib/fs/session-recorder'
   import FileTree from '$lib/components/FileTree.svelte'
   import FileEditor from '$lib/components/FileEditor.svelte'
 
   // ─── State ────────────────────────────────────────────────────────────────
 
-  let fileTreeRef = $state<{
-    expandToPath: (path: string) => Promise<void>
-    refresh: () => Promise<void>
-  } | undefined>(undefined)
+  let fileTreeRef = $state<
+    | {
+        expandToPath: (path: string) => Promise<void>
+        refresh: () => Promise<void>
+      }
+    | undefined
+  >(undefined)
 
   let selectedPath = $state<string | null>(null)
   let sessionEntries = $state<SessionEntry[] | null>(null)
@@ -141,11 +141,15 @@
   onDestroy(() => document.removeEventListener('keydown', handleKeydown))
 </script>
 
-<div class="layout">
+<div class="flex h-screen bg-surface text-fg font-[inherit]">
   <!-- Mobile backdrop -->
   {#if treeOpen}
     <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <div class="mobile-backdrop" role="presentation" onclick={() => (treeOpen = false)}></div>
+    <div
+      class="fixed inset-0 bg-black/40 z-40 sm:hidden"
+      role="presentation"
+      onclick={() => (treeOpen = false)}
+    ></div>
   {/if}
 
   <FileTree
@@ -157,24 +161,36 @@
     onClose={() => (treeOpen = false)}
   />
 
-  <main class="main">
-    <!-- Mobile top bar -->
-    <header class="mobile-header">
-      <button class="btn-hamburger" onclick={() => (treeOpen = true)} aria-label="打开文件树">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="3" y1="6" x2="21" y2="6" />
-          <line x1="3" y1="12" x2="21" y2="12" />
-          <line x1="3" y1="18" x2="21" y2="18" />
-        </svg>
+  <main class="flex-1 flex flex-col overflow-hidden">
+    <!-- Mobile top bar (hidden on sm+) -->
+    <header
+      class="flex sm:hidden items-center gap-1.5 h-[52px] px-2 pl-3
+                   border-b border-line bg-surface flex-shrink-0"
+    >
+      <button
+        class="bg-transparent border-none p-1.5 rounded-lg cursor-pointer text-fg-sub
+               flex items-center flex-shrink-0 transition-all duration-100
+               hover:bg-surface-hover hover:text-fg"
+        onclick={() => (treeOpen = true)}
+        aria-label="打开文件树"
+      >
+        <Menu size={18} />
       </button>
-      <span class="mobile-title">
+      <span
+        class="flex-1 text-[0.9rem] font-semibold text-fg overflow-hidden
+                   text-ellipsis whitespace-nowrap text-center"
+      >
         {selectedPath ? selectedPath.split('/').pop() : 'Files'}
       </span>
-      <button class="btn-mobile-nav" onclick={() => history.back()} aria-label="返回" title="返回">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-          <line x1="18" y1="6" x2="6" y2="18" />
-          <line x1="6" y1="6" x2="18" y2="18" />
-        </svg>
+      <button
+        class="bg-transparent border-none p-1.5 rounded-lg cursor-pointer text-fg-sub
+               flex items-center flex-shrink-0 transition-all duration-100
+               hover:bg-surface-hover hover:text-fg"
+        onclick={() => history.back()}
+        aria-label="返回"
+        title="返回"
+      >
+        <X size={16} />
       </button>
     </header>
 
@@ -197,106 +213,3 @@
     />
   </main>
 </div>
-
-<style>
-  .layout {
-    display: flex;
-    height: 100vh;
-    background: var(--surface-main);
-    color: var(--text-primary);
-    font-family: inherit;
-  }
-
-  .main {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-
-  /* ── Mobile backdrop ── */
-  .mobile-backdrop {
-    display: none;
-  }
-
-  /* ── Mobile top bar (hidden on desktop) ── */
-  .mobile-header {
-    display: none;
-  }
-
-  @media (max-width: 639px) {
-    .mobile-backdrop {
-      display: block;
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.4);
-      z-index: 40;
-    }
-
-    .mobile-header {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      height: 52px;
-      padding: 0 8px 0 12px;
-      border-bottom: 1px solid var(--border);
-      background: var(--surface-main);
-      flex-shrink: 0;
-    }
-
-    .mobile-title {
-      flex: 1;
-      font-size: 0.9rem;
-      font-weight: 600;
-      color: var(--text-primary);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      text-align: center;
-    }
-
-    .btn-hamburger,
-    .btn-mobile-nav {
-      background: none;
-      border: none;
-      padding: 6px;
-      border-radius: 8px;
-      cursor: pointer;
-      color: var(--text-secondary);
-      display: flex;
-      align-items: center;
-      text-decoration: none;
-      flex-shrink: 0;
-      transition: all 0.1s;
-    }
-    .btn-hamburger:hover,
-    .btn-mobile-nav:hover {
-      background: var(--surface-hover);
-      color: var(--text-primary);
-    }
-  }
-
-  @media print {
-    .mobile-header,
-    .mobile-backdrop {
-      display: none !important;
-    }
-
-    /* Let the layout expand to full content height for printing */
-    :global(body),
-    :global(html) {
-      height: auto !important;
-      overflow: visible !important;
-    }
-
-    .layout {
-      height: auto !important;
-      overflow: visible !important;
-    }
-
-    .main {
-      overflow: visible !important;
-      height: auto !important;
-    }
-  }
-</style>

@@ -1,13 +1,13 @@
 <script lang="ts">
+  import { FileText, AlertCircle, ChevronRight } from 'lucide-svelte'
+
   /**
    * Renders a single <file-context> block parsed from a user message.
    * Collapsed by default to keep chat history clean.
    */
   export interface FileContext {
     path: string
-    /** "1-20" when truncated, undefined when full file was shown. */
     lines?: string
-    /** Total line count of the file, present when truncated. */
     total?: number
     truncated: boolean
     error: boolean
@@ -30,69 +30,66 @@
 
 <div class="fc-card" class:fc-error={file.error}>
   <button
-    class="fc-header"
+    class="fc-header flex items-center gap-1.5 w-full px-2.5 py-1.5 bg-transparent border-none
+           cursor-pointer text-left text-fg-sub transition-colors duration-100
+           hover:bg-surface-hover min-w-0"
     onclick={() => (expanded = !expanded)}
     type="button"
     aria-expanded={expanded}
   >
-    <!-- File icon -->
-    <svg
-      class="fc-icon"
-      width="12"
-      height="12"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="2"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-    >
+    <span class="flex-shrink-0 text-fg-muted" class:error-icon={file.error}>
       {#if file.error}
-        <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line
-          x1="12"
-          y1="16"
-          x2="12.01"
-          y2="16"
-        />
+        <AlertCircle size={12} />
       {:else}
-        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-        <polyline points="14 2 14 8 20 8" />
+        <FileText size={12} />
       {/if}
-    </svg>
+    </span>
 
-    <span class="fc-path" title={file.path}>{fileName}</span>
+    <span
+      class="fc-path font-medium text-fg whitespace-nowrap flex-shrink-0 font-mono text-[0.78rem]"
+      title={file.path}>{fileName}</span
+    >
 
     {#if file.path !== fileName}
-      <span class="fc-dir">{file.path.slice(0, -(fileName.length + 1))}/</span>
+      <span
+        class="text-fg-muted whitespace-nowrap overflow-hidden text-ellipsis min-w-0
+                   font-mono text-[0.78rem]"
+      >
+        {file.path.slice(0, -(fileName.length + 1))}/
+      </span>
     {/if}
 
     {#if metaLabel}
-      <span class="fc-meta">{metaLabel}</span>
+      <span class="text-fg-muted whitespace-nowrap flex-shrink-0 ml-0.5 text-[0.78rem]">
+        {metaLabel}
+      </span>
     {/if}
 
     {#if file.truncated}
-      <span class="fc-truncated-badge">截断</span>
+      <span
+        class="text-[0.68rem] px-1.5 py-px rounded bg-surface-hover text-fg-muted
+                   border border-line flex-shrink-0">截断</span
+      >
     {/if}
 
-    <svg
-      class="fc-chevron"
-      class:open={expanded}
-      width="11"
-      height="11"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="2.5"
-    >
-      <polyline points="9 18 15 12 9 6" />
-    </svg>
+    <ChevronRight
+      size={11}
+      class="ml-auto flex-shrink-0 text-fg-muted transition-transform duration-[180ms]
+             {expanded ? 'rotate-90' : ''}"
+    />
   </button>
 
   {#if expanded}
     {#if file.error}
-      <p class="fc-error-msg">文件读取失败，可能已被移动或删除。</p>
+      <p class="m-0 px-3 py-2 text-[0.78rem] text-error border-t border-error bg-error-bg">
+        文件读取失败，可能已被移动或删除。
+      </p>
     {:else}
-      <pre class="fc-content">{file.content}</pre>
+      <pre
+        class="fc-content m-0 px-3 py-2.5 text-[0.78rem] font-mono text-fg-sub
+                  border-t border-line whitespace-pre overflow-x-auto max-h-[320px]
+                  overflow-y-auto leading-[1.55]"
+        style="background: var(--code-bg);">{file.content}</pre>
     {/if}
   {/if}
 </div>
@@ -112,102 +109,7 @@
     opacity: 0.7;
   }
 
-  .fc-header {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    width: 100%;
-    padding: 6px 10px;
-    background: none;
-    border: none;
-    cursor: pointer;
-    text-align: left;
-    color: var(--text-secondary);
-    transition: background 0.1s;
-    min-width: 0;
-  }
-
-  .fc-header:hover {
-    background: var(--surface-hover);
-  }
-
-  .fc-icon {
-    flex-shrink: 0;
-    color: var(--text-muted);
-  }
-
-  .fc-error .fc-icon {
-    color: var(--error);
-  }
-
-  .fc-path {
-    font-weight: 500;
-    color: var(--text-primary);
-    white-space: nowrap;
-    flex-shrink: 0;
-    font-family: monospace;
-    font-size: 0.78rem;
-  }
-
-  .fc-dir {
-    color: var(--text-muted);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    min-width: 0;
-    font-family: monospace;
-    font-size: 0.78rem;
-  }
-
-  .fc-meta {
-    color: var(--text-muted);
-    white-space: nowrap;
-    flex-shrink: 0;
-    margin-left: 2px;
-  }
-
-  .fc-truncated-badge {
-    font-size: 0.68rem;
-    padding: 1px 5px;
-    border-radius: 4px;
-    background: var(--surface-hover);
-    color: var(--text-muted);
-    border: 1px solid var(--border);
-    flex-shrink: 0;
-  }
-
-  .fc-chevron {
-    margin-left: auto;
-    flex-shrink: 0;
-    color: var(--text-muted);
-    transition: transform 0.18s;
-  }
-
-  .fc-chevron.open {
-    transform: rotate(90deg);
-  }
-
-  .fc-content {
-    margin: 0;
-    padding: 10px 12px;
-    font-size: 0.78rem;
-    font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace;
-    color: var(--text-secondary);
-    background: var(--code-bg);
-    border-top: 1px solid var(--border);
-    white-space: pre;
-    overflow-x: auto;
-    max-height: 320px;
-    overflow-y: auto;
-    line-height: 1.55;
-  }
-
-  .fc-error-msg {
-    margin: 0;
-    padding: 8px 12px;
-    font-size: 0.78rem;
-    color: var(--error);
-    background: var(--error-bg);
-    border-top: 1px solid var(--error);
+  .error-icon {
+    color: var(--error) !important;
   }
 </style>

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
+  import { Image, FileUp, X, Square, ArrowUp, AlertCircle, FileText } from 'lucide-svelte'
   import { isStreaming, queueLength } from '$lib/stores/chat'
   import type { ImageContent } from '@mariozechner/pi-ai'
   import FilePicker from '$lib/components/FilePicker.svelte'
@@ -24,28 +25,19 @@
   let textFileInputEl = $state<HTMLInputElement | undefined>(undefined)
   let isDraggingOver = $state(false)
   let isMobile = $state(false)
-  /** Names of files rejected during local upload (auto-clears after 3 s). */
   let uploadErrors = $state<string[]>([])
   let uploadErrorTimer: ReturnType<typeof setTimeout> | null = null
 
   // ── @mention state ────────────────────────────────────────────────────────
-
-  /** Files selected via @mention — shown as chips, injected as context on send. */
   let fileChips = $state<FileEntry[]>([])
-  /** All workspace files (lazy-loaded on first @). */
   let allFiles = $state<FileEntry[]>([])
-  /** Whether the dropdown is visible. */
   let showDropdown = $state(false)
-  /** The text typed after the triggering @. */
   let mentionQuery = $state('')
-  /** Index of @ in textarea value, used to splice it out on selection. */
   let mentionStart = $state(-1)
-  /** Keyboard-highlighted item in the dropdown. */
   let dropdownIndex = $state(0)
 
   const filteredFiles = $derived(fuzzyFilter(allFiles, mentionQuery))
 
-  // Reset keyboard selection when the filtered list changes.
   $effect(() => {
     void filteredFiles
     dropdownIndex = 0
@@ -53,7 +45,6 @@
 
   onMount(() => {
     isMobile = window.matchMedia('(max-width: 639px)').matches
-    // Restore unsent draft
     const saved = localStorage.getItem(DRAFT_KEY)
     if (saved) {
       value = saved
@@ -61,7 +52,6 @@
     }
   })
 
-  // Persist draft to localStorage whenever value changes
   $effect(() => {
     if (value) {
       localStorage.setItem(DRAFT_KEY, value)
@@ -70,17 +60,10 @@
     }
   })
 
-  /** Focus the textarea from outside (called by parent via bind:this). */
   export function focus() {
     textareaEl?.focus()
   }
 
-  // ── @mention helpers ──────────────────────────────────────────────────────
-
-  /**
-   * Reload the workspace file list (once per dropdown session).
-   * Fast on OPFS — only metadata reads.
-   */
   async function refreshFiles() {
     try {
       allFiles = await listWorkspaceFiles()
@@ -89,21 +72,12 @@
     }
   }
 
-  /**
-   * Inspect textarea content around the cursor.
-   * Opens the dropdown when an @-word is directly before the cursor;
-   * closes it otherwise.
-   */
   function checkMentionTrigger(textarea: HTMLTextAreaElement) {
     const cursor = textarea.selectionStart
     const before = textarea.value.slice(0, cursor)
-    // Match @ followed by non-whitespace chars up to the cursor.
     const match = /@([^\s@]*)$/.exec(before)
     if (match) {
-      if (!showDropdown) {
-        // Dropdown just opened — refresh file list.
-        refreshFiles()
-      }
+      if (!showDropdown) refreshFiles()
       mentionQuery = match[1]
       mentionStart = match.index
       showDropdown = true
@@ -114,13 +88,10 @@
     }
   }
 
-  /** Called when the user picks a file from the dropdown. */
   function selectFile(file: FileEntry) {
-    // Remove the @query text from the textarea.
     if (mentionStart >= 0) {
       value = value.slice(0, mentionStart) + value.slice(mentionStart + 1 + mentionQuery.length)
     }
-    // Add as a chip (avoid duplicates).
     if (!fileChips.find((c) => c.path === file.path)) {
       fileChips = [...fileChips, file]
     }
@@ -133,8 +104,6 @@
   function removeChip(path: string) {
     fileChips = fileChips.filter((c) => c.path !== path)
   }
-
-  // ── Image helpers ─────────────────────────────────────────────────────────
 
   function fileToImageContent(file: File): Promise<ImageContent> {
     return new Promise((resolve, reject) => {
@@ -158,9 +127,6 @@
     images = [...images, ...contents]
   }
 
-  // ── Local text-file upload helpers ───────────────────────────────────────
-
-  /** Extensions we're confident are plain text / source code. */
   const TEXT_EXTENSIONS = new Set([
     'txt',
     'md',
@@ -236,11 +202,6 @@
     return TEXT_EXTENSIONS.has(ext)
   }
 
-  /**
-   * Upload local text files to OPFS under `uploads/`, then add as chips.
-   * Non-text files are rejected with a brief inline error.
-   * Same-name files are silently overwritten.
-   */
   async function uploadLocalFiles(files: FileList | File[]) {
     const all = Array.from(files)
     const rejected: string[] = []
@@ -261,16 +222,12 @@
       }
     }
 
-    // Add successfully uploaded files as chips (deduplicated).
     for (const entry of uploaded) {
       if (!fileChips.find((c) => c.path === entry.path)) {
         fileChips = [...fileChips, entry]
-      } else {
-        // Already chipped — content was silently overwritten; no need to add again.
       }
     }
 
-    // Show rejection notice for 3 s.
     if (rejected.length > 0) {
       if (uploadErrorTimer) clearTimeout(uploadErrorTimer)
       uploadErrors = rejected
@@ -284,24 +241,18 @@
     images = images.filter((_, i) => i !== idx)
   }
 
-  // ── Event handlers ────────────────────────────────────────────────────────
-
   function handleKeydown(e: KeyboardEvent) {
-    // ESC closes modal
     if (isModal && e.key === 'Escape') {
       e.preventDefault()
       onClose?.()
       return
     }
-
-    // Escape closes the dropdown regardless of whether there are results.
     if (showDropdown && e.key === 'Escape') {
       e.preventDefault()
       showDropdown = false
       return
     }
 
-    // Intercept navigation/selection keys only when there are items to pick from.
     if (showDropdown && filteredFiles.length > 0) {
       if (e.key === 'ArrowDown') {
         e.preventDefault()
@@ -332,16 +283,11 @@
   }
 
   function handleBlur() {
-    // Delay so FilePicker's onmousedown can fire before the dropdown disappears.
     setTimeout(() => {
       showDropdown = false
     }, 150)
   }
 
-  /**
-   * Build and send the message.
-   * File chip contexts are prepended; UI resets immediately before the async reads.
-   */
   async function submit() {
     const trimmed = value.trim()
     if (!trimmed && images.length === 0 && fileChips.length === 0) return
@@ -349,7 +295,6 @@
     const currentImages = $state.snapshot(images) as ImageContent[]
     const currentChips = $state.snapshot(fileChips) as FileEntry[]
 
-    // Reset UI eagerly — prevents double-sends while awaiting file reads.
     value = ''
     localStorage.removeItem(DRAFT_KEY)
     images = []
@@ -357,7 +302,6 @@
     showDropdown = false
     if (textareaEl) textareaEl.style.height = 'auto'
 
-    // Inject file context blocks ahead of the user's message.
     let content = trimmed
     if (currentChips.length > 0) {
       const parts: string[] = []
@@ -368,13 +312,10 @@
             const returnedLines = preview.content.split('\n').length
             parts.push(
               `<file-context path="${chip.path}" lines="1-${returnedLines}" total="${preview.totalLines}" truncated="true">\n` +
-                `${preview.content}\n` +
-                `</file-context>`,
+                `${preview.content}\n</file-context>`,
             )
           } else {
-            parts.push(
-              `<file-context path="${chip.path}">\n` + `${preview.content}\n` + `</file-context>`,
-            )
+            parts.push(`<file-context path="${chip.path}">\n${preview.content}\n</file-context>`)
           }
         } catch {
           parts.push(`<file-context path="${chip.path}" error="true"></file-context>`)
@@ -399,18 +340,10 @@
     textareaEl.style.height = Math.min(textareaEl.scrollHeight, 200) + 'px'
   }
 
-  function openFilePicker() {
-    fileInputEl?.click()
-  }
-
   function handleFileChange(e: Event) {
     const input = e.target as HTMLInputElement
     if (input.files) addFiles(input.files)
     input.value = ''
-  }
-
-  function openTextFilePicker() {
-    textFileInputEl?.click()
   }
 
   function handleTextFileChange(e: Event) {
@@ -460,7 +393,7 @@
   const canSend = $derived(value.trim().length > 0 || images.length > 0 || fileChips.length > 0)
 </script>
 
-<!-- Hidden image input -->
+<!-- Hidden inputs -->
 <input
   bind:this={fileInputEl}
   type="file"
@@ -469,8 +402,6 @@
   style="display:none"
   onchange={handleFileChange}
 />
-
-<!-- Hidden text-file input -->
 <input
   bind:this={textFileInputEl}
   type="file"
@@ -481,7 +412,8 @@
 />
 
 <div
-  class="input-area"
+  class="input-area px-6 pb-4 pt-3 border-t border-line bg-surface flex-shrink-0"
+  class:modal-mode={isModal}
   role="region"
   aria-label="消息输入框"
   ondragover={handleDragOver}
@@ -490,93 +422,75 @@
 >
   <!-- Image previews -->
   {#if images.length > 0}
-    <div class="previews">
+    <div class="flex flex-wrap gap-2 mb-2">
       {#each images as img, i}
-        <div class="preview-item">
-          <img src={previewSrc(img)} alt="attachment {i + 1}" />
-          <button class="remove-btn" onclick={() => removeImage(i)} title="移除图片" type="button">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
-              <path
-                d="M18 6L6 18M6 6l12 12"
-                stroke="currentColor"
-                stroke-width="2.5"
-                stroke-linecap="round"
-              />
-            </svg>
+        <div class="relative w-16 h-16 flex-shrink-0">
+          <img
+            src={previewSrc(img)}
+            alt="attachment {i + 1}"
+            class="w-16 h-16 object-cover rounded-lg border border-line block"
+          />
+          <button
+            class="absolute -top-1.5 -right-1.5 w-[18px] h-[18px] rounded-full bg-fg-sub
+                   border-none cursor-pointer flex items-center justify-center text-white p-0
+                   transition-colors duration-100 z-10 hover:bg-error"
+            onclick={() => removeImage(i)}
+            title="移除图片"
+            type="button"
+          >
+            <X size={10} />
           </button>
         </div>
       {/each}
     </div>
   {/if}
 
-  <!-- File chips (from @mention and local upload) -->
+  <!-- File chips -->
   {#if fileChips.length > 0}
-    <div class="file-chips">
+    <div class="flex flex-wrap gap-1.5 mb-2">
       {#each fileChips as chip}
-        <div class="file-chip">
-          <svg
-            width="11"
-            height="11"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-            <polyline points="14 2 14 8 20 8" />
-          </svg>
-          <span class="chip-name" title={chip.path}>{chip.name}</span>
+        <div
+          class="inline-flex items-center gap-1.5 bg-surface-elevated border border-line
+                    rounded-md px-2 py-1 text-[0.78rem] text-fg-sub max-w-[240px]"
+        >
+          <FileText size={11} class="text-fg-muted flex-shrink-0" />
+          <span class="truncate min-w-0">{chip.name}</span>
           <button
-            class="chip-remove"
+            class="bg-transparent border-none p-0 cursor-pointer text-fg-muted flex
+                   items-center flex-shrink-0 rounded transition-colors duration-100
+                   hover:text-error"
             onclick={() => removeChip(chip.path)}
             type="button"
             title="移除文件"
           >
-            <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor">
-              <path
-                d="M18 6L6 18M6 6l12 12"
-                stroke="currentColor"
-                stroke-width="2.5"
-                stroke-linecap="round"
-              />
-            </svg>
+            <X size={9} />
           </button>
         </div>
       {/each}
     </div>
   {/if}
 
-  <!-- Upload error notice (auto-dismisses after 3 s) -->
+  <!-- Upload error notice -->
   {#if uploadErrors.length > 0}
-    <div class="upload-error">
-      <svg
-        width="12"
-        height="12"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-      >
-        <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line
-          x1="12"
-          y1="16"
-          x2="12.01"
-          y2="16"
-        />
-      </svg>
+    <div
+      class="flex items-center gap-1.5 text-[0.78rem] text-error bg-error-bg
+                border border-error rounded-md px-2.5 py-1.5 mb-2"
+    >
+      <AlertCircle size={12} class="flex-shrink-0" />
       不支持：{uploadErrors.join('、')}（仅限文本 / 代码文件）
     </div>
   {/if}
 
-  <!-- Input box wrapper (relative for dropdown positioning) -->
-  <div class="input-wrapper">
+  <!-- Input wrapper (relative for dropdown) -->
+  <div class="relative">
     {#if showDropdown}
       <FilePicker files={filteredFiles} selectedIndex={dropdownIndex} onSelect={selectFile} />
     {/if}
 
-    <div class="input-box" class:drag-over={isDraggingOver}>
+    <div
+      class="input-box flex flex-col rounded-xl px-3 pt-2.5 pb-2"
+      class:drag-over={isDraggingOver}
+    >
       <textarea
         bind:this={textareaEl}
         bind:value
@@ -588,226 +502,77 @@
             ? '输入消息，@ 引用文件…'
             : '输入消息（Enter 发送，Shift+Enter 换行，@ 引用文件）'}
         rows="1"
+        class="w-full bg-transparent border-none outline-none resize-none text-[0.9375rem]
+               leading-relaxed text-fg font-[inherit] max-h-[200px] overflow-y-auto
+               placeholder:text-fg-muted"
         onkeydown={handleKeydown}
         oninput={handleInput}
         onblur={handleBlur}
         onpaste={handlePaste}
       ></textarea>
 
-      <div class="toolbar">
-        <div class="toolbar-left">
-          <!-- Attach image button -->
-          <button class="attach-btn" type="button" onclick={openFilePicker} title="附加图片">
-            <svg
-              width="17"
-              height="17"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-              <circle cx="8.5" cy="8.5" r="1.5" />
-              <polyline points="21 15 16 10 5 21" />
-            </svg>
-          </button>
-
-          <!-- Upload local text file button -->
+      <div class="flex items-center justify-between mt-1.5">
+        <div class="flex items-center gap-0.5">
           <button
-            class="attach-btn"
+            class="attach-btn w-[34px] h-[34px] flex items-center justify-center rounded-lg
+                   bg-transparent border-none cursor-pointer text-fg-muted flex-shrink-0
+                   transition-colors duration-100 hover:text-fg-sub hover:bg-surface-hover"
             type="button"
-            onclick={openTextFilePicker}
+            onclick={() => fileInputEl?.click()}
+            title="附加图片"
+          >
+            <Image size={17} />
+          </button>
+          <button
+            class="attach-btn w-[34px] h-[34px] flex items-center justify-center rounded-lg
+                   bg-transparent border-none cursor-pointer text-fg-muted flex-shrink-0
+                   transition-colors duration-100 hover:text-fg-sub hover:bg-surface-hover"
+            type="button"
+            onclick={() => textFileInputEl?.click()}
             title="上传本地文本文件到工作区"
           >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-              <polyline points="14 2 14 8 20 8" />
-              <line x1="12" y1="18" x2="12" y2="12" />
-              <polyline points="9 15 12 12 15 15" />
-            </svg>
+            <FileUp size={16} />
           </button>
         </div>
 
-        <div class="toolbar-right">
-          <!-- Stop button — only visible while streaming -->
+        <div class="flex items-center gap-0.5">
           {#if $isStreaming}
-            <button class="stop-btn" onclick={onAbort} title="停止" type="button">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                <rect x="6" y="6" width="12" height="12" rx="2" />
-              </svg>
+            <button
+              class="w-[34px] h-[34px] flex items-center justify-center rounded-lg
+                     bg-transparent border border-line cursor-pointer text-fg-sub flex-shrink-0
+                     transition-all duration-100 hover:text-error hover:border-error hover:bg-error-bg"
+              onclick={onAbort}
+              title="停止"
+              type="button"
+            >
+              <Square size={14} />
             </button>
           {/if}
-
-          <!-- Send button — queues when streaming -->
           <button
-            class="send-btn"
+            class="w-[34px] h-[34px] flex items-center justify-center rounded-lg bg-accent
+                   border-none cursor-pointer text-white flex-shrink-0
+                   transition-opacity duration-100 disabled:opacity-40 disabled:cursor-not-allowed
+                   not-disabled:hover:opacity-85"
             disabled={!canSend}
             onclick={submit}
             title={$isStreaming ? '排队发送' : '发送'}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
-            </svg>
+            <ArrowUp size={16} />
           </button>
         </div>
       </div>
     </div>
   </div>
 
-  <p class="hint">ThinClaw 将对话存储在您的浏览器本地，API 密钥不会离开您的设备。</p>
+  <p class="hint text-[0.72rem] text-fg-muted text-center mt-2 mb-0">
+    ThinClaw 将对话存储在您的浏览器本地，API 密钥不会离开您的设备。
+  </p>
 </div>
 
 <style>
-  .input-area {
-    padding: 12px 24px 16px;
-    border-top: 1px solid var(--border);
-    background: var(--surface-main);
-    flex-shrink: 0;
-  }
-
-  /* Modal mode adjustments */
-  :global(.chat-input-modal) .input-area {
-    border-top: none;
-    border-radius: 16px;
-    padding: 16px 24px 20px;
-  }
-
-  :global(.chat-input-modal) .hint {
-    display: none;
-  }
-
-  /* Image previews row */
-  .previews {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 8px;
-  }
-
-  .preview-item {
-    position: relative;
-    width: 64px;
-    height: 64px;
-    border-radius: 8px;
-    overflow: visible;
-    flex-shrink: 0;
-  }
-
-  .preview-item img {
-    width: 64px;
-    height: 64px;
-    object-fit: cover;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-    display: block;
-  }
-
-  .remove-btn {
-    position: absolute;
-    top: -6px;
-    right: -6px;
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    background: var(--text-secondary);
-    border: none;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    padding: 0;
-    transition: background 0.1s;
-    z-index: 1;
-  }
-
-  .remove-btn:hover {
-    background: var(--error);
-  }
-
-  /* File chips row (@mention selections) */
-  .file-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-bottom: 8px;
-  }
-
-  .file-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    background: var(--surface-elevated);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 3px 6px 3px 8px;
-    font-size: 0.78rem;
-    color: var(--text-secondary);
-    max-width: 240px;
-  }
-
-  .chip-name {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    min-width: 0;
-  }
-
-  .chip-remove {
-    background: none;
-    border: none;
-    padding: 0;
-    cursor: pointer;
-    color: var(--text-muted);
-    display: flex;
-    align-items: center;
-    flex-shrink: 0;
-    border-radius: 3px;
-    transition: color 0.1s;
-  }
-
-  .chip-remove:hover {
-    color: var(--error);
-  }
-
-  /* Upload error notice */
-  .upload-error {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 0.78rem;
-    color: var(--error);
-    background: var(--error-bg);
-    border: 1px solid var(--error);
-    border-radius: 6px;
-    padding: 5px 10px;
-    margin-bottom: 8px;
-  }
-
-  /* Wrapper that anchors the FilePicker dropdown */
-  .input-wrapper {
-    position: relative;
-  }
-
-  /* Input box */
   .input-box {
-    display: flex;
-    flex-direction: column;
     background: var(--surface-input);
     border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 10px 12px 8px;
     transition: border-color 0.15s;
   }
 
@@ -820,117 +585,14 @@
     background: var(--surface-hover);
   }
 
-  textarea {
-    width: 100%;
-    background: none;
-    border: none;
-    outline: none;
-    resize: none;
-    font-size: 0.9375rem;
-    line-height: 1.5;
-    color: var(--text-primary);
-    font-family: inherit;
-    max-height: 200px;
-    overflow-y: auto;
+  .modal-mode {
+    border-top: none !important;
+    border-radius: 16px;
+    padding: 16px 24px 20px;
   }
 
-  textarea::placeholder {
-    color: var(--text-muted);
-  }
-
-  /* Bottom toolbar: attachments left, actions right */
-  .toolbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-top: 6px;
-  }
-
-  .toolbar-left,
-  .toolbar-right {
-    display: flex;
-    align-items: center;
-    gap: 2px;
-  }
-
-  /* Attach button */
-  .attach-btn {
-    background: none;
-    border: none;
-    border-radius: 8px;
-    width: 34px;
-    height: 34px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    color: var(--text-muted);
-    flex-shrink: 0;
-    transition:
-      color 0.1s,
-      background 0.1s;
-  }
-
-  .attach-btn:hover {
-    color: var(--text-secondary);
-    background: var(--surface-hover);
-  }
-
-  /* Stop button */
-  .stop-btn {
-    background: none;
-    border: 1.5px solid var(--border);
-    border-radius: 8px;
-    width: 34px;
-    height: 34px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    color: var(--text-secondary);
-    flex-shrink: 0;
-    transition:
-      color 0.1s,
-      background 0.1s,
-      border-color 0.1s;
-  }
-
-  .stop-btn:hover {
-    color: var(--error);
-    border-color: var(--error);
-    background: var(--error-bg);
-  }
-
-  /* Send button */
-  .send-btn {
-    background: var(--accent);
-    border: none;
-    border-radius: 8px;
-    width: 34px;
-    height: 34px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    color: white;
-    flex-shrink: 0;
-    transition: opacity 0.1s;
-  }
-
-  .send-btn:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-
-  .send-btn:not(:disabled):hover {
-    opacity: 0.85;
-  }
-
-  .hint {
-    font-size: 0.72rem;
-    color: var(--text-muted);
-    text-align: center;
-    margin: 8px 0 0;
+  .modal-mode .hint {
+    display: none;
   }
 
   @media (max-width: 639px) {

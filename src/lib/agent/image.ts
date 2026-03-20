@@ -22,7 +22,7 @@ const IMAGE_ENDPOINT =
   'https://api.laozhang.ai/v1beta/models/gemini-3-pro-image-preview:generateContent'
 
 export interface GeneratedImage {
-  imageData: string  // base64-encoded
+  imageData: string // base64-encoded
   mimeType: string
   prompt: string
   aspectRatio: string
@@ -93,7 +93,8 @@ const imageGenerateParams = Type.Object({
   ),
   imageSize: Type.Optional(
     Type.Union([Type.Literal('1K'), Type.Literal('2K'), Type.Literal('4K')], {
-      description: 'Image resolution. Defaults to "1K". Use "4K" only when the user explicitly requests high resolution.',
+      description:
+        'Image resolution. Defaults to "1K". Use "4K" only when the user explicitly requests high resolution.',
     }),
   ),
 })

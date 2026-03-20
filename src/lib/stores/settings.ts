@@ -6,28 +6,33 @@
  *   enabledModelKeys — explicit list of enabled model keys ([] = all models whose provider has a key)
  *   model            — active conversation model key (`${provider}:${modelId}`)
  *   utilityModelKey  — utility model key (compaction, auto-title)
- *   theme            — color theme
  *   systemPrompt     — extra instructions appended to the system prompt
+ *   toolCallDelay    — minimum delay (seconds) between consecutive API calls
  */
 import { writable, get } from 'svelte/store'
 import { browser } from '$app/environment'
-import { MODELS, DEFAULT_MODEL_KEY, DEFAULT_UTILITY_MODEL_KEY, modelKey, getModelByKey } from '$lib/agent/models'
+import {
+  MODELS,
+  DEFAULT_MODEL_KEY,
+  DEFAULT_UTILITY_MODEL_KEY,
+  modelKey,
+  getModelByKey,
+} from '$lib/agent/models'
 import type { Model } from '@mariozechner/pi-ai'
 
 export { MODELS, modelKey, getModelByKey }
-
-export type Theme = 'light' | 'dark' | 'system'
 
 export interface Settings {
   laozhangApiKey: string
   bianxieApiKey: string
   lingyaaiApiKey: string
   qiniuApiKey: string
-  enabledModelKeys: string[]   // [] means all models of providers with keys
-  model: string                // active model key: `${provider}:${modelId}`
-  utilityModelKey: string      // utility model key (compaction / auto-title)
-  theme: Theme
+  enabledModelKeys: string[] // [] means all models of providers with keys
+  model: string // active model key: `${provider}:${modelId}`
+  utilityModelKey: string // utility model key (compaction / auto-title)
   systemPrompt: string
+  /** Minimum delay (seconds) between consecutive API calls. Range: 2–10. Default: 4. */
+  toolCallDelay: number
 }
 
 const STORAGE_KEY = 'thinclaw:settings'
@@ -40,8 +45,8 @@ const DEFAULTS: Settings = {
   enabledModelKeys: [],
   model: DEFAULT_MODEL_KEY,
   utilityModelKey: DEFAULT_UTILITY_MODEL_KEY,
-  theme: 'system',
   systemPrompt: '',
+  toolCallDelay: 4,
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────

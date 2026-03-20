@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Check, RotateCcw } from 'lucide-svelte'
   import { soul, DEFAULT_SOUL } from '$lib/agent/soul'
 
   let draft = $state($soul)
@@ -18,96 +19,55 @@
   }
 </script>
 
-<p class="description">
+<p class="text-[0.825rem] text-fg-muted mb-3.5 leading-[1.5]">
   这是 AI 的身份设定——包括其价值观、个性和行为准则。AI 可以通过
-  <code>soul_update</code> 工具自主更新，您也可以直接在此编辑。
+  <code
+    class="bg-surface-elevated border border-line rounded px-1.5 py-px text-[0.8rem] text-fg-sub"
+  >
+    soul_update
+  </code>
+  工具自主更新，您也可以直接在此编辑。
 </p>
 
-<textarea class="editor" bind:value={draft} spellcheck="false" rows="18"></textarea>
+<textarea
+  class="block w-full bg-surface-input border border-line rounded-lg px-3 py-2.5
+         font-mono text-[0.82rem] leading-[1.6] text-fg resize-y min-h-[320px]
+         outline-none box-border transition-colors duration-150 mb-3
+         focus:border-accent"
+  bind:value={draft}
+  spellcheck="false"
+  rows="18"
+></textarea>
 
-<div class="actions">
-  <button class="btn-reset" onclick={reset} type="button">恢复默认</button>
-  <button class="btn-save" onclick={save} type="button">
-    {saved ? '✓ 已保存' : '保存灵魂'}
+<div class="flex justify-between items-center">
+  <button
+    class="flex items-center gap-1.5 bg-transparent border border-line rounded-lg px-3.5 py-1.5
+           text-[0.85rem] cursor-pointer text-fg-muted transition-all duration-100
+           hover:text-error hover:border-error"
+    onclick={reset}
+    type="button"
+  >
+    <RotateCcw size={13} />
+    恢复默认
+  </button>
+  <button
+    class="flex items-center gap-1.5 bg-accent border-none rounded-lg px-5 py-1.5 text-[0.875rem]
+           cursor-pointer text-white font-medium transition-opacity duration-100
+           hover:opacity-85"
+    onclick={save}
+    type="button"
+  >
+    {#if saved}
+      <Check size={14} /> 已保存
+    {:else}
+      保存灵魂
+    {/if}
   </button>
 </div>
 
 <style>
-  .description {
-    font-size: 0.825rem;
-    color: var(--text-muted);
-    margin: 0 0 14px;
-    line-height: 1.5;
-  }
-  .description code {
-    background: var(--surface-elevated);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 1px 5px;
-    font-size: 0.8rem;
-    color: var(--text-secondary);
-  }
-
-  .editor {
-    display: block;
-    width: 100%;
-    background: var(--surface-input);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 9px 12px;
-    font-family: 'Menlo', 'Monaco', 'Consolas', monospace;
-    font-size: 0.82rem;
-    line-height: 1.6;
-    color: var(--text-primary);
-    resize: vertical;
-    min-height: 320px;
-    outline: none;
-    box-sizing: border-box;
-    transition: border-color 0.15s;
-    margin-bottom: 12px;
-  }
-  .editor:focus {
-    border-color: var(--accent);
-  }
-
-  .actions {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .btn-reset {
-    background: none;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 7px 14px;
-    font-size: 0.85rem;
-    cursor: pointer;
-    color: var(--text-muted);
-    transition: all 0.1s;
-  }
-  .btn-reset:hover {
-    color: var(--error);
-    border-color: var(--error);
-  }
-
-  .btn-save {
-    background: var(--accent);
-    border: none;
-    border-radius: 8px;
-    padding: 7px 20px;
-    font-size: 0.875rem;
-    cursor: pointer;
-    color: white;
-    font-weight: 500;
-    transition: opacity 0.1s;
-  }
-  .btn-save:hover {
-    opacity: 0.85;
-  }
-
   @media (max-width: 639px) {
-    .editor {
+    textarea {
       min-height: 180px;
     }
   }
