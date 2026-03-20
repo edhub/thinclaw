@@ -19,7 +19,7 @@
 </script>
 
 <div
-  class="absolute bottom-[calc(100%+6px)] left-0 right-0 bg-surface-elevated border border-line
+  class="absolute top-[calc(100%+6px)] left-0 right-0 bg-surface-elevated border border-line
          rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] max-h-[236px] overflow-y-auto z-[100]"
   bind:this={listEl}
   role="listbox"

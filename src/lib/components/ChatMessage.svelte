@@ -164,7 +164,7 @@
       </span>
 
       <!-- Metadata -->
-      <div class="flex items-center gap-1.5 ml-auto flex-shrink-0 opacity-50">
+      <div class="flex items-center gap-1.5 flex-shrink-0 opacity-50">
         {#if msgTimestamp}
           <span class="text-[0.7rem] text-fg-muted leading-none whitespace-nowrap">
             {formatTime(msgTimestamp)}
@@ -255,12 +255,12 @@
 
         <!-- Text -->
         {#if isStreaming && textBlocks.length > 0}
-          <div class="text-fg leading-[1.7] text-[0.9375rem] break-words whitespace-pre-wrap">
+          <div class="text-fg leading-[1.7] text-base break-words whitespace-pre-wrap">
             {textBlocks.map((b) => b.text).join('')}
           </div>
         {:else if renderedHtml}
           <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-          <div class="markdown-body text-fg leading-[1.7] text-[0.9375rem] break-words">
+          <div class="markdown-body text-fg leading-[1.7] text-base break-words">
             {@html renderedHtml}
           </div>
         {:else if isStreaming && thinkingBlocks.length === 0 && toolCallBlocks.length === 0}
@@ -323,7 +323,7 @@
             {#if errorExpanded}
               <div
                 class="px-3 py-2 text-[0.8rem] text-error opacity-90 leading-[1.55]
-                     border-t whitespace-pre-wrap break-words"
+                     border-t whitespace-pre-wrap wrap-break-word"
                 style="border-color: color-mix(in srgb, var(--error) 30%, transparent)"
               >
                 {assistantMsg?.errorMessage ?? '发生未知错误。'}

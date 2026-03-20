@@ -502,7 +502,7 @@
             ? '输入消息，@ 引用文件…'
             : '输入消息（Enter 发送，Shift+Enter 换行，@ 引用文件）'}
         rows="1"
-        class="w-full bg-transparent border-none outline-none resize-none text-[0.9375rem]
+        class="w-full bg-transparent border-none outline-none resize-none text-base
                leading-relaxed text-fg font-[inherit] max-h-[200px] overflow-y-auto
                placeholder:text-fg-muted"
         onkeydown={handleKeydown}

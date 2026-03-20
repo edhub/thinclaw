@@ -399,9 +399,29 @@
         </div>
       {/if}
     {/if}
+
+    <!-- Chat input modal — inside <main> so it auto-centers in the chat area -->
+    {#if chatInputOpen}
+      <div
+        class="absolute top-[10vh] left-0 right-0 mx-auto z-[70]
+               w-[min(calc(100%-2rem),760px)]
+               bg-surface border border-line rounded-2xl
+               shadow-[0_10px_40px_rgba(0,0,0,0.2)]
+               max-h-[70vh] animate-modal-slide-up"
+      >
+        <ChatInput
+          bind:this={chatInputRef}
+          onSend={handleSend}
+          onAbort={abortStreaming}
+          open={true}
+          onClose={() => (chatInputOpen = false)}
+          isModal={true}
+        />
+      </div>
+    {/if}
   </main>
 
-  <!-- Chat input modal -->
+  <!-- Backdrop — fixed/full-screen so it also dims the sidebar -->
   {#if chatInputOpen}
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <div
@@ -409,20 +429,6 @@
       role="presentation"
       onclick={() => (chatInputOpen = false)}
     ></div>
-    <div
-      class="fixed top-[10vh] left-1/2 -translate-x-1/2 z-[70] w-[min(92vw,760px)]
-                bg-surface border border-line rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.2)]
-                max-h-[70vh] overflow-y-auto animate-modal-slide-up"
-    >
-      <ChatInput
-        bind:this={chatInputRef}
-        onSend={handleSend}
-        onAbort={abortStreaming}
-        open={true}
-        onClose={() => (chatInputOpen = false)}
-        isModal={true}
-      />
-    </div>
   {/if}
 
   <!-- Floating action button -->

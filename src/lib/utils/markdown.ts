@@ -1,15 +1,20 @@
 /**
  * Markdown renderer with lazy-loaded syntax highlighting via highlight.js.
- * highlight.js is ~1MB so we load it on first use to keep the initial bundle small.
+ *
+ * We import 'highlight.js/lib/common' (37 common languages, ~300 KB) instead of
+ * the full 'highlight.js' (~970 KB / 192 languages) to keep the lazy chunk small.
+ * Covered: js/ts, python, bash/shell, go, rust, java, c/cpp, json, yaml, xml/html,
+ *           css/scss, markdown, sql, swift, kotlin, ruby, php, diff, …
  */
 import { marked } from 'marked'
 
+// highlight.js/lib/common re-exports the same HLJSApi as the default package.
 type HljsModule = typeof import('highlight.js').default
 let hljsPromise: Promise<HljsModule> | null = null
 
 function getHljs(): Promise<HljsModule> {
   if (!hljsPromise) {
-    hljsPromise = import('highlight.js').then((m) => m.default)
+    hljsPromise = import('highlight.js/lib/common').then((m) => m.default as HljsModule)
   }
   return hljsPromise
 }
