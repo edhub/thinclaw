@@ -67,7 +67,7 @@ export default defineConfig({
       injectRegister: null,       // disable HTML injection — SvelteKit SSG overwrites it anyway
                                    // registration is handled via virtual:pwa-register in layout
       devOptions: {
-        enabled: true,            // serve manifest + SW in dev
+        enabled: false,           // disable SW in dev — navigateFallback causes 404 for index.html
       },
       // Precache all static assets emitted by the build.
       workbox: {
