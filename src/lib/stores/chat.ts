@@ -21,7 +21,7 @@ import { getPersonaById } from '$lib/agent/personas'
 import { soul } from '$lib/agent/soul'
 import { memories } from '$lib/stores/memory'
 import { browserTools } from '$lib/agent/tools'
-import { imageGenerateTool } from '$lib/agent/image'
+import { imageGenerateTool, imageEditTool, setLastImageContextFromUpload } from '$lib/agent/image'
 import { convertToLlm } from '$lib/agent/convert'
 import { onPayload, capturedPayloads, clearCapturedPayloads } from '$lib/agent/payload'
 import { settings, getApiKeyForProvider } from '$lib/stores/settings'
@@ -165,7 +165,7 @@ function getAgent(): Agent {
 /** Build the agent tool list, optionally including the image generation tool. */
 function buildTools(imageEnabled: boolean): AgentTool[] {
   return imageEnabled
-    ? ([...browserTools, imageGenerateTool] as AgentTool[])
+    ? ([...browserTools, imageGenerateTool, imageEditTool] as AgentTool[])
     : (browserTools as AgentTool[])
 }
 
@@ -531,6 +531,12 @@ export async function sendMessage(content: string, images: ImageContent[] = []):
   // Always track the last attempted content so the error banner retry is correct.
   lastPromptContent.set(content)
   lastPromptImages.set(images)
+
+  // Keep last-image context in sync so edit_image can use it automatically.
+  // Aspect ratio is detected asynchronously from image dimensions — fire-and-forget.
+  if (images.length > 0) {
+    setLastImageContextFromUpload(images[0].data, images[0].mimeType).catch(() => {})
+  }
 
   const s = get(settings)
   const activeModel = getModelByKey(s.model)

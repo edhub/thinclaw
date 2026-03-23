@@ -68,6 +68,8 @@
         return '更新自我认知'
       case 'generate_image':
         return `生成图片${args.prompt ? ': ' + String(args.prompt).slice(0, 40) : ''}`
+      case 'edit_image':
+        return `编辑图片${args.prompt ? ': ' + String(args.prompt).slice(0, 40) : ''}`
       default:
         return name
     }
@@ -83,7 +85,7 @@
   )
 
   const generatedImage = $derived(
-    result?.toolName === 'generate_image' && !result.isError
+    (result?.toolName === 'generate_image' || result?.toolName === 'edit_image') && !result.isError
       ? (result.details as GeneratedImage | null)
       : null,
   )
@@ -204,7 +206,7 @@
               />
               <div class="flex items-center justify-between">
                 <span class="text-[0.72rem] text-fg-muted font-mono">
-                  {generatedImage.aspectRatio} · {generatedImage.imageSize}
+                  {generatedImage.operation === 'edit' ? '编辑' : '生成'} · {generatedImage.aspectRatio}{generatedImage.imageSize ? ' · ' + generatedImage.imageSize : ''}
                 </span>
                 <a
                   href="data:{generatedImage.mimeType};base64,{generatedImage.imageData}"

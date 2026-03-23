@@ -2,13 +2,14 @@
  * Settings store — persisted to localStorage.
  *
  * Fields:
- *   laozhangApiKey   — laozhang.ai API key
- *   enabledModelKeys — explicit list of enabled model keys ([] = all models whose provider has a key)
- *   model            — active conversation model key (`${provider}:${modelId}`)
- *   utilityModelKey  — utility model key (compaction, auto-title)
- *   systemPrompt     — extra instructions appended to the system prompt
- *   toolCallDelay    — minimum delay (seconds) between consecutive API calls
- *   theme            — UI color theme id (see src/lib/themes.ts)
+ *   laozhangApiKey        — laozhang.ai API key
+ *   enabledModelKeys      — explicit list of enabled model keys ([] = all models whose provider has a key)
+ *   model                 — active conversation model key (`${provider}:${modelId}`)
+ *   utilityModelKey       — utility model key (compaction, auto-title)
+ *   imageGenerationModel  — image tool model key (from IMAGE_MODELS in image.ts)
+ *   systemPrompt          — extra instructions appended to the system prompt
+ *   toolCallDelay         — minimum delay (seconds) between consecutive API calls
+ *   theme                 — UI color theme id (see src/lib/themes.ts)
  */
 import { writable, get } from 'svelte/store'
 import { browser } from '$app/environment'
@@ -19,8 +20,11 @@ import {
   modelKey,
   getModelByKey,
 } from '$lib/agent/models'
+import { IMAGE_MODELS, DEFAULT_IMAGE_MODEL_KEY } from '$lib/agent/image'
 import { DEFAULT_THEME_ID } from '$lib/themes'
 import type { Model } from '@mariozechner/pi-ai'
+
+export { IMAGE_MODELS, DEFAULT_IMAGE_MODEL_KEY }
 
 export { MODELS, modelKey, getModelByKey }
 
@@ -32,6 +36,8 @@ export interface Settings {
   enabledModelKeys: string[] // [] means all models of providers with keys
   model: string // active model key: `${provider}:${modelId}`
   utilityModelKey: string // utility model key (compaction / auto-title)
+  /** Image tool model key. One of IMAGE_MODELS[*].key. */
+  imageGenerationModel: string
   systemPrompt: string
   /** Minimum delay (seconds) between consecutive API calls. Range: 2–10. Default: 4. */
   toolCallDelay: number
@@ -49,6 +55,7 @@ const DEFAULTS: Settings = {
   enabledModelKeys: [],
   model: DEFAULT_MODEL_KEY,
   utilityModelKey: DEFAULT_UTILITY_MODEL_KEY,
+  imageGenerationModel: DEFAULT_IMAGE_MODEL_KEY,
   systemPrompt: '',
   toolCallDelay: 4,
   theme: DEFAULT_THEME_ID,

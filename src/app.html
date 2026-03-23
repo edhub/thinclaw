@@ -8,6 +8,29 @@
     />
     <meta name="description" content="ThinClaw — lightweight AI chat in your browser" />
     <meta name="theme-color" content="#FF9940" />
+    <script>
+      // Inline bootstrap — runs synchronously before any bundle loads.
+      // Reads the saved theme from localStorage and immediately:
+      //   1. Sets data-theme on <html> (prevents theme flash / FOUC)
+      //   2. Updates <meta name="theme-color"> to the correct accent color
+      ;(function () {
+        var ACCENTS = {
+          'ayu-light': '#ff9940',
+          'adwaita-light': '#3584e4',
+          'base16-default': '#7cafc2',
+          'catppuccin-latte': '#1e66f5',
+          ingrid: '#c07028',
+          'zed-onelight': '#4078f2',
+        }
+        try {
+          var s = localStorage.getItem('thinclaw:settings')
+          var theme = (s && JSON.parse(s).theme) || 'ayu-light'
+          document.documentElement.dataset.theme = theme
+          var accent = ACCENTS[theme] || ACCENTS['ayu-light']
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', accent)
+        } catch (_) {}
+      })()
+    </script>
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />

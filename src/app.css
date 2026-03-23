@@ -408,7 +408,10 @@ select {
 @media print {
   /* Only neutralise page-level backgrounds → pure white.            */
   /* Component backgrounds (cards, code blocks, badges) are kept.    */
-  :root {
+  /* :root[data-theme] has equal specificity to :root[data-theme='x']  */
+  /* and comes later in the file, so it wins the cascade tie.        */
+  :root,
+  :root[data-theme] {
     --surface-main: #ffffff;
     --surface-sidebar: #ffffff;
   }

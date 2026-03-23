@@ -29,6 +29,8 @@
     isModelEnabled,
     MODELS,
     modelKey,
+    IMAGE_MODELS,
+    DEFAULT_IMAGE_MODEL_KEY,
   } from '$lib/stores/settings'
   import { THEMES } from '$lib/themes'
   import SettingsSoul from '$lib/components/SettingsSoul.svelte'
@@ -240,6 +242,29 @@
               </select>
               <p class="text-[0.75rem] text-fg-muted m-0 leading-[1.5]">
                 用于对话摘要和自动标题生成，推荐选速度快、成本低的模型。
+              </p>
+            </div>
+            <div class="flex flex-col gap-1.5 mb-[18px]">
+              <label class="text-[0.825rem] font-medium text-fg-sub" for="image-model">
+                图像工具模型
+              </label>
+              <select
+                id="image-model"
+                class="settings-input"
+                value={$settings.imageGenerationModel ?? DEFAULT_IMAGE_MODEL_KEY}
+                onchange={(e) =>
+                  updateSettings({
+                    imageGenerationModel: (e.target as HTMLSelectElement).value,
+                  })}
+              >
+                {#each IMAGE_MODELS as m (m.key)}
+                  <option value={m.key}>{m.name}</option>
+                {/each}
+              </select>
+              <p class="text-[0.75rem] text-fg-muted m-0 leading-[1.5]">
+                用于 <span class="font-mono text-fg-sub">generate_image</span> 和
+                <span class="font-mono text-fg-sub">edit_image</span> 工具。需确保对应供应商已配置
+                API 密钥。
               </p>
             </div>
           {/if}
