@@ -30,6 +30,7 @@
     MODELS,
     modelKey,
   } from '$lib/stores/settings'
+  import { THEMES } from '$lib/themes'
   import SettingsSoul from '$lib/components/SettingsSoul.svelte'
   import SettingsMemory from '$lib/components/SettingsMemory.svelte'
 
@@ -311,6 +312,45 @@
         <div class="max-w-[600px] pt-7 max-sm:max-w-full max-sm:pt-5">
           <h2 class="text-base font-semibold text-fg m-0 mb-1.5">外观 & 指令</h2>
 
+          <!-- Theme picker -->
+          <div class="flex flex-col gap-1.5 mb-[22px]">
+            <!-- svelte-ignore a11y_label_has_associated_control -->
+            <label class="text-[0.825rem] font-medium text-fg-sub">配色主题</label>
+            <div class="grid grid-cols-3 gap-2 max-sm:grid-cols-2">
+              {#each THEMES as theme (theme.id)}
+                {@const active = ($settings.theme || 'ayu-light') === theme.id}
+                <button
+                  type="button"
+                  class="theme-swatch"
+                  class:theme-swatch-active={active}
+                  onclick={() => updateSettings({ theme: theme.id })}
+                  style="--swatch-bg:{theme.bg}; --swatch-accent:{theme.accent}; --swatch-text:{theme.text}"
+                  title={theme.label}
+                >
+                  <!-- Mini preview strip -->
+                  <span class="swatch-preview" aria-hidden="true">
+                    <span class="swatch-bar" style="background:{theme.bg}">
+                      <span class="swatch-dot" style="background:{theme.accent}"></span>
+                      <span class="swatch-line" style="background:{theme.text}"></span>
+                      <span
+                        class="swatch-line swatch-line-short"
+                        style="background:{theme.text}"
+                      ></span>
+                    </span>
+                  </span>
+                  <span class="swatch-label" style="color:{active ? theme.accent : ''}"
+                    >{theme.label}</span
+                  >
+                  {#if active}
+                    <span class="swatch-check" style="color:{theme.accent}">✓</span>
+                  {/if}
+                </button>
+              {/each}
+            </div>
+          </div>
+
+          <div class="h-px bg-line my-5"></div>
+
           <div class="flex flex-col gap-1.5 mb-[18px]">
             <label class="text-[0.825rem] font-medium text-fg-sub" for="system-prompt">
               自定义指令
@@ -509,6 +549,73 @@
 {/snippet}
 
 <style>
+  /* ── Theme swatch picker ── */
+  .theme-swatch {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    background: var(--surface-elevated);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 10px 8px;
+    cursor: pointer;
+    font-family: inherit;
+    transition:
+      border-color 0.15s,
+      background 0.15s;
+    text-align: left;
+  }
+  .theme-swatch:hover {
+    background: var(--surface-hover);
+    border-color: var(--text-muted);
+  }
+  .theme-swatch-active {
+    border-color: var(--swatch-accent);
+    background: var(--surface-hover);
+  }
+  .swatch-preview {
+    display: block;
+  }
+  .swatch-bar {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 7px;
+    border-radius: 6px;
+    border: 1px solid rgba(0, 0, 0, 0.07);
+  }
+  .swatch-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .swatch-line {
+    height: 3px;
+    border-radius: 2px;
+    flex: 1;
+    opacity: 0.35;
+  }
+  .swatch-line-short {
+    flex: 0.5;
+  }
+  .swatch-label {
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    line-height: 1.3;
+    transition: color 0.15s;
+  }
+  .swatch-check {
+    position: absolute;
+    top: 7px;
+    right: 9px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+
   /* Shared form input style — used by many inputs/selects/textareas */
   .settings-input {
     background: var(--surface-input);

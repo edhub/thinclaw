@@ -134,6 +134,122 @@
   --badge-compaction-fg: #5a6068;
 }
 
+/* ─── Adwaita Light ─── */
+/* GNOME libadwaita default light palette.                        */
+:root[data-theme='adwaita-light'] {
+  --accent: #3584e4;
+  --surface-main: #fafafa;
+  --surface-sidebar: #f0f0f0;
+  --surface-elevated: #e8e8e8;
+  --surface-hover: #e0e0e0;
+  --surface-active: #d5d5d5;
+  --surface-input: #f6f5f4;
+  --text-primary: #1c1c1e;
+  --text-secondary: #5c5c5c;
+  --text-muted: #9a9996;
+  --border: #d3d0cc;
+  --code-bg: #f4f2ef;
+  --code-inline-bg: #eae8e4;
+  --code-inline-color: #813d9c;
+  --error: #e01b24;
+  --error-bg: #fce6e6;
+  --warn-color: #c07700;
+  --warn-bg: #fff6d8;
+}
+
+/* ─── Base16 Default Light ─── */
+/* https://github.com/tinted-theming/base16-default-schemes       */
+:root[data-theme='base16-default'] {
+  --accent: #7cafc2; /* base0D — blue */
+  --surface-main: #f8f8f8; /* base00 */
+  --surface-sidebar: #f0f0f0;
+  --surface-elevated: #e8e8e8; /* base01 */
+  --surface-hover: #e0e0e0;
+  --surface-active: #d8d8d8; /* base02 */
+  --surface-input: #f4f4f4;
+  --text-primary: #383838; /* base05 */
+  --text-secondary: #585858; /* base04 */
+  --text-muted: #b8b8b8; /* base03 */
+  --border: #d0d0d0;
+  --code-bg: #efefef;
+  --code-inline-bg: #e5e5e5;
+  --code-inline-color: #ba8baf; /* base0E — violet */
+  --error: #ab4642; /* base08 — red */
+  --error-bg: #f9ecec;
+  --warn-color: #a16946; /* base0F — brown */
+  --warn-bg: #fdf3ec;
+}
+
+/* ─── Catppuccin Latte ─── */
+/* https://github.com/catppuccin/catppuccin — Latte flavor        */
+:root[data-theme='catppuccin-latte'] {
+  --accent: #1e66f5; /* Blue */
+  --surface-main: #eff1f5; /* Base */
+  --surface-sidebar: #e6e9ef; /* Mantle */
+  --surface-elevated: #dce0e8; /* Crust */
+  --surface-hover: #ccd0da; /* Surface0 */
+  --surface-active: #bcc0cc; /* Surface1 */
+  --surface-input: #e6e9ef; /* Mantle */
+  --text-primary: #4c4f69; /* Text */
+  --text-secondary: #5c5f77; /* Subtext1 */
+  --text-muted: #9ca0b0; /* Overlay0 */
+  --border: #ccd0da; /* Surface0 */
+  --code-bg: #dce0e8; /* Crust */
+  --code-inline-bg: #ccd0da; /* Surface0 */
+  --code-inline-color: #8839ef; /* Mauve */
+  --error: #d20f39; /* Red */
+  --error-bg: #fce4e8;
+  --warn-color: #df8e1d; /* Yellow */
+  --warn-bg: #fef9ec;
+}
+
+/* ─── Ingrid ─── */
+/* Warm ivory / cream palette — inspired by the Helix editor theme */
+:root[data-theme='ingrid'] {
+  --accent: #c07028;
+  --surface-main: #fffbf0;
+  --surface-sidebar: #f5f0e0;
+  --surface-elevated: #ece6d0;
+  --surface-hover: #e3ddc8;
+  --surface-active: #d8d2bc;
+  --surface-input: #f8f2e4;
+  --text-primary: #3a3428;
+  --text-secondary: #6a5e50;
+  --text-muted: #9a8e82;
+  --border: #d8d0bc;
+  --code-bg: #f0ead8;
+  --code-inline-bg: #e8e0cc;
+  --code-inline-color: #8060a0;
+  --error: #c83020;
+  --error-bg: #fdecea;
+  --warn-color: #a07000;
+  --warn-bg: #fdf5cc;
+}
+
+/* ─── Zed One Light ─── */
+/* https://github.com/zed-industries/zed — One Light variant      */
+/* Inspired by Atom One Light. Clean white + vivid blue accent.   */
+:root[data-theme='zed-onelight'] {
+  --accent: #4078f2;
+  --surface-main: #fafafa;
+  --surface-sidebar: #f2f2f2;
+  --surface-elevated: #eaeaea;
+  --surface-hover: #e2e2e2;
+  --surface-active: #d5d5d5;
+  --surface-input: #f4f4f4;
+  --text-primary: #383a42;
+  --text-secondary: #696c77;
+  --text-muted: #a0a1a7;
+  --border: #d8d8d8;
+  --code-bg: #f0f0f0;
+  --code-inline-bg: #e8e8e8;
+  --code-inline-color: #a626a4;
+  --error: #e45649;
+  --error-bg: #fce4e4;
+  --warn-color: #986801;
+  --warn-bg: #fff4e0;
+}
+
 /* ─── Reset & base ─── */
 *,
 *::before,

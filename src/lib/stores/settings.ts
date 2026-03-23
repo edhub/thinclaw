@@ -8,6 +8,7 @@
  *   utilityModelKey  — utility model key (compaction, auto-title)
  *   systemPrompt     — extra instructions appended to the system prompt
  *   toolCallDelay    — minimum delay (seconds) between consecutive API calls
+ *   theme            — UI color theme id (see src/lib/themes.ts)
  */
 import { writable, get } from 'svelte/store'
 import { browser } from '$app/environment'
@@ -18,6 +19,7 @@ import {
   modelKey,
   getModelByKey,
 } from '$lib/agent/models'
+import { DEFAULT_THEME_ID } from '$lib/themes'
 import type { Model } from '@mariozechner/pi-ai'
 
 export { MODELS, modelKey, getModelByKey }
@@ -33,6 +35,8 @@ export interface Settings {
   systemPrompt: string
   /** Minimum delay (seconds) between consecutive API calls. Range: 2–10. Default: 4. */
   toolCallDelay: number
+  /** UI color theme id. See src/lib/themes.ts for available values. */
+  theme: string
 }
 
 const STORAGE_KEY = 'thinclaw:settings'
@@ -47,6 +51,7 @@ const DEFAULTS: Settings = {
   utilityModelKey: DEFAULT_UTILITY_MODEL_KEY,
   systemPrompt: '',
   toolCallDelay: 4,
+  theme: DEFAULT_THEME_ID,
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
