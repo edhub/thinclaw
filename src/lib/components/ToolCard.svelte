@@ -32,40 +32,16 @@
   const isError = $derived(result?.isError ?? false)
 
   function toolTitle(name: string, args: Record<string, unknown>): string {
-    const rawPath = String(args.path ?? args.file_path ?? '')
-    const short = rawPath ? rawPath.replace(/^(?:workspace|tmp)\//, '') : ''
-
     switch (name) {
-      case 'fs_read':
-        return `读取 ${short || '文件'}`
-      case 'fs_write':
-        return `写入 ${short || '文件'}`
-      case 'fs_edit':
-        return `编辑 ${short || '文件'}`
-      case 'fs_list':
-        return `列出 ${short || '目录'}`
-      case 'fs_search':
-        return `搜索${args.query ? ' "' + String(args.query).slice(0, 40) + '"' : ''}`
-      case 'fs_delete':
-        return `删除 ${short || '文件'}`
-      case 'fs_move':
-        return `移动 ${short || '文件'}`
-      case 'fs_stat':
-        return `查看 ${short || '文件'}`
-      case 'calculate':
-        return `计算 ${String(args.expression ?? '').slice(0, 50)}`
-      case 'datetime':
-        return '获取当前时间'
-      case 'memory_add':
+      case 'run_js': {
+        const code = String(args.code ?? '')
+        const firstLine = code.split('\n').find((l) => l.trim())?.trim() ?? ''
+        return firstLine ? `JS: ${firstLine.slice(0, 60)}` : 'Run JS'
+      }
+      case 'memory_save':
         return '存储记忆'
-      case 'memory_list':
-        return '查看记忆'
       case 'memory_delete':
         return '删除记忆'
-      case 'soul_read':
-        return '读取自我认知'
-      case 'soul_update':
-        return '更新自我认知'
       case 'generate_image':
         return `生成图片${args.prompt ? ': ' + String(args.prompt).slice(0, 40) : ''}`
       case 'edit_image':
@@ -90,25 +66,11 @@
       : null,
   )
 
-  const openFilePath = $derived(
+  const touchedFiles = $derived(
     (() => {
-      if (!result || result.isError) return null
-      switch (result.toolName) {
-        case 'fs_write': {
-          const m = resultText.match(/^Written: (.+?) \(/)
-          return m?.[1] ?? null
-        }
-        case 'fs_edit': {
-          const m = resultText.match(/^Edited: (.+)$/m)
-          return m?.[1]?.trim() ?? null
-        }
-        case 'fs_move': {
-          const m = resultText.match(/→ (.+)$/m)
-          return m?.[1]?.trim() ?? null
-        }
-        default:
-          return null
-      }
+      if (!result || result.isError) return [] as string[]
+      const files = (result.details as any)?.touchedFiles
+      return Array.isArray(files) ? (files as string[]) : []
     })(),
   )
 
@@ -157,20 +119,22 @@
     />
   </button>
 
-  {#if openFilePath}
-    <div class="px-2.5 pb-1.5">
-      <a
-        href="/files?path={encodeURIComponent(openFilePath)}"
-        target="_blank"
-        rel="noopener noreferrer"
-        class="inline-flex items-center gap-1.5 text-[0.75rem] font-mono text-accent
-               no-underline px-1 py-0.5 rounded transition-colors duration-100
-               hover:bg-surface-active"
-      >
-        <FileText size={11} />
-        {openFilePath}
-        <ExternalLink size={10} />
-      </a>
+  {#if touchedFiles.length > 0}
+    <div class="px-2.5 pb-1.5 flex flex-wrap gap-1">
+      {#each touchedFiles as path (path)}
+        <a
+          href="/files?path={encodeURIComponent(path)}"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="inline-flex items-center gap-1.5 text-[0.75rem] font-mono text-accent
+                 no-underline px-1 py-0.5 rounded transition-colors duration-100
+                 hover:bg-surface-active"
+        >
+          <FileText size={11} />
+          {path}
+          <ExternalLink size={10} />
+        </a>
+      {/each}
     </div>
   {/if}
 

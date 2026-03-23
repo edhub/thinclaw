@@ -74,8 +74,12 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         // Don't precache highlight.js language chunks — they're huge and lazily loaded.
         globIgnores: ['**/highlight.js/**'],
-        // SPA fallback: all navigation requests that miss the cache serve index.html.
-        navigateFallback: '/index.html',
+        // navigateFallback is intentionally omitted.
+        // adapter-static already sets fallback: 'index.html', so the hosting layer
+        // handles SPA routing.  VitePWA runs during the Vite build step, before
+        // adapter-static writes index.html, so /index.html is never in the
+        // precache manifest — referencing it via navigateFallback would make
+        // Workbox throw "non-precached-url" on every SW initialization.
       },
       manifest: {
         name: 'ThinClaw',

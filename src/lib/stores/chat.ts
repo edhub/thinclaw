@@ -7,7 +7,6 @@
  *   settings    — user's custom instructions
  *
  * After agent_end, new messages are persisted to IndexedDB.
- * Auto-compaction runs after each agent_end when context is nearly full.
  */
 import { writable, derived, get } from 'svelte/store'
 import { Agent } from '@mariozechner/pi-agent-core'
@@ -22,7 +21,6 @@ import { soul } from '$lib/agent/soul'
 import { memories } from '$lib/stores/memory'
 import { browserTools } from '$lib/agent/tools'
 import { imageGenerateTool, imageEditTool, setLastImageContextFromUpload } from '$lib/agent/image'
-import { convertToLlm } from '$lib/agent/convert'
 import { onPayload, capturedPayloads, clearCapturedPayloads } from '$lib/agent/payload'
 import { settings, getApiKeyForProvider } from '$lib/stores/settings'
 import {
@@ -35,13 +33,6 @@ import {
   type Conversation,
 } from '$lib/db'
 import { generateAiTitle, countUserMessages } from '$lib/agent/title'
-import {
-  compactMessages,
-  estimateContextTokens,
-  shouldCompact,
-  shouldCompactProactive,
-  shouldCompactByTime,
-} from '$lib/agent/compaction'
 import { recordSession, updateSessionTitle, type SerializedTool } from '$lib/fs/session-recorder'
 
 // ─── Streaming throttle (rAF batching) ───────────────────────────────────────
@@ -146,10 +137,9 @@ function getAgent(): Agent {
   if (!_agent) {
     _agent = new Agent({
       initialState: {
-        tools: buildTools(false),
+        tools: buildTools(),
         systemPrompt: '',
       },
-      convertToLlm,
       onPayload: onPayload,
       streamFn: makeStreamFn(),
     })
@@ -162,11 +152,9 @@ function getAgent(): Agent {
   return _agent
 }
 
-/** Build the agent tool list, optionally including the image generation tool. */
-function buildTools(imageEnabled: boolean): AgentTool[] {
-  return imageEnabled
-    ? ([...browserTools, imageGenerateTool, imageEditTool] as AgentTool[])
-    : (browserTools as AgentTool[])
+/** Build the agent tool list. Image tools are always included when configured. */
+function buildTools(): AgentTool[] {
+  return [...browserTools, imageGenerateTool, imageEditTool] as AgentTool[]
 }
 
 /**
@@ -197,8 +185,6 @@ export const queueLength = writable(0)
  * before the first message_end event confirms it's in agent.state.messages.
  */
 export const pendingUserMessage = writable<AgentMessage | null>(null)
-/** 'compacting' while auto-compaction LLM call is in flight. */
-export const compactionStatus = writable<'idle' | 'compacting'>('idle')
 
 /**
  * Content of the most recently attempted sendMessage call.
@@ -210,12 +196,6 @@ export const lastPromptImages = writable<ImageContent[]>([])
 export const activeConversation = derived(
   [conversations, activeConversationId],
   ([$convs, $id]) => $convs.find((c) => c.id === $id) ?? null,
-)
-
-/** Whether the image generation tool is enabled for the active conversation. */
-export const imageToolEnabled = derived(
-  activeConversation,
-  ($conv) => $conv?.imageToolEnabled ?? false,
 )
 
 // Using a Map prevents cross-conversation pollution when onAgentEnd and
@@ -260,8 +240,8 @@ function handleAgentEvent(event: AgentEvent) {
       streamingMessage.set(null)
       activeMessages.set([...getAgent().state.messages])
       queueLength.set(0) // safety reset — all follow-ups have been processed
-      // Fire-and-forget: persist → auto-compact (order matters).
-      // Catch here so IDB / compaction errors surface to the user instead of
+      // Fire-and-forget: persist messages after agent completes.
+      // Catch here so IDB errors surface to the user instead of
       // becoming silent unhandled rejections.
       onAgentEnd().catch((err: unknown) => {
         console.error('[chat] Failed to save messages:', err)
@@ -274,8 +254,7 @@ function handleAgentEvent(event: AgentEvent) {
 async function onAgentEnd(): Promise<void> {
   await persistNewMessages()
   await loadConversations()
-  await maybeCompact()
-  // Record session snapshot after compaction so the file reflects the final state.
+  // Record session snapshot after agent completes.
   persistSessionSnapshot().catch((err: unknown) => {
     console.warn('[session] Failed to record session:', err)
   })
@@ -333,84 +312,6 @@ async function persistNewMessages(): Promise<void> {
   _prevMessageCounts.set(convId, all.length)
 }
 
-/**
- * Execute compaction: summarize old messages, update agent state + IDB + UI.
- * Called by both the post-turn safety net and the pre-send proactive check.
- */
-async function runCompaction(): Promise<void> {
-  const agent = getAgent()
-  const convId = get(activeConversationId)
-  const utilityModel = getUtilityModel()
-  const apiKey = (await agent.getApiKey?.(utilityModel.provider)) ?? ''
-  if (!apiKey) return
-
-  const messages = agent.state.messages
-
-  compactionStatus.set('compacting')
-  try {
-    const result = await compactMessages(messages, utilityModel, apiKey)
-
-    if (convId) await replaceAllMessages(convId, result.messages)
-
-    if (get(activeConversationId) !== convId) {
-      console.info(
-        '[compaction] conversation switched during compaction; IDB updated, in-memory state skipped.',
-      )
-      return
-    }
-
-    agent.replaceMessages(result.messages)
-    if (convId) _prevMessageCounts.set(convId, result.messages.length)
-    activeMessages.set([...result.messages])
-
-    console.info(`[compaction] ${result.tokensBefore.toLocaleString()} tokens → compacted.`)
-  } catch (err: unknown) {
-    console.warn('[compaction] Auto-compaction failed:', err instanceof Error ? err.message : err)
-  } finally {
-    compactionStatus.set('idle')
-  }
-}
-
-/**
- * Post-turn safety net: compact only when approaching the model's context limit.
- *
- * Proactive compaction (80k threshold) is intentionally excluded here because
- * this runs immediately after agent_end while the cache is still warm.
- * Compacting now would bust the growing prefix cache for no benefit.
- */
-async function maybeCompact(): Promise<void> {
-  const agent = getAgent()
-  const mainModel = agent.state.model
-  if (!mainModel) return
-
-  const contextTokens = estimateContextTokens(agent.state.messages)
-  if (!shouldCompact(contextTokens, mainModel)) return
-
-  await runCompaction()
-}
-
-/**
- * Pre-send proactive check: compact before a new turn when the cache has
- * likely expired, making a smaller context cheaper than the full history.
- *
- * Two triggers (either fires compaction):
- *  1. Tokens > 80k AND idle gap > 5 min (Anthropic cache TTL expired)
- *  2. Cross-day: oldest uncompacted message is from a prior calendar day
- *     AND > CROSS_DAY_MIN_EXCHANGES user turns (cache definitely expired)
- */
-async function maybeCompactPreSend(): Promise<void> {
-  const agent = getAgent()
-  const messages = agent.state.messages
-  if (messages.length === 0) return
-
-  const contextTokens = estimateContextTokens(messages)
-  const lastMsg = messages[messages.length - 1] as any
-  const idleMs = Date.now() - ((lastMsg?.timestamp as number | undefined) ?? 0)
-
-  if (!shouldCompactProactive(contextTokens, idleMs) && !shouldCompactByTime(messages)) return
-
-  await runCompaction()
-}
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -438,7 +339,7 @@ export async function selectConversation(id: string): Promise<void> {
   agent.setModel(selectedModel)
   agent.setThinkingLevel(selectedModel.reasoning ? 'medium' : 'off')
   agent.replaceMessages(msgs)
-  agent.setTools(buildTools(conv?.imageToolEnabled ?? false))
+  agent.setTools(buildTools())
 
   _prevMessageCounts.set(id, msgs.length)
   activeConversationId.set(id)
@@ -509,22 +410,6 @@ export async function renameConversation(id: string, title: string): Promise<voi
   updateSessionTitle(id, title).catch(() => {})
 }
 
-/**
- * Toggle the image generation tool for the active conversation.
- * Persists to IndexedDB and immediately updates the agent's live tool list.
- */
-export async function toggleImageTool(): Promise<void> {
-  const convId = get(activeConversationId)
-  if (!convId) return
-  const next = !(get(activeConversation)?.imageToolEnabled ?? false)
-  conversations.update((list) =>
-    list.map((c) => (c.id === convId ? { ...c, imageToolEnabled: next } : c)),
-  )
-  const conv = get(conversations).find((c) => c.id === convId)
-  if (conv) await saveConversation(conv)
-  getAgent().setTools(buildTools(next))
-}
-
 export async function sendMessage(content: string, images: ImageContent[] = []): Promise<void> {
   const agent = getAgent()
 
@@ -572,12 +457,6 @@ export async function sendMessage(content: string, images: ImageContent[] = []):
   agent.setSystemPrompt(assembleSystemPrompt())
   agent.setModel(selectedModel)
   agent.setThinkingLevel(selectedModel.reasoning ? 'medium' : 'off')
-
-  // Proactive compaction: compact before this turn if the cache has likely
-  // expired (idle > 5 min) and context is large, or if this is the first
-  // message of a new day.  This runs pre-send so the actual LLM call benefits
-  // from the smaller context immediately.
-  await maybeCompactPreSend()
 
   _prevMessageCounts.set(convId, agent.state.messages.length)
 

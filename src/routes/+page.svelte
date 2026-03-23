@@ -30,9 +30,6 @@
     isStreaming,
     streamError,
     abortStreaming,
-    compactionStatus,
-    imageToolEnabled,
-    toggleImageTool,
     deleteErrorMessage,
     retryFromError,
     retryLastMessage,
@@ -158,19 +155,6 @@
       </span>
       <ModelSwitcher />
       <div class="flex items-center flex-shrink-0">
-        {#if $activeConversationId && $settings.laozhangApiKey}
-          <button
-            class="bg-transparent border-none p-1.5 rounded-lg cursor-pointer text-[0.95rem]
-                   leading-none transition-all duration-100 opacity-40 hover:bg-surface-hover
-                   hover:opacity-80"
-            class:active={$imageToolEnabled}
-            onclick={toggleImageTool}
-            aria-label={$imageToolEnabled ? '停用图像生成工具' : '启用图像生成工具'}
-            title={$imageToolEnabled ? '图像工具已启用（点击关闭）' : '启用图像生成工具'}
-          >
-            🎨
-          </button>
-        {/if}
         {#if $activeConversationId}
           <button
             class="bg-transparent border-none p-1.5 rounded-lg cursor-pointer text-fg-sub flex
@@ -244,19 +228,6 @@
         {/if}
       </div>
       <ModelSwitcher />
-      {#if $activeConversationId && $settings.laozhangApiKey}
-        <button
-          class="bg-transparent border-none p-1 px-1.5 rounded-lg cursor-pointer text-[0.95rem]
-                 leading-none transition-all duration-100 opacity-40 hover:bg-surface-hover hover:opacity-80
-                 flex-shrink-0"
-          class:tool-active={$imageToolEnabled}
-          onclick={toggleImageTool}
-          aria-label={$imageToolEnabled ? '停用图像生成工具' : '启用图像生成工具'}
-          title={$imageToolEnabled ? '图像工具已启用（点击关闭）' : '启用图像生成工具'}
-        >
-          🎨
-        </button>
-      {/if}
     </div>
 
     {#if !$activeConversationId}
@@ -386,18 +357,6 @@
         </div>
       </div>
 
-      {#if $compactionStatus === 'compacting'}
-        <div
-          class="flex items-center justify-center gap-2 px-4 py-2 text-[0.8rem] text-fg-muted
-                    border-t border-line bg-surface"
-        >
-          <span
-            class="inline-block w-3 h-3 border-2 border-line border-t-accent
-                       rounded-full animate-spin flex-shrink-0"
-          ></span>
-          正在压缩对话历史…
-        </div>
-      {/if}
     {/if}
 
     <!-- Chat input modal — inside <main> so it auto-centers in the chat area -->
@@ -468,12 +427,6 @@
       padding-top: 16px;
       padding-bottom: 100px;
     }
-  }
-
-  /* Image-tool active state */
-  .tool-active {
-    background: var(--surface-active);
-    opacity: 1 !important;
   }
 
   /* AI dot — shape only; animation applied via Tailwind animate-dot-bounce */

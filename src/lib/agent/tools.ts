@@ -3,38 +3,58 @@
  * All tools run entirely in the browser — no network calls, no file system access beyond OPFS.
  *
  * Tools:
- *   run_js          — write and execute an arbitrary JS snippet (replaces calculate + get_datetime)
+ *   run_js          — execute JS with full browser globals + injected `fs` object for OPFS
  *   memory_save     — persist a stable identity fact across conversations
  *   memory_delete   — remove a specific memory by id
  *
- * File system tools (OPFS /workspace):
- *   fs_read         — read file content (with optional line pagination)
- *   fs_write        — create or overwrite a file
- *   fs_edit         — precise find-and-replace within a file
- *   fs_list         — list directory contents
- *   fs_search       — full-text search across files
- *   fs_move         — move or rename a file
- *   fs_delete       — delete a file or directory
+ * File system access is via the `fs` object inside run_js (no separate fs_* tools):
+ *   fs.read / fs.write / fs.edit / fs.list / fs.search
+ *   fs.stat / fs.move / fs.delete / fs.outline
  */
 import { Type } from '@mariozechner/pi-ai'
 import type { AgentTool } from '@mariozechner/pi-agent-core'
 import { memories } from '$lib/stores/memory'
-import { fsTools } from '$lib/fs/tools'
+import {
+  readFile,
+  writeFile,
+  editFile,
+  listDir,
+  searchFiles,
+  statEntry,
+  moveEntry,
+  deleteEntry,
+  outlineFile,
+} from '$lib/fs/opfs'
+
+// ─── OPFS context injected into run_js ────────────────────────────────────────
+
+const fsContext = {
+  read: readFile,
+  write: writeFile,
+  edit: editFile,
+  list: listDir,
+  search: searchFiles,
+  stat: statEntry,
+  move: moveEntry,
+  delete: deleteEntry,
+  outline: outlineFile,
+}
 
 // ─── run_js ───────────────────────────────────────────────────────────────────
 
 const runJsParams = Type.Object({
   code: Type.String({
     description: [
-      'JavaScript code to execute in an async function context.',
-      'Use `return` to produce a result value.',
-      'Use `console.log()` / `console.error()` etc. to emit output lines.',
-      'Supports `await`. Has access to all standard browser globals (Date, Math, fetch, crypto, …).',
-      'Execution is time-limited to 10 seconds.',
-      'Examples:',
-      '  • Get current time:  return new Date().toLocaleString()',
-      '  • Calculate:        const r = Math.sqrt(144); return `sqrt(144) = ${r}`',
-      '  • Async work:       const d = await fetch("https://…").then(r=>r.json()); return d',
+      'JavaScript code to execute in an async function context. Use `return` to produce a result, `console.log()` to emit output. Supports `await` and all browser globals (Date, Math, fetch, crypto, …). 10-second timeout.',
+      '',
+      'OPFS workspace is available via the `fs` object:',
+      '  fs.read(path, offset?, limit?) → {content, totalLines, returnedLines, truncated, offset}',
+      '  fs.write(path, content) · fs.edit(path, oldText, newText) · fs.list(path)',
+      '  fs.search(query, path?) · fs.stat(path) · fs.move(from, to) · fs.delete(path, recursive?)',
+      '  fs.outline(path) — structural outline (headings / functions)',
+      '',
+      'Paths are workspace-relative ("notes/todo.md"). Prefix "tmp/" for temp files (7-day TTL).',
+      'fs.read returns an object — use .content. Check .truncated and paginate with offset/limit for large files.',
     ].join('\n'),
   }),
 })
@@ -58,10 +78,34 @@ export const runJsTool: AgentTool<typeof runJsParams> = {
   name: 'run_js',
   label: 'Run JS',
   description:
-    'Write and execute a JavaScript snippet in the browser. Useful for calculations, date/time queries, string manipulation, data transformation, quick API calls, and anything else expressible in JS. Supports async/await. Use `return` to return a value; use `console.log()` to emit output.',
+    'Execute a JavaScript snippet in the browser. ' +
+    'Has full access to browser globals (fetch, Date, Math, crypto, …) ' +
+    'and a `fs` object for reading/writing the OPFS workspace. ' +
+    'Use `return` to return a value; `console.log()` to emit output. Supports async/await.',
   parameters: runJsParams,
   execute: async (_id, { code }) => {
     const logs: string[] = []
+
+    // Track which files are written/edited/moved during this invocation.
+    const touchedFiles: string[] = []
+    const trackedFs = {
+      ...fsContext,
+      write: async (path: string, content: string) => {
+        const r = await fsContext.write(path, content)
+        touchedFiles.push(path)
+        return r
+      },
+      edit: async (path: string, oldText: string, newText: string) => {
+        const r = await fsContext.edit(path, oldText, newText)
+        touchedFiles.push(path)
+        return r
+      },
+      move: async (from: string, to: string) => {
+        const r = await fsContext.move(from, to)
+        touchedFiles.push(to)
+        return r
+      },
+    }
 
     // Temporarily redirect console output so we can capture it.
     const originals = {} as Record<ConsoleMethods, (...a: unknown[]) => void>
@@ -79,8 +123,9 @@ export const runJsTool: AgentTool<typeof runJsParams> = {
 
     try {
       // Wrap in async IIFE so `await` and `return` both work naturally.
+      // `fs` is injected as a parameter so code can call fs.read/write/edit/… directly.
       // eslint-disable-next-line no-new-func
-      const fn = new Function(`"use strict"; return (async () => { ${code} })()`)
+      const fn = new Function('fs', `"use strict"; return (async () => { ${code} })()`)
 
       const timeout = new Promise<never>((_, reject) =>
         setTimeout(
@@ -89,7 +134,7 @@ export const runJsTool: AgentTool<typeof runJsParams> = {
         ),
       )
 
-      result = await Promise.race([fn() as Promise<unknown>, timeout])
+      result = await Promise.race([fn(trackedFs) as Promise<unknown>, timeout])
     } catch (e) {
       errorMsg = e instanceof Error ? e.message : String(e)
     } finally {
@@ -114,7 +159,7 @@ export const runJsTool: AgentTool<typeof runJsParams> = {
     const text = parts.length > 0 ? parts.join('\n') : '(no output)'
     return {
       content: [{ type: 'text' as const, text }],
-      details: { result, logs },
+      details: { result, logs, ...(touchedFiles.length > 0 ? { touchedFiles } : {}) },
     }
   },
 }
@@ -169,9 +214,6 @@ export const memoryDeleteTool: AgentTool<typeof memoryDeleteParams> = {
 
 export const browserTools: AgentTool<any>[] = [
   runJsTool,
-  // soulUpdateTool,
-  // soulReadTool,
   memorySaveTool,
   memoryDeleteTool,
-  ...fsTools,
 ]
