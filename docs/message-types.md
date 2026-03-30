@@ -10,17 +10,22 @@
 AgentMessage = UserMessage
              | AssistantMessage
              | ToolResultMessage
-             | CompactionSummaryMessage   ← ThinClaw 自定义
+             | CompactionSummaryMessage   ← 遗留 schema 类型（见下）
 ```
 
-前三种来自 `@mariozechner/pi-ai`，`CompactionSummaryMessage` 在 `src/lib/agent/compaction.ts` 通过 declaration merging 注入 `CustomAgentMessages`。
+前三种来自 `@mariozechner/pi-ai`，`CompactionSummaryMessage` 是 ThinClaw 的自定义扩展类型，
+通过 `@mariozechner/pi-agent-core` 提供的 `CustomAgentMessages` declaration merging 接口注入。
 
-| role | 来源 | IDB 持久化 | 显示到 UI | `convertToLlm` 展开结果 |
+> **注意：** `CompactionSummaryMessage` 是一个**遗留 schema 类型**。它可能出现在早期版本写入
+> IndexedDB 的历史记录中，UI 代码对其做了防御性处理（过滤显示、在 SessionViewer 中打标签）。
+> 当前代码**不会主动生成**此类型的消息——自动压缩功能已从运行时中移除。
+
+| role | 来源 | IDB 持久化 | 显示到 UI | LLM 请求处理 |
 |---|---|---|---|---|
 | `user` | 用户输入 / `agent.prompt()` | ✅ | ✅ | 原样透传 |
 | `assistant` | LLM 响应 | ✅ | ✅ | 原样透传（老 thinking block → redacted） |
 | `toolResult` | 工具执行结果 | ✅ | ✅（折叠） | 原样透传 |
-| `compactionSummary` | 压缩后摘要，替换旧消息 | ✅ | ❌ 过滤 | → 1 条 `user` 消息 |
+| `compactionSummary` | 遗留类型，不再主动写入 | ✅（存量） | ❌ 过滤 | → 展开为 1 条 `user` 消息 |
 
 ---
 
@@ -51,8 +56,8 @@ interface AssistantMessage {
   role: 'assistant'
   content: (TextContent | ThinkingContent | ToolCall)[]
   api: string        // e.g. 'anthropic-messages'
-  provider: string   // e.g. 'anthropic'
-  model: string      // e.g. 'claude-opus-4-5'
+  provider: string   // e.g. 'bianxie'
+  model: string      // e.g. 'claude-sonnet-4-6'
   usage: Usage
   stopReason: StopReason  // 'stop' | 'length' | 'toolUse' | 'error' | 'aborted'
   errorMessage?: string   // 仅 stopReason === 'error' 时有值
@@ -76,13 +81,13 @@ interface Usage {
 | `thinking` | `thinking: string`, `thinkingSignature?: string`, `redacted?: boolean` | 推理过程（Claude 扩展思考）|
 | `toolCall` | `id`, `name`, `arguments` | 工具调用请求 |
 
-**thinking block 的特殊处理（见 `convertToLlm`）：**
+**thinking block 的处理（pi-agent-core 内置 `convertToLlm`）：**
 - 最近 3 个 user turn 内的 assistant 消息：原样传回（保留完整 thinking 文本）
 - 更早的消息：
   - 有 `thinkingSignature` → 转为 redacted 形式 `{ ...block, thinking: '', redacted: true }`（Anthropic 合规紧凑格式，只传签名）
   - 无签名（如 stream 中断）→ 整个 block 丢弃
 
-**错误消息过滤：** `convertToLlm` 会跳过 `stopReason === 'error'` 的 assistant 消息，以及其紧前方的 user 消息（整对从 LLM 上下文中排除）。
+**错误消息过滤：** pi-agent-core 默认的 `convertToLlm` 会跳过 `stopReason === 'error'` 的 assistant 消息，以及其紧前方的 user 消息（整对从 LLM 上下文中排除）。
 
 ---
 
@@ -99,13 +104,11 @@ interface ToolResultMessage {
 }
 ```
 
-**约束：** `toolResult` 不能作为压缩切割点（`validCutPoints` 不含此 role），必须与其对应的 `toolCall` 保持在同一侧（都被摘要 or 都被保留）。
-
 UI 中 `ToolResultMessage` 通过 `toolResultMap`（`toolCallId → ToolResultMessage`）绑定到前一条 assistant 消息内的 toolCall 气泡中渲染。
 
 ---
 
-## 三、自定义消息类型（ThinClaw 扩展）
+## 三、遗留自定义消息类型
 
 ### CompactionSummaryMessage
 
@@ -118,23 +121,15 @@ interface CompactionSummaryMessage {
 }
 ```
 
-**创建时机：** `compactMessages()` 完成后，替换被摘要的历史消息块，插在剩余消息的最前面。
+**历史背景：** 早期版本的 ThinClaw 实现了自动对话压缩功能——当上下文超出阈值时，使用 utility model 生成摘要并替换历史消息，生成的 `CompactionSummaryMessage` 写入 agent state 和 IndexedDB。该功能已从当前版本移除，但类型定义和 UI 防御逻辑保留，以兼容可能存在的老版本存量数据。
 
-**位置规则：**
-- 始终是 `agent.state.messages[0]`（或 `messages` 中最多出现一次，位于最前）
-- 二次压缩时旧摘要被纳入新摘要，不叠加
-
-**`convertToLlm` 展开：**
-```ts
-// CompactionSummaryMessage → 1 条 user message
-{
-  role: 'user',
-  content: [{ type: 'text', text: `[Summary of previous conversation]\n\n${cs.summary}` }],
-  timestamp: cs.timestamp,
-}
-```
-
-**UI：** 被 `+page.svelte` 的 `activeMessages` 过滤器过滤掉，不渲染。
+**当前行为：**
+- 读取时：`+page.svelte` 的 `activeMessages` 过滤器过滤掉此类型不渲染；SessionViewer 将其标记为 `compaction` badge 显示
+- 写入时：**不再主动写入**，当前运行时不会产生新的 `compactionSummary` 消息
+- LLM 请求时：若存量记录中存在此类型，pi-agent-core 会将其展开为一条 `user` 消息：
+  ```ts
+  { role: 'user', content: [{ type: 'text', text: `[Summary of previous conversation]\n\n${cs.summary}` }] }
+  ```
 
 ---
 
@@ -177,27 +172,25 @@ interface ToolCall {
 用户输入
   └─→ agent.prompt()
         └─→ [UserMessage] 写入 agent.state.messages
-              └─→ LLM 调用（convertToLlm 转换后发送）
+              └─→ LLM 调用（pi-agent-core 内置 convertToLlm 转换后发送）
                     └─→ [AssistantMessage] 写入 agent.state.messages
                           ├─→ 若 stopReason === 'toolUse'
                           │     └─→ [ToolResultMessage×N] 写入 agent.state.messages
                           │           └─→ 再次 LLM 调用（循环）
                           └─→ agent_end 触发
-                                ├─→ persistNewMessages()   → IndexedDB
-                                └─→ maybeCompact()
-                                      └─→ 若触发：[CompactionSummaryMessage] 替换旧消息
+                                └─→ persistNewMessages()  → IndexedDB
 ```
 
 ---
 
-## 六、持久化 vs 运行时专有
+## 六、持久化 vs 运行时
 
 | 消息类型 | IndexedDB | agent.state.messages | LLM 请求 |
 |---|---|---|---|
 | `user` | ✅ | ✅ | ✅ 原样 |
 | `assistant` | ✅ | ✅ | ✅（老 thinking → redacted）|
 | `toolResult` | ✅ | ✅ | ✅ 原样 |
-| `compactionSummary` | ✅ | ✅ | ✅ → 展开为 user |
+| `compactionSummary` | ✅（存量只读）| ✅（若从 IDB 加载）| ✅ → 展开为 user |
 
 > **记忆（Memories）** 不作为消息存在。它们通过 `assembleSystemPrompt()` 注入为最后一段 system prompt，每次 `sendMessage()` 前重建。详见 `docs/caching-and-compaction.md`。
 
@@ -207,7 +200,8 @@ interface ToolCall {
 
 | 文件 | 职责 |
 |---|---|
-| `src/lib/agent/compaction.ts` | `CompactionSummaryMessage` 类型定义；`estimateTokens`、`toSummaryMessages` 的各 role 处理 |
-| `src/lib/agent/convert.ts` | `convertToLlm`（各 role 展开规则、redacted thinking 转换）|
+| `src/lib/stores/chat.ts` | `assembleSystemPrompt()`、`sendMessage()`、`persistNewMessages()`、Agent 生命周期 |
 | `src/routes/+page.svelte` | `activeMessages` 渲染过滤（排除 `compactionSummary`）|
 | `src/lib/components/ChatMessage.svelte` | `user`、`assistant`、`toolResult` 三种 role 的 UI 渲染 |
+| `src/lib/components/SessionViewer.svelte` | 所有 role 的调试视图，含 `compactionSummary` badge |
+| `src/lib/db/index.ts` | IndexedDB schema + 读写操作；`replaceAllMessages` 供未来压缩功能使用 |

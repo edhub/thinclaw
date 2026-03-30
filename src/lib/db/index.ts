@@ -8,6 +8,14 @@
  *   conversations  — chat conversation metadata
  *   messages       — AgentMessage rows per conversation
  *   memories       — persistent AI memory entries (global, cross-conversation)
+ *
+ * Future migration notes:
+ *   v4 (when needed): Memory.tier field can be safely removed — it is no longer
+ *   read or differentiated at runtime. All records are treated identically regardless
+ *   of tier value. A v4 migration would simply be a schema version bump with no
+ *   data transformation required (IndexedDB does not enforce field presence on stored
+ *   objects, so old records with a tier field will continue to deserialise fine after
+ *   the TypeScript type is updated).
  */
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
 import type { AgentMessage } from '@mariozechner/pi-agent-core'
@@ -36,9 +44,10 @@ export interface Memory {
   id: string
   content: string
   /**
-   * Kept for schema compatibility with legacy records. All memories are
-   * treated the same — injected into every conversation via the system prompt.
-   * New entries are always saved as 'core'.
+   * Legacy field — kept for schema compatibility with stored records.
+   * All memories are treated identically regardless of this value; it is never
+   * read at runtime. New entries are always written as 'core'.
+   * Safe to drop in a future v4 migration (see header comment).
    */
   tier: 'core' | 'general'
   createdAt: number

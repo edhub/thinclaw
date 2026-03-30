@@ -1,3 +1,7 @@
+> **Reference document** — This is an upstream copy of Anthropic's prompt caching documentation,
+> kept here for offline reference. For ThinClaw-specific caching behaviour see
+> [`docs/caching-and-compaction.md`](caching-and-compaction.md).
+
 # Prompt Caching
 
 Prompt caching optimizes your API usage by allowing resuming from specific prefixes in your prompts. This significantly reduces processing time and costs for repetitive tasks or prompts with consistent elements.

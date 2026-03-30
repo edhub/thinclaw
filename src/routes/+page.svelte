@@ -57,7 +57,7 @@
   )
   import type { ImageContent, ToolResultMessage } from '@mariozechner/pi-ai'
   import { memories } from '$lib/stores/memory'
-  import { settings } from '$lib/stores/settings'
+  import { settings, getAvailableModels } from '$lib/stores/settings'
   import { sweepSessions } from '$lib/fs/session-recorder'
 
   function isErrorMsg(msg: AgentMessage): boolean {
@@ -236,7 +236,7 @@
         <div class="text-5xl">🦀</div>
         <h1 class="text-[1.75rem] font-bold m-0 tracking-tight">ThinClaw</h1>
         <p class="text-fg-sub m-0 text-base">一款完全在浏览器中运行的轻量级 AI 聊天应用。</p>
-        {#if !$settings.laozhangApiKey}
+        {#if getAvailableModels($settings).length === 0}
           <p
             class="flex items-center gap-1.5 bg-warn-bg text-warn px-4 py-2.5 rounded-lg
                     text-[0.9rem] m-0"
@@ -356,7 +356,6 @@
           <div bind:this={chatEndEl}></div>
         </div>
       </div>
-
     {/if}
 
     <!-- Chat input modal — inside <main> so it auto-centers in the chat area -->

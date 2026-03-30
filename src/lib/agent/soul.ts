@@ -1,8 +1,7 @@
 /**
  * Soul — the AI's persistent identity.
  *
- * Inspired by openclaw's SOUL.md template:
- *   docs/reference/templates/SOUL.md
+ * Inspired by openclaw's SOUL.md template.
  *
  * The soul is a Markdown string stored in localStorage. At the start of every
  * conversation it is injected into the system prompt. The AI can update it

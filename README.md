@@ -8,11 +8,10 @@ No server. No installation. No data leaves your device.
 ## Features
 
 - **Multi-provider AI** — Claude (Anthropic), Gemini (Google), GPT (OpenAI) via proxy APIs
-- **Agent with tools** — calculator, date/time, soul evolution, persistent memory, OPFS file system
+- **Agent with tools** — JS sandbox (`run_js`), persistent memory, OPFS file system
 - **Streaming responses** — real-time token streaming with thinking block support
 - **Markdown rendering** — full Markdown with syntax-highlighted code blocks (lazy-loaded hljs)
 - **Personas** — built-in conversational roles (thinking partner, prompt explorer, etc.)
-- **Auto-compaction** — automatic context summarization when conversations grow long
 - **File workspace** — OPFS-backed persistent file system with read/write/edit/search
 - **Image generation** — via Gemini image model (optional, per-conversation toggle)
 - **@mention file injection** — type `@` in chat to attach workspace files as context
@@ -57,7 +56,7 @@ All configuration is done in the **Settings** page (gear icon in the sidebar).
 | Setting | Description |
 |---|---|
 | Provider API Keys | One key per provider (laozhang.ai, bianxie.ai). A single key can access multiple models. |
-| Model Selection | Choose default and utility (compaction/title) models from enabled providers. |
+| Model Selection | Choose default and utility (auto-title) models from enabled providers. |
 | Model Toggles | Enable/disable individual models per provider. |
 | Theme | Light, dark, or follow system preference. |
 | Custom Instructions | Extra text appended to the system prompt for all conversations. |
@@ -113,21 +112,18 @@ src/
 │   │   ├── personas.ts            # BUILTIN_PERSONAS + getPersonaById
 │   │   ├── prompts.ts             # buildSystemPrompt → SystemPromptParts
 │   │   ├── soul.ts                # AI identity (localStorage, self-editable via soul_update)
-│   │   ├── tools.ts               # Agent tools: calculate, datetime, soul_*, memory_*
+│   │   ├── tools.ts               # Agent tools: run_js (JS sandbox + OPFS fs), memory_save, memory_delete
 │   │   ├── image.ts               # Image generation tool (Gemini, optional per conversation)
 │   │   ├── title.ts               # AI auto-title generation
-│   │   ├── convert.ts             # convertToLlm: message conversion for LLM (thinking redaction, etc.)
-│   │   ├── payload.ts             # onPayload: provider-specific cache breakpoints
-│   │   └── compaction.ts          # Auto-compaction: token estimation + LLM summarization
+│   │   └── payload.ts             # onPayload: captures outgoing LLM request payloads for SessionViewer
 │   ├── fs/
 │   │   ├── opfs.ts                # OPFS abstraction: readFile/writeFile/editFile/listDir/etc.
-│   │   ├── tools.ts               # Agent tools: fs_read/write/edit/list/search/stat/move/delete
 │   │   ├── session-recorder.ts    # OPFS sessions/{convId}.jsonl after each agent_end
 │   │   └── mention.ts             # @mention helpers: listWorkspaceFiles + fuzzyFilter
 │   ├── db/
 │   │   └── index.ts               # IndexedDB v3: conversations + messages + memories
 │   ├── stores/
-│   │   ├── chat.ts                # Conversation state, Agent lifecycle, streaming, compaction
+│   │   ├── chat.ts                # Conversation state, Agent lifecycle, streaming
 │   │   ├── settings.ts            # apiKeys, model, theme, systemPrompt (localStorage)
 │   │   └── memory.ts              # Reactive memory store (wraps IndexedDB memories table)
 │   ├── components/
@@ -162,9 +158,10 @@ src/
 ## Documentation
 
 - [Deployment Guide](docs/deployment.md) — nginx, Caddy, Cloudflare Pages, Docker
-- [bianxie.ai Provider Details](docs/bianxie.md) — API protocols, endpoints, known limitations
-- [Caching & Compaction](docs/caching-and-compaction.md) — prompt caching, thinking blocks, auto-compaction
+- [Provider Details](docs/providers.md) — proxy APIs, endpoints, per-provider notes
+- [Caching](docs/caching-and-compaction.md) — prompt caching strategy, thinking blocks, provider notes
 - [Message Types](docs/message-types.md) — all message types, lifecycle, persistence
+- [Anthropic Prompt Caching Reference](docs/anthropic-prompt-caching-reference.md) — upstream Anthropic docs, kept for offline reference
 
 ---
 
