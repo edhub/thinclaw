@@ -27,6 +27,7 @@ export interface Conversation {
   title: string
   model: string
   personaId?: string // optional: built-in persona locked in at conversation creation
+  starred?: boolean  // pinned — exempt from 7-day auto-sweep
   createdAt: number
   updatedAt: number
 }
@@ -183,6 +184,22 @@ export async function replaceAllMessages(
     } satisfies StoredMessage)
   }
   await tx.done
+}
+
+// ─── Sweep old conversations ─────────────────────────────────────────────────
+
+/**
+ * Delete all unstarred conversations whose updatedAt is older than 7 days.
+ * Called once at app startup before rendering the sidebar.
+ */
+export async function sweepOldConversations(): Promise<void> {
+  const db = await getDB()
+  const all = await db.getAllFromIndex('conversations', 'by-updatedAt')
+  const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000
+  const toDelete = all.filter((c) => !c.starred && c.updatedAt < cutoff)
+  for (const conv of toDelete) {
+    await deleteConversation(conv.id)
+  }
 }
 
 // ─── Memory operations ────────────────────────────────────────────────────────

@@ -1,20 +1,23 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
-  import { Image, FileUp, X, Square, ArrowUp, AlertCircle, FileText } from 'lucide-svelte'
+  import { onMount, onDestroy } from 'svelte'
+  import { Image, FileUp, X, Square, ArrowUp, AlertCircle, FileText, Plus } from 'lucide-svelte'
   import { isStreaming, queueLength } from '$lib/stores/chat'
   import type { ImageContent } from '@mariozechner/pi-ai'
   import FilePicker from '$lib/components/FilePicker.svelte'
+  import ModelSwitcher from '$lib/components/ModelSwitcher.svelte'
   import { listWorkspaceFiles, fuzzyFilter, getFilePreview, type FileEntry } from '$lib/fs/mention'
   import { writeFile } from '$lib/fs/opfs'
 
   interface Props {
     onSend: (content: string, images: ImageContent[]) => void
+    onNewTopicSend?: (content: string, images: ImageContent[]) => void
     onAbort?: () => void
     open?: boolean
     onClose?: () => void
     isModal?: boolean
+    lastMessageAt?: number
   }
-  let { onSend, onAbort, open = true, onClose, isModal = false }: Props = $props()
+  let { onSend, onNewTopicSend, onAbort, open = true, onClose, isModal = false, lastMessageAt }: Props = $props()
 
   const DRAFT_KEY = 'thinclaw:input-draft'
 
@@ -27,6 +30,15 @@
   let isMobile = $state(false)
   let uploadErrors = $state<string[]>([])
   let uploadErrorTimer: ReturnType<typeof setTimeout> | null = null
+  let altHeld = $state(false)
+  let newTopicPinned = $state(false)
+  let now = $state(Date.now())
+  let nowTimer: ReturnType<typeof setInterval> | null = null
+
+  const newTopicActive = $derived(
+    !!onNewTopicSend &&
+      (altHeld || newTopicPinned || (!!lastMessageAt && now - lastMessageAt > 3_600_000)),
+  )
 
   // ── @mention state ────────────────────────────────────────────────────────
   let fileChips = $state<FileEntry[]>([])
@@ -43,13 +55,24 @@
     dropdownIndex = 0
   })
 
+  function onWindowKeyup(e: KeyboardEvent) {
+    if (!e.altKey) altHeld = false
+  }
+
   onMount(() => {
     isMobile = window.matchMedia('(max-width: 639px)').matches
+    nowTimer = setInterval(() => { now = Date.now() }, 60_000)
+    window.addEventListener('keyup', onWindowKeyup)
     const saved = localStorage.getItem(DRAFT_KEY)
     if (saved) {
       value = saved
       setTimeout(resizeTextarea, 0)
     }
+  })
+
+  onDestroy(() => {
+    window.removeEventListener('keyup', onWindowKeyup)
+    if (nowTimer) clearInterval(nowTimer)
   })
 
   $effect(() => {
@@ -242,6 +265,8 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
+    if (e.altKey) altHeld = true
+
     if (isModal && e.key === 'Escape') {
       e.preventDefault()
       onClose?.()
@@ -271,10 +296,20 @@
       }
     }
 
+    if (e.key === 'Enter' && e.altKey && !e.shiftKey && !e.isComposing && onNewTopicSend) {
+      e.preventDefault()
+      buildAndSend(onNewTopicSend)
+      return
+    }
+
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
       e.preventDefault()
       submit()
     }
+  }
+
+  function handleKeyup(e: KeyboardEvent) {
+    if (!e.altKey) altHeld = false
   }
 
   function handleInput(e: Event) {
@@ -289,6 +324,15 @@
   }
 
   async function submit() {
+    if (newTopicActive && onNewTopicSend) {
+      newTopicPinned = false
+      await buildAndSend(onNewTopicSend)
+    } else {
+      await buildAndSend(onSend)
+    }
+  }
+
+  async function buildAndSend(sendFn: (content: string, images: ImageContent[]) => void) {
     const trimmed = value.trim()
     if (!trimmed && images.length === 0 && fileChips.length === 0) return
 
@@ -324,7 +368,7 @@
       content = parts.join('\n\n') + (trimmed ? '\n\n' + trimmed : '')
     }
 
-    onSend(content, currentImages)
+    sendFn(content, currentImages)
     textareaEl?.focus()
   }
 
@@ -506,6 +550,7 @@
                leading-relaxed text-fg font-[inherit] max-h-[200px] overflow-y-auto
                placeholder:text-fg-muted"
         onkeydown={handleKeydown}
+        onkeyup={handleKeyup}
         oninput={handleInput}
         onblur={handleBlur}
         onpaste={handlePaste}
@@ -533,9 +578,25 @@
           >
             <FileUp size={16} />
           </button>
+          <ModelSwitcher />
         </div>
 
         <div class="flex items-center gap-0.5">
+          {#if onNewTopicSend}
+            <button
+              type="button"
+              onclick={() => (newTopicPinned = !newTopicPinned)}
+              title={newTopicActive ? '新话题已激活（再次点击取消）' : '新话题 (⌥↵)'}
+              class="inline-flex items-center gap-1 text-[0.7rem] font-medium px-2 py-0.5
+                     rounded-full border transition-all duration-150 select-none
+                     {newTopicActive
+                ? 'text-accent bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] border-[color-mix(in_srgb,var(--accent)_30%,transparent)]'
+                : 'text-fg-muted bg-transparent border-transparent hover:border-line'}"
+            >
+              <Plus size={10} />
+              新话题
+            </button>
+          {/if}
           {#if $isStreaming}
             <button
               class="w-[34px] h-[34px] flex items-center justify-center rounded-lg
@@ -555,7 +616,7 @@
                    not-disabled:hover:opacity-85"
             disabled={!canSend}
             onclick={submit}
-            title={$isStreaming ? '排队发送' : '发送'}
+            title={newTopicActive ? '新话题 (⌥↵)' : $isStreaming ? '排队发送' : '发送'}
           >
             <ArrowUp size={16} />
           </button>

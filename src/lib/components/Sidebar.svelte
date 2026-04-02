@@ -1,24 +1,22 @@
 <script lang="ts">
-  import { Plus, Pencil, Trash2 } from 'lucide-svelte'
+  import { Plus, Star, Trash2 } from 'lucide-svelte'
   import {
     createConversation,
     removeConversation,
     selectConversation,
-    renameConversation,
+    starConversation,
     conversations,
     activeConversationId,
     isStreaming,
   } from '$lib/stores/chat'
   import { getPersonaById } from '$lib/agent/personas'
+  import type { Conversation } from '$lib/db'
 
   interface Props {
     open?: boolean
     onClose?: () => void
   }
   let { open = false, onClose }: Props = $props()
-
-  let renamingId = $state<string | null>(null)
-  let renameValue = $state('')
 
   async function handleNew() {
     await createConversation()
@@ -36,16 +34,46 @@
     await removeConversation(id)
   }
 
-  function startRename(e: MouseEvent, id: string, title: string) {
+  async function handleStar(e: MouseEvent, conv: Conversation) {
     e.stopPropagation()
-    renamingId = id
-    renameValue = title
+    await starConversation(conv.id, !conv.starred)
   }
 
-  async function commitRename(id: string) {
-    if (renameValue.trim()) await renameConversation(id, renameValue.trim())
-    renamingId = null
+  // ── Time grouping ──────────────────────────────────────────────────────────
+  interface Groups {
+    today: Conversation[]
+    yesterday: Conversation[]
+    thisWeek: Conversation[]
   }
+
+  const groups = $derived.by<Groups>(() => {
+    const todayStart = new Date()
+    todayStart.setHours(0, 0, 0, 0)
+    const todayMs = todayStart.getTime()
+    const yesterdayMs = todayMs - 86_400_000
+    const sevenDaysAgoMs = Date.now() - 7 * 86_400_000
+
+    const today: Conversation[] = []
+    const yesterday: Conversation[] = []
+    const thisWeek: Conversation[] = []
+
+    for (const conv of $conversations) {
+      if (conv.updatedAt >= todayMs) {
+        today.push(conv)
+      } else if (conv.updatedAt >= yesterdayMs) {
+        yesterday.push(conv)
+      } else if (conv.updatedAt >= sevenDaysAgoMs) {
+        thisWeek.push(conv)
+      }
+      // Older items already swept at startup — simply not rendered
+    }
+
+    return { today, yesterday, thisWeek }
+  })
+
+  const hasAny = $derived(
+    groups.today.length + groups.yesterday.length + groups.thisWeek.length > 0,
+  )
 </script>
 
 <aside
@@ -61,7 +89,7 @@
              bg-transparent cursor-pointer text-fg-sub
              hover:bg-surface-hover hover:text-fg transition-colors duration-100"
       onclick={handleNew}
-      title="新建对话"
+      title="新建对话 (⌘T)"
     >
       <Plus size={16} />
     </button>
@@ -69,80 +97,84 @@
 
   <!-- List -->
   <nav class="flex-1 overflow-y-auto p-2">
-    {#each $conversations as conv (conv.id)}
-      {@const isActive = $activeConversationId === conv.id}
-      <div
-        class="group/item flex items-center justify-between gap-1 px-2.5 py-2
-               rounded-lg cursor-pointer text-sm text-fg-sub min-h-9
-               transition-colors duration-100 hover:bg-surface-hover hover:text-fg"
-        class:is-active={isActive}
-        onclick={() => handleSelect(conv.id)}
-        role="button"
-        tabindex="0"
-        onkeydown={(e) => e.key === 'Enter' && handleSelect(conv.id)}
-      >
-        {#if renamingId === conv.id}
-          <!-- svelte-ignore a11y_autofocus -->
-          <input
-            class="flex-1 bg-surface-input border border-accent rounded px-1.5 py-0.5
-                   text-sm text-fg outline-none"
-            bind:value={renameValue}
-            onblur={() => commitRename(conv.id)}
-            onkeydown={(e) => {
-              if (e.key === 'Enter') commitRename(conv.id)
-              if (e.key === 'Escape') renamingId = null
-            }}
-            onclick={(e) => e.stopPropagation()}
-            autofocus
-          />
-        {:else}
-          <div class="flex-1 flex flex-col gap-0.5 overflow-hidden">
-            <span class="truncate">{conv.title}</span>
-            {#if conv.personaId}
-              {@const persona = getPersonaById(conv.personaId)}
-              {#if persona}
-                <span
-                  class="text-[0.72rem] text-fg-muted truncate
-                         group-[.is-active]/item:text-accent group-[.is-active]/item:opacity-80"
-                  >{persona.name}</span
-                >
-              {/if}
-            {/if}
-          </div>
-
-          <!-- Actions: visible on hover OR when active -->
-          <div
-            class="hidden group-hover/item:flex group-[.is-active]/item:flex
-                   items-center gap-0.5 flex-shrink-0"
-          >
-            <button
-              class="flex items-center justify-center w-5 h-5 rounded bg-transparent
-                     border-none cursor-pointer text-fg-muted
-                     hover:bg-surface-hover hover:text-fg-sub transition-colors duration-100"
-              onclick={(e) => startRename(e, conv.id, conv.title)}
-              title="重命名"
-            >
-              <Pencil size={12} />
-            </button>
-            <button
-              class="flex items-center justify-center w-5 h-5 rounded bg-transparent
-                     border-none cursor-pointer text-fg-muted
-                     hover:bg-error-bg hover:text-error transition-colors duration-100"
-              onclick={(e) => handleDelete(e, conv.id)}
-              title="删除"
-            >
-              <Trash2 size={12} />
-            </button>
-          </div>
-        {/if}
-      </div>
-    {/each}
-
-    {#if $conversations.length === 0}
+    {#if !hasAny}
       <p class="text-center text-fg-muted text-[0.8rem] px-4 py-6 leading-relaxed">
         暂无对话。<br />点击 + 开始。
       </p>
     {/if}
+
+    {#each ([['today', '今天'], ['yesterday', '昨天'], ['thisWeek', '一周内']] as const) as [key, label]}
+      {@const list = groups[key]}
+      {#if list.length > 0}
+        <!-- Group label -->
+        <div
+          class="px-2.5 pt-3 pb-1 text-[0.7rem] font-semibold uppercase tracking-wider text-fg-muted select-none"
+        >
+          {label}
+        </div>
+
+        {#each list as conv (conv.id)}
+          {@const isActive = $activeConversationId === conv.id}
+          <div
+            class="group/item flex items-center justify-between gap-1 px-2.5 py-2
+                   rounded-lg cursor-pointer text-sm text-fg-sub min-h-9
+                   transition-colors duration-100 hover:bg-surface-hover hover:text-fg"
+            class:is-active={isActive}
+            onclick={() => handleSelect(conv.id)}
+            role="button"
+            tabindex="0"
+            onkeydown={(e) => e.key === 'Enter' && handleSelect(conv.id)}
+          >
+            <!-- Star button: always in front of title -->
+            <button
+              class="flex items-center justify-center w-5 h-5 rounded bg-transparent
+                     border-none cursor-pointer flex-shrink-0 transition-colors duration-100
+                     {conv.starred
+                ? 'text-accent'
+                : 'text-transparent group-hover/item:text-fg-muted hover:!text-accent'}"
+              onclick={(e) => handleStar(e, conv)}
+              title={conv.starred ? '取消收藏' : '收藏'}
+            >
+              <Star
+                size={12}
+                fill={conv.starred ? 'currentColor' : 'none'}
+                stroke-width={conv.starred ? 0 : 1.8}
+              />
+            </button>
+
+            <div class="flex-1 flex flex-col gap-0.5 overflow-hidden min-w-0">
+              <span class="truncate">{conv.title}</span>
+              {#if conv.personaId}
+                {@const persona = getPersonaById(conv.personaId)}
+                {#if persona}
+                  <span
+                    class="text-[0.72rem] text-fg-muted truncate
+                           group-[.is-active]/item:text-accent group-[.is-active]/item:opacity-80"
+                    >{persona.name}</span
+                  >
+                {/if}
+              {/if}
+            </div>
+
+            <!-- Actions: visible on hover OR when active -->
+            <div
+              class="hidden group-hover/item:flex group-[.is-active]/item:flex
+                     items-center gap-0.5 flex-shrink-0"
+            >
+              <button
+                class="flex items-center justify-center w-5 h-5 rounded bg-transparent
+                       border-none cursor-pointer text-fg-muted
+                       hover:bg-error-bg hover:text-error transition-colors duration-100"
+                onclick={(e) => handleDelete(e, conv.id)}
+                title="删除"
+              >
+                <Trash2 size={12} />
+              </button>
+            </div>
+          </div>
+        {/each}
+      {/if}
+    {/each}
   </nav>
 </aside>
 

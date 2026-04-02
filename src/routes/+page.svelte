@@ -14,7 +14,6 @@
   import Sidebar from '$lib/components/Sidebar.svelte'
   import ChatMessage from '$lib/components/ChatMessage.svelte'
   import ChatInput from '$lib/components/ChatInput.svelte'
-  import ModelSwitcher from '$lib/components/ModelSwitcher.svelte'
   import PersonaPicker from '$lib/components/PersonaPicker.svelte'
   import {
     loadConversations,
@@ -104,6 +103,13 @@
     })
   })
 
+  // Scroll once to bottom when user sends a message (not on every streaming update)
+  $effect(() => {
+    if ($pendingUserMessage) {
+      tick().then(() => chatEndEl?.scrollIntoView({ behavior: 'instant', block: 'end' }))
+    }
+  })
+
   $effect(() => {
     if (chatInputOpen) {
       tick().then(() => chatInputRef?.focus())
@@ -112,6 +118,12 @@
 
   async function handleSend(content: string, images: ImageContent[]) {
     chatInputOpen = false
+    await sendMessage(content, images)
+  }
+
+  async function handleSendNewTopic(content: string, images: ImageContent[]) {
+    chatInputOpen = false
+    await createConversation()
     await sendMessage(content, images)
   }
 </script>
@@ -153,7 +165,6 @@
       >
         {$activeConversation?.title ?? 'ThinClaw'}
       </span>
-      <ModelSwitcher />
       <div class="flex items-center flex-shrink-0">
         {#if $activeConversationId}
           <button
@@ -227,7 +238,6 @@
           </button>
         {/if}
       </div>
-      <ModelSwitcher />
     </div>
 
     {#if !$activeConversationId}
@@ -258,7 +268,7 @@
     {:else}
       <!-- Chat thread -->
       <div class="flex-1 overflow-y-auto overflow-x-hidden px-6 messages-scroll">
-        <div class="max-w-[860px] mx-auto py-6 pb-[120px]">
+        <div class="max-w-[860px] mx-auto py-6 pb-[60vh]">
           <!-- Persona picker + new message actions -->
           {#if $activeMessages.length === 0 && !$isStreaming && !$pendingUserMessage}
             <PersonaPicker />
@@ -370,10 +380,12 @@
         <ChatInput
           bind:this={chatInputRef}
           onSend={handleSend}
+          onNewTopicSend={handleSendNewTopic}
           onAbort={abortStreaming}
           open={true}
           onClose={() => (chatInputOpen = false)}
           isModal={true}
+          lastMessageAt={$activeConversation?.updatedAt}
         />
       </div>
     {/if}
@@ -424,7 +436,7 @@
     }
     .messages-scroll > div {
       padding-top: 16px;
-      padding-bottom: 100px;
+      padding-bottom: 60vh;
     }
   }
 

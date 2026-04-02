@@ -30,6 +30,7 @@ import {
   getMessages,
   appendMessages,
   replaceAllMessages,
+  sweepOldConversations,
   type Conversation,
 } from '$lib/db'
 import { generateAiTitle, countUserMessages } from '$lib/agent/title'
@@ -319,6 +320,7 @@ async function persistNewMessages(): Promise<void> {
 // once at app startup (see +page.svelte onMount) and kept in sync by
 // memory_save / memory_delete tools incrementally.
 export async function loadConversations(): Promise<void> {
+  await sweepOldConversations()
   const list = await listConversations()
   conversations.set(list)
 }
@@ -381,6 +383,12 @@ export async function setConversationPersona(personaId: string | null): Promise<
   if (conv) await saveConversation(conv)
   // Immediately update agent system prompt to reflect the new persona.
   getAgent().setSystemPrompt(assembleSystemPrompt())
+}
+
+export async function starConversation(id: string, starred: boolean): Promise<void> {
+  conversations.update((list) => list.map((c) => (c.id === id ? { ...c, starred } : c)))
+  const conv = get(conversations).find((c) => c.id === id)
+  if (conv) await saveConversation(conv)
 }
 
 export async function removeConversation(id: string): Promise<void> {
