@@ -36,6 +36,11 @@ function escapeHtml(str: string): string {
     .replace(/"/g, '&quot;')
 }
 
+/** Synchronously render markdown without syntax highlighting (used for initial layout). */
+export function renderMarkdownSync(content: string): string {
+  return marked.parse(content) as string
+}
+
 /** Render markdown to HTML string. Code blocks are highlighted if hljs is available. */
 export async function renderMarkdown(content: string): Promise<string> {
   const hljs = await getHljs()

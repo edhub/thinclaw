@@ -15,8 +15,9 @@
   interface Props {
     open?: boolean
     onClose?: () => void
+    onScrollToBottom?: () => void
   }
-  let { open = false, onClose }: Props = $props()
+  let { open = false, onClose, onScrollToBottom }: Props = $props()
 
   async function handleNew() {
     await createConversation()
@@ -24,7 +25,12 @@
   }
 
   async function handleSelect(id: string) {
-    if ($activeConversationId === id || $isStreaming) return
+    if ($isStreaming) return
+    if ($activeConversationId === id) {
+      onScrollToBottom?.()
+      onClose?.()
+      return
+    }
     await selectConversation(id)
     onClose?.()
   }

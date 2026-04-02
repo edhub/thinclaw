@@ -30,15 +30,28 @@
   let isMobile = $state(false)
   let uploadErrors = $state<string[]>([])
   let uploadErrorTimer: ReturnType<typeof setTimeout> | null = null
-  let altHeld = $state(false)
-  let newTopicPinned = $state(false)
+  // null = 跟随默认值；true/false = 手动覆盖
+  let newTopicOverride = $state<boolean | null>(null)
+  let _altEnterUsed = false // 标记 Alt 是否已组合 Enter 使用
   let now = $state(Date.now())
   let nowTimer: ReturnType<typeof setInterval> | null = null
 
+  // 默认：距最后一条消息超过 1 小时则高亮
+  const newTopicDefault = $derived(!!lastMessageAt && now - lastMessageAt > 3_600_000)
+
   const newTopicActive = $derived(
-    !!onNewTopicSend &&
-      (altHeld || newTopicPinned || (!!lastMessageAt && now - lastMessageAt > 3_600_000)),
+    !!onNewTopicSend && (newTopicOverride !== null ? newTopicOverride : newTopicDefault),
   )
+
+  function toggleNewTopic() {
+    newTopicOverride = !newTopicActive
+  }
+
+  // 新消息后重置为默认值
+  $effect(() => {
+    lastMessageAt
+    newTopicOverride = null
+  })
 
   // ── @mention state ────────────────────────────────────────────────────────
   let fileChips = $state<FileEntry[]>([])
@@ -55,14 +68,12 @@
     dropdownIndex = 0
   })
 
-  function onWindowKeyup(e: KeyboardEvent) {
-    if (!e.altKey) altHeld = false
-  }
+
 
   onMount(() => {
     isMobile = window.matchMedia('(max-width: 639px)').matches
     nowTimer = setInterval(() => { now = Date.now() }, 60_000)
-    window.addEventListener('keyup', onWindowKeyup)
+
     const saved = localStorage.getItem(DRAFT_KEY)
     if (saved) {
       value = saved
@@ -71,7 +82,6 @@
   })
 
   onDestroy(() => {
-    window.removeEventListener('keyup', onWindowKeyup)
     if (nowTimer) clearInterval(nowTimer)
   })
 
@@ -265,7 +275,8 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    if (e.altKey) altHeld = true
+    // Alt 单击切换：keydown 时重置标记
+    if (e.key === 'Alt' && !e.repeat) _altEnterUsed = false
 
     if (isModal && e.key === 'Escape') {
       e.preventDefault()
@@ -298,6 +309,7 @@
 
     if (e.key === 'Enter' && e.altKey && !e.shiftKey && !e.isComposing && onNewTopicSend) {
       e.preventDefault()
+      _altEnterUsed = true // 组合键，Alt keyup 时不再触发 toggle
       buildAndSend(onNewTopicSend)
       return
     }
@@ -309,7 +321,8 @@
   }
 
   function handleKeyup(e: KeyboardEvent) {
-    if (!e.altKey) altHeld = false
+    // Alt 单独松开（未与 Enter 组合）→ 切换新话题状态
+    if (e.key === 'Alt' && !_altEnterUsed) toggleNewTopic()
   }
 
   function handleInput(e: Event) {
@@ -325,7 +338,6 @@
 
   async function submit() {
     if (newTopicActive && onNewTopicSend) {
-      newTopicPinned = false
       await buildAndSend(onNewTopicSend)
     } else {
       await buildAndSend(onSend)
@@ -585,7 +597,7 @@
           {#if onNewTopicSend}
             <button
               type="button"
-              onclick={() => (newTopicPinned = !newTopicPinned)}
+              onclick={toggleNewTopic}
               title={newTopicActive ? '新话题已激活（再次点击取消）' : '新话题 (⌥↵)'}
               class="inline-flex items-center gap-1 text-[0.7rem] font-medium px-2 py-0.5
                      rounded-full border transition-all duration-150 select-none

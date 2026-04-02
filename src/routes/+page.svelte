@@ -66,6 +66,8 @@
 
   let sidebarOpen = $state(false)
   let chatEndEl = $state<HTMLDivElement | undefined>(undefined)
+  let messagesEndEl = $state<HTMLDivElement | undefined>(undefined)
+  let messagesScrollEl = $state<HTMLDivElement | undefined>(undefined)
   let chatInputRef = $state<{ focus: () => void } | undefined>(undefined)
   let chatInputOpen = $state(false)
 
@@ -95,18 +97,27 @@
 
   onDestroy(() => document.removeEventListener('keydown', handleGlobalKeydown))
 
+  function scrollToBottom(behavior: ScrollBehavior = 'smooth') {
+    tick().then(() =>
+      requestAnimationFrame(() => {
+        messagesEndEl?.scrollIntoView({ behavior, block: 'end' })
+      }),
+    )
+  }
+
+  // Scroll to top when switching conversations
+  let lastConvId = ''
   $effect(() => {
-    const _convId = $activeConversationId
-    void _convId
-    requestAnimationFrame(() => {
-      chatEndEl?.scrollIntoView({ behavior: 'instant', block: 'end' })
-    })
+    const convId = $activeConversationId ?? ''
+    if (!convId || convId === lastConvId) return
+    lastConvId = convId
+    if (messagesScrollEl) messagesScrollEl.scrollTop = 0
   })
 
-  // Scroll once to bottom when user sends a message (not on every streaming update)
+  // Scroll once to bottom when user sends a message
   $effect(() => {
     if ($pendingUserMessage) {
-      tick().then(() => chatEndEl?.scrollIntoView({ behavior: 'instant', block: 'end' }))
+      tick().then(() => chatEndEl?.scrollIntoView({ behavior: 'smooth', block: 'end' }))
     }
   })
 
@@ -143,7 +154,11 @@
     ></div>
   {/if}
 
-  <Sidebar open={sidebarOpen} onClose={() => (sidebarOpen = false)} />
+  <Sidebar
+    open={sidebarOpen}
+    onClose={() => (sidebarOpen = false)}
+    onScrollToBottom={scrollToBottom}
+  />
 
   <main class="flex-1 flex flex-col overflow-hidden min-w-0 relative">
     <!-- Mobile top bar -->
@@ -267,8 +282,11 @@
       </div>
     {:else}
       <!-- Chat thread -->
-      <div class="flex-1 overflow-y-auto overflow-x-hidden px-6 messages-scroll">
-        <div class="max-w-[860px] mx-auto py-6 pb-[60vh]">
+      <div
+        bind:this={messagesScrollEl}
+        class="flex-1 overflow-y-auto overflow-x-hidden px-6 messages-scroll"
+      >
+        <div class="max-w-[860px] mx-auto py-6">
           <!-- Persona picker + new message actions -->
           {#if $activeMessages.length === 0 && !$isStreaming && !$pendingUserMessage}
             <PersonaPicker />
@@ -362,9 +380,11 @@
               </button>
             </div>
           {/if}
-
-          <div bind:this={chatEndEl}></div>
+          <div bind:this={messagesEndEl} class="h-32"></div>
         </div>
+        <!-- reading space: visible after sending a new message -->
+        <div class="h-[70vh]" aria-hidden="true"></div>
+        <div bind:this={chatEndEl}></div>
       </div>
     {/if}
 
@@ -433,10 +453,6 @@
     .messages-scroll {
       padding-left: 12px;
       padding-right: 12px;
-    }
-    .messages-scroll > div {
-      padding-top: 16px;
-      padding-bottom: 60vh;
     }
   }
 

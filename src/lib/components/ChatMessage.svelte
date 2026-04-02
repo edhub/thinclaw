@@ -10,7 +10,7 @@
     UserMessage,
     AssistantMessage,
   } from '@mariozechner/pi-ai'
-  import { renderMarkdown } from '$lib/utils/markdown'
+  import { renderMarkdown, renderMarkdownSync } from '$lib/utils/markdown'
   import ToolCard from '$lib/components/ToolCard.svelte'
   import FileContextCard from '$lib/components/FileContextCard.svelte'
 
@@ -75,16 +75,20 @@
   let thinkingOpen = $state(false)
   let errorExpanded = $state(false)
   let renderedHtml = $state('')
+  let renderGen = 0
 
   $effect(() => {
-    if (isStreaming) return
     const combined = textBlocks.map((b) => b.text).join('')
     if (!combined) {
       renderedHtml = ''
       return
     }
+    // Sync render immediately (no hljs) so DOM heights are correct for layout/scroll
+    renderedHtml = renderMarkdownSync(combined)
+    // Async re-render with syntax highlighting; guard against out-of-order resolution
+    const gen = ++renderGen
     renderMarkdown(combined).then((html) => {
-      renderedHtml = html
+      if (gen === renderGen) renderedHtml = html
     })
   })
 
@@ -254,11 +258,7 @@
         {/each}
 
         <!-- Text -->
-        {#if isStreaming && textBlocks.length > 0}
-          <div class="text-fg leading-[1.7] text-base break-words whitespace-pre-wrap">
-            {textBlocks.map((b) => b.text).join('')}
-          </div>
-        {:else if renderedHtml}
+        {#if renderedHtml}
           <!-- eslint-disable-next-line svelte/no-at-html-tags -->
           <div class="markdown-body text-fg leading-[1.7] text-base break-words">
             {@html renderedHtml}
