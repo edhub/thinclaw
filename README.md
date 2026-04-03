@@ -7,7 +7,7 @@ No server. No installation. No data leaves your device.
 
 ## Features
 
-- **Multi-provider AI** — Claude (Anthropic), Gemini (Google), GPT (OpenAI) via proxy APIs
+- **Multi-provider AI** — Claude (Anthropic) and Gemini (Google) via proxy APIs (laozhang.ai, bianxie.ai, lingyaai.cn, qnaigc.com)
 - **Agent with tools** — JS sandbox (`run_js`), persistent memory, OPFS file system
 - **Streaming responses** — real-time token streaming with thinking block support
 - **Markdown rendering** — full Markdown with syntax-highlighted code blocks (lazy-loaded hljs)
@@ -55,7 +55,7 @@ All configuration is done in the **Settings** page (gear icon in the sidebar).
 
 | Setting | Description |
 |---|---|
-| Provider API Keys | One key per provider (laozhang.ai, bianxie.ai). A single key can access multiple models. |
+| Provider API Keys | One key per provider (laozhang.ai, bianxie.ai, lingyaai.cn, qnaigc.com). A single key unlocks multiple models. |
 | Model Selection | Choose default and utility (auto-title) models from enabled providers. |
 | Model Toggles | Enable/disable individual models per provider. |
 | Theme | Light, dark, or follow system preference. |

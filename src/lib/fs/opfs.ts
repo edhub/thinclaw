@@ -43,10 +43,6 @@ function parsePath(path: string): string[] {
   return segments
 }
 
-function displayPath(segments: string[]): string {
-  return '/' + segments.join('/')
-}
-
 // ─── Root resolution ──────────────────────────────────────────────────────────
 
 type RootResolution = {

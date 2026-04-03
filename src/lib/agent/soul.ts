@@ -4,8 +4,8 @@
  * Inspired by openclaw's SOUL.md template.
  *
  * The soul is a Markdown string stored in localStorage. At the start of every
- * conversation it is injected into the system prompt. The AI can update it
- * via the `soul_update` tool — effectively letting it evolve its own identity.
+ * conversation it is injected into the system prompt. It is editable by the user
+ * via Settings → 灵魂, and the AI can see and reference it in every conversation.
  */
 import { writable, get } from 'svelte/store'
 import { browser } from '$app/environment'

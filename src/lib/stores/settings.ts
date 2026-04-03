@@ -3,6 +3,9 @@
  *
  * Fields:
  *   laozhangApiKey        — laozhang.ai API key
+ *   bianxieApiKey         — bianxie.ai API key
+ *   lingyaaiApiKey        — lingyaai.cn API key
+ *   qiniuApiKey           — qnaigc.com (七牛) API key
  *   enabledModelKeys      — explicit list of enabled model keys ([] = all models whose provider has a key)
  *   model                 — active conversation model key (`${provider}:${modelId}`)
  *   utilityModelKey       — utility model key (compaction, auto-title)
@@ -63,22 +66,27 @@ const DEFAULTS: Settings = {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
+/** Keys of the Settings interface that hold provider API keys. */
+export type ApiKeyField = 'laozhangApiKey' | 'bianxieApiKey' | 'lingyaaiApiKey' | 'qiniuApiKey'
+
+/** Maps provider id → Settings key field that holds its API key. */
+const PROVIDER_KEY_FIELD: Record<string, ApiKeyField> = {
+  laozhang: 'laozhangApiKey',
+  bianxie:  'bianxieApiKey',
+  lingyaai: 'lingyaaiApiKey',
+  qiniu:    'qiniuApiKey',
+}
+
 /** Returns true if the given provider has an API key configured. */
 function hasProviderKey(provider: string, s: Settings): boolean {
-  if (provider === 'laozhang') return !!s.laozhangApiKey
-  if (provider === 'bianxie') return !!s.bianxieApiKey
-  if (provider === 'lingyaai') return !!s.lingyaaiApiKey
-  if (provider === 'qiniu') return !!s.qiniuApiKey
-  return false
+  const field = PROVIDER_KEY_FIELD[provider]
+  return field ? !!s[field] : false
 }
 
 /** Returns the API key for the given provider, or undefined if not configured. */
 export function getApiKeyForProvider(provider: string, s: Settings): string | undefined {
-  if (provider === 'laozhang') return s.laozhangApiKey || undefined
-  if (provider === 'bianxie') return s.bianxieApiKey || undefined
-  if (provider === 'lingyaai') return s.lingyaaiApiKey || undefined
-  if (provider === 'qiniu') return s.qiniuApiKey || undefined
-  return undefined
+  const field = PROVIDER_KEY_FIELD[provider]
+  return field ? s[field] || undefined : undefined
 }
 
 /** All models whose provider currently has a key configured (ignores enabledModelKeys). */

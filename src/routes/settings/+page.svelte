@@ -31,6 +31,8 @@
     modelKey,
     IMAGE_MODELS,
     DEFAULT_IMAGE_MODEL_KEY,
+    type Settings,
+    type ApiKeyField,
   } from '$lib/stores/settings'
   import { THEMES } from '$lib/themes'
   import SettingsSoul from '$lib/components/SettingsSoul.svelte'
@@ -48,46 +50,63 @@
 
   const memCount = $derived($memories.length)
 
-  let laozhangKey = $state($settings.laozhangApiKey)
-  let showLaozhang = $state(false)
-  $effect(() => {
-    laozhangKey = $settings.laozhangApiKey
-  })
-  function saveLaozhangKey() {
-    updateSettings({ laozhangApiKey: laozhangKey })
+  interface ProviderConfig {
+    id: string
+    field: ApiKeyField
+    name: string
+    notice: string
+    inputId: string
+    apiDomain: string
   }
 
-  let bianxieKey = $state($settings.bianxieApiKey)
-  let showBianxie = $state(false)
-  $effect(() => {
-    bianxieKey = $settings.bianxieApiKey
-  })
-  function saveBianxieKey() {
-    updateSettings({ bianxieApiKey: bianxieKey })
-  }
+  const PROVIDER_CONFIGS: ProviderConfig[] = [
+    {
+      id: 'lingyaai', field: 'lingyaaiApiKey', name: '灵芽 · lingyaai.cn',
+      notice: '⚠ 未配置密钙，该供应商下的模型不可用。',
+      inputId: 'lingyaai-key', apiDomain: 'api.lingyaai.cn',
+    },
+    {
+      id: 'bianxie', field: 'bianxieApiKey', name: '便携 · bianxie.ai',
+      notice: '⚠ 未配置密钙，该供应商下的模型不可用。',
+      inputId: 'bianxie-key', apiDomain: 'api.bianxie.ai',
+    },
+    {
+      id: 'laozhang', field: 'laozhangApiKey', name: '老张 · laozhang.ai',
+      notice: '⚠ 未配置密钙，该供应商下的模型和图像生成功能不可用。',
+      inputId: 'laozhang-key', apiDomain: 'api.laozhang.ai',
+    },
+    {
+      id: 'qiniu', field: 'qiniuApiKey', name: '七牛 · qnaigc.com',
+      notice: '⚠ 未配置密钙，该供应商下的模型不可用。',
+      inputId: 'qiniu-key', apiDomain: 'api.qnaigc.com',
+    },
+  ]
 
-  let lingyaaiKey = $state($settings.lingyaaiApiKey)
-  let showLingyaai = $state(false)
-  $effect(() => {
-    lingyaaiKey = $settings.lingyaaiApiKey
+  const keyDraft = $state<Record<ApiKeyField, string>>({
+    laozhangApiKey: $settings.laozhangApiKey,
+    bianxieApiKey:  $settings.bianxieApiKey,
+    lingyaaiApiKey: $settings.lingyaaiApiKey,
+    qiniuApiKey:    $settings.qiniuApiKey,
   })
-  function saveLingyaaiKey() {
-    updateSettings({ lingyaaiApiKey: lingyaaiKey })
-  }
 
-  let qiniuKey = $state($settings.qiniuApiKey)
-  let showQiniu = $state(false)
-  $effect(() => {
-    qiniuKey = $settings.qiniuApiKey
+  const keyVisible = $state<Record<ApiKeyField, boolean>>({
+    laozhangApiKey: false,
+    bianxieApiKey:  false,
+    lingyaaiApiKey: false,
+    qiniuApiKey:    false,
   })
-  function saveQiniuKey() {
-    updateSettings({ qiniuApiKey: qiniuKey })
-  }
 
-  const laozhangModels = $derived(MODELS.filter((m) => m.provider === 'laozhang'))
-  const bianxieModels = $derived(MODELS.filter((m) => m.provider === 'bianxie'))
-  const lingyaaiModels = $derived(MODELS.filter((m) => m.provider === 'lingyaai'))
-  const qiniuModels = $derived(MODELS.filter((m) => m.provider === 'qiniu'))
+  // Keep drafts in sync when settings change externally (e.g. import/reset)
+  $effect(() => {
+    keyDraft.laozhangApiKey = $settings.laozhangApiKey
+    keyDraft.bianxieApiKey  = $settings.bianxieApiKey
+    keyDraft.lingyaaiApiKey = $settings.lingyaaiApiKey
+    keyDraft.qiniuApiKey    = $settings.qiniuApiKey
+  })
+
+  function saveKey(field: ApiKeyField): void {
+    updateSettings({ [field]: keyDraft[field] } as Partial<Settings>)
+  }
 
   function toggleModel(key: string): void {
     const s = $settings
@@ -205,7 +224,6 @@
               没有可用模型。请先在下方配置 API 密钥。
             </div>
           {:else}
-            {@render field('默认对话模型', '新建对话时默认使用的模型。')}
             <!-- svelte-ignore a11y_label_has_associated_control -->
             <div class="flex flex-col gap-1.5 mb-[18px]">
               <label class="text-[0.825rem] font-medium text-fg-sub" for="default-model">
@@ -269,66 +287,23 @@
             </div>
           {/if}
 
-          <div class="h-px bg-line my-5"></div>
-          {@render providerCard(
-            'lingyaai',
-            '灵芽 · lingyaai.cn',
-            $settings.lingyaaiApiKey,
-            '⚠ 未配置密钥，该供应商下的模型不可用。',
-            'lingyaai-key',
-            showLingyaai,
-            lingyaaiKey,
-            () => (showLingyaai = !showLingyaai),
-            (v) => (lingyaaiKey = v),
-            saveLingyaaiKey,
-            'api.lingyaai.cn',
-            lingyaaiModels,
-          )}
-          <div class="h-px bg-line my-5"></div>
-          {@render providerCard(
-            'bianxie',
-            '便携 · bianxie.ai',
-            $settings.bianxieApiKey,
-            '⚠ 未配置密钥，该供应商下的模型不可用。',
-            'bianxie-key',
-            showBianxie,
-            bianxieKey,
-            () => (showBianxie = !showBianxie),
-            (v) => (bianxieKey = v),
-            saveBianxieKey,
-            'api.bianxie.ai',
-            bianxieModels,
-          )}
-          <div class="h-px bg-line my-5"></div>
-          {@render providerCard(
-            'laozhang',
-            '老张 · laozhang.ai',
-            $settings.laozhangApiKey,
-            '⚠ 未配置密钥，该供应商下的模型和图像生成功能不可用。',
-            'laozhang-key',
-            showLaozhang,
-            laozhangKey,
-            () => (showLaozhang = !showLaozhang),
-            (v) => (laozhangKey = v),
-            saveLaozhangKey,
-            'api.laozhang.ai',
-            laozhangModels,
-          )}
-          <div class="h-px bg-line my-5"></div>
-          {@render providerCard(
-            'qiniu',
-            '七牛 · qnaigc.com',
-            $settings.qiniuApiKey,
-            '⚠ 未配置密钥，该供应商下的模型不可用。',
-            'qiniu-key',
-            showQiniu,
-            qiniuKey,
-            () => (showQiniu = !showQiniu),
-            (v) => (qiniuKey = v),
-            saveQiniuKey,
-            'api.qnaigc.com',
-            qiniuModels,
-          )}
+          {#each PROVIDER_CONFIGS as pc (pc.id)}
+            <div class="h-px bg-line my-5"></div>
+            {@render providerCard(
+              pc.id,
+              pc.name,
+              $settings[pc.field] as string,
+              pc.notice,
+              pc.inputId,
+              keyVisible[pc.field],
+              keyDraft[pc.field],
+              () => (keyVisible[pc.field] = !keyVisible[pc.field]),
+              (v) => (keyDraft[pc.field] = v),
+              () => saveKey(pc.field),
+              pc.apiDomain,
+              MODELS.filter((m) => m.provider === pc.id),
+            )}
+          {/each}
         </div>
 
         <!-- ── 外观 & 指令 ──────────────────────────────────────────────── -->
@@ -438,10 +413,6 @@
 </div>
 
 <!-- ── Snippets ─────────────────────────────────────────────────────────── -->
-
-{#snippet field(label: string, hint: string)}
-  <!-- placeholder — field content rendered inline above -->
-{/snippet}
 
 {#snippet providerCard(
   _id: string,

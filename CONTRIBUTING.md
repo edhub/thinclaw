@@ -64,7 +64,7 @@ Run `pnpm check` before submitting. Fix all TypeScript and Svelte errors.
 2. Choose `api` based on provider — see `docs/providers.md`:
    - Anthropic → `api: 'anthropic-messages'`
    - Google → `api: 'google-generative-ai'`
-   - OpenAI → `api: 'openai-completions'`（当前未启用，provider 在 vite.config.ts 中已 stub）
+   - OpenAI → `api: 'openai-completions'` (currently disabled; the provider is stubbed out in vite.config.ts)
 3. Set `reasoning: true` for thinking models (agent will use `thinkingLevel: 'medium'`).
 4. No other changes needed — the API key is injected at runtime from Settings.
 

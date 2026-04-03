@@ -35,7 +35,7 @@ src/
 
 ## Architecture
 
-**No server.** `adapter-static` → plain HTML/CSS/JS. All AI calls go browser → provider API directly. See `docs/providers.md` for provider/endpoint details.
+**No server.** `adapter-static` → plain HTML/CSS/JS. All AI calls go browser → provider API directly. Current providers: **laozhang** · **bianxie** · **lingyaai** · **qiniu**. See `docs/providers.md` for endpoint details.
 
 **Storage:**
 

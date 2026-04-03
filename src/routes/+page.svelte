@@ -139,6 +139,48 @@
   }
 </script>
 
+{#snippet settingsLink()}
+  <a
+    href="/settings"
+    class="bg-transparent border-none p-1.5 rounded-lg cursor-pointer text-fg-sub flex
+           items-center shrink-0 no-underline transition-all duration-100
+           hover:bg-surface-hover hover:text-fg"
+    aria-label="设置"
+    title="设置"
+  >
+    <Settings size={16} />
+  </a>
+{/snippet}
+
+{#snippet filesLink()}
+  <a
+    href="/files"
+    class="bg-transparent border-none p-1.5 rounded-lg cursor-pointer text-fg-sub flex
+           items-center shrink-0 no-underline transition-all duration-100
+           hover:bg-surface-hover hover:text-fg"
+    aria-label="文件浏览器"
+    title="文件浏览器"
+    target="_blank"
+    rel="noopener noreferrer"
+  >
+    <FolderOpen size={15} />
+  </a>
+{/snippet}
+
+{#snippet printBtn()}
+  {#if $activeConversationId}
+    <button
+      class="bg-transparent border-none p-1.5 rounded-lg cursor-pointer text-fg-sub flex
+             items-center shrink-0 transition-all duration-100 hover:bg-surface-hover hover:text-fg"
+      onclick={() => window.print()}
+      aria-label="打印 / 保存为 PDF"
+      title="打印 / 保存为 PDF"
+    >
+      <Printer size={15} />
+    </button>
+  {/if}
+{/snippet}
+
 <svelte:head>
   <title>ThinClaw</title>
 </svelte:head>
@@ -181,77 +223,18 @@
         {$activeConversation?.title ?? 'ThinClaw'}
       </span>
       <div class="flex items-center shrink-0">
-        {#if $activeConversationId}
-          <button
-            class="bg-transparent border-none p-1.5 rounded-lg cursor-pointer text-fg-sub flex
-                   items-center shrink-0 transition-all duration-100 hover:bg-surface-hover hover:text-fg"
-            onclick={() => window.print()}
-            aria-label="打印 / 保存为 PDF"
-            title="打印 / 保存为 PDF"
-          >
-            <Printer size={15} />
-          </button>
-        {/if}
-        <a
-          href="/files"
-          class="bg-transparent border-none p-1.5 rounded-lg cursor-pointer text-fg-sub flex
-                  items-center shrink-0 transition-all duration-100 hover:bg-surface-hover
-                  hover:text-fg no-underline"
-          aria-label="文件浏览器"
-          title="文件浏览器"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <FolderOpen size={15} />
-        </a>
-        <a
-          href="/settings"
-          class="bg-transparent border-none p-1.5 rounded-lg cursor-pointer text-fg-sub flex
-                  items-center shrink-0 transition-all duration-100 hover:bg-surface-hover
-                  hover:text-fg no-underline"
-          aria-label="设置"
-        >
-          <Settings size={16} />
-        </a>
+        {@render printBtn()}
+        {@render filesLink()}
+        {@render settingsLink()}
       </div>
     </header>
 
     <!-- Desktop floating controls (top-right) -->
     <div class="chat-controls absolute top-2.5 right-3.5 flex items-center flex-col gap-0.5 z-10">
       <div class="flex flex-col gap-0.5">
-        <a
-          href="/settings"
-          class="bg-transparent border-none p-1.5 rounded-lg cursor-pointer text-fg-sub flex
-                  items-center no-underline transition-all duration-100
-                  hover:bg-surface-hover hover:text-fg"
-          aria-label="设置"
-          title="设置"
-        >
-          <Settings size={16} />
-        </a>
-        <a
-          href="/files"
-          class="bg-transparent border-none p-1.5 rounded-lg cursor-pointer text-fg-sub flex
-                  items-center no-underline transition-all duration-100
-                  hover:bg-surface-hover hover:text-fg"
-          aria-label="文件浏览器"
-          title="文件浏览器"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <FolderOpen size={15} />
-        </a>
-        {#if $activeConversationId}
-          <button
-            class="bg-transparent border-none p-1.5 rounded-lg cursor-pointer text-fg-sub flex
-                   items-center transition-all duration-100 hover:bg-surface-hover hover:text-fg"
-            onclick={() => window.print()}
-            aria-label="打印 / 保存为 PDF"
-            title="打印 / 保存为 PDF"
-          >
-            <Printer size={15} />
-          </button>
-        {/if}
+        {@render settingsLink()}
+        {@render filesLink()}
+        {@render printBtn()}
       </div>
     </div>
 

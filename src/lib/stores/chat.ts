@@ -418,6 +418,18 @@ export async function renameConversation(id: string, title: string): Promise<voi
   updateSessionTitle(id, title).catch(() => {})
 }
 
+/** Construct a user AgentMessage from text content and optional images. */
+function buildUserMessage(content: string, images: ImageContent[]): AgentMessage {
+  return {
+    role: 'user',
+    content:
+      images.length > 0
+        ? [{ type: 'text', text: content }, ...images]
+        : [{ type: 'text', text: content }],
+    timestamp: Date.now(),
+  } as AgentMessage
+}
+
 export async function sendMessage(content: string, images: ImageContent[] = []): Promise<void> {
   const agent = getAgent()
 
@@ -442,15 +454,7 @@ export async function sendMessage(content: string, images: ImageContent[] = []):
   // If the agent is already running, queue this message as a follow-up.
   // The SDK's agent loop will process it automatically after the current turn.
   if (agent.state.isStreaming) {
-    const userMsg: AgentMessage = {
-      role: 'user',
-      content:
-        images.length > 0
-          ? [{ type: 'text', text: content }, ...images]
-          : [{ type: 'text', text: content }],
-      timestamp: Date.now(),
-    } as AgentMessage
-    agent.followUp(userMsg)
+    agent.followUp(buildUserMessage(content, images))
     queueLength.update((n) => n + 1)
     return
   }
@@ -469,15 +473,7 @@ export async function sendMessage(content: string, images: ImageContent[] = []):
   _prevMessageCounts.set(convId, agent.state.messages.length)
 
   // Show the user message in the UI immediately — don't wait for the API round-trip.
-  const userMsgContent: AgentMessage = {
-    role: 'user',
-    content:
-      images.length > 0
-        ? [{ type: 'text', text: content }, ...images]
-        : [{ type: 'text', text: content }],
-    timestamp: Date.now(),
-  } as AgentMessage
-  pendingUserMessage.set(userMsgContent)
+  pendingUserMessage.set(buildUserMessage(content, images))
 
   try {
     clearCapturedPayloads() // Clear previous payloads before new agent run
