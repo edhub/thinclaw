@@ -221,7 +221,7 @@
 <div class="flex-1 overflow-y-auto px-2.5 py-2 flex flex-col gap-0.5">
   <div
     class="text-[0.68rem] text-fg-muted uppercase tracking-[0.06em] font-semibold
-              px-1 pb-1 flex-shrink-0"
+              px-1 pb-1 shrink-0"
   >
     {entries.length} entries
   </div>
@@ -230,7 +230,7 @@
   {#if totalUsage.turns > 0}
     <div
       class="flex flex-wrap items-center gap-1 px-2 py-1.5 mb-1 bg-surface-elevated
-                border border-line rounded-md text-[0.72rem] flex-shrink-0"
+                border border-line rounded-md text-[0.72rem] shrink-0"
     >
       <span class="font-semibold text-fg-muted uppercase tracking-[0.05em] text-[0.65rem] mr-0.5">
         Token 用量
@@ -307,7 +307,7 @@
         </div>
         <ChevronRight
           size={10}
-          class="flex-shrink-0 text-fg-muted transition-transform duration-150 mt-px
+          class="shrink-0 text-fg-muted transition-transform duration-150 mt-px
                  {open ? 'rotate-90' : ''}"
         />
       </button>

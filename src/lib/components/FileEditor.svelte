@@ -64,7 +64,7 @@
   <!-- Toolbar -->
   <div
     class="flex items-center gap-2.5 px-4 py-2 border-b border-line bg-surface-sidebar
-              flex-shrink-0 min-h-[44px]"
+              shrink-0 min-h-[44px]"
   >
     <span
       class="flex-1 text-[0.82rem] text-fg-muted font-mono overflow-hidden text-ellipsis
@@ -72,7 +72,7 @@
     >
       {selectedPath}
     </span>
-    <div class="flex items-center gap-1.5 flex-shrink-0">
+    <div class="flex items-center gap-1.5 shrink-0">
       {#if isMarkdown}
         <div class="flex border border-line rounded-md overflow-hidden">
           <button

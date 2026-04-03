@@ -164,11 +164,11 @@
     <!-- Mobile top bar -->
     <header
       class="mobile-header hidden items-center gap-1.5 h-[52px] px-2 pl-3
-                   border-b border-line bg-surface flex-shrink-0"
+                   border-b border-line bg-surface shrink-0"
     >
       <button
         class="bg-transparent border-none p-1.5 rounded-lg cursor-pointer text-fg-sub flex
-               items-center flex-shrink-0 transition-all duration-100 hover:bg-surface-hover hover:text-fg"
+               items-center shrink-0 transition-all duration-100 hover:bg-surface-hover hover:text-fg"
         onclick={() => (sidebarOpen = true)}
         aria-label="打开侧边栏"
       >
@@ -180,11 +180,11 @@
       >
         {$activeConversation?.title ?? 'ThinClaw'}
       </span>
-      <div class="flex items-center flex-shrink-0">
+      <div class="flex items-center shrink-0">
         {#if $activeConversationId}
           <button
             class="bg-transparent border-none p-1.5 rounded-lg cursor-pointer text-fg-sub flex
-                   items-center flex-shrink-0 transition-all duration-100 hover:bg-surface-hover hover:text-fg"
+                   items-center shrink-0 transition-all duration-100 hover:bg-surface-hover hover:text-fg"
             onclick={() => window.print()}
             aria-label="打印 / 保存为 PDF"
             title="打印 / 保存为 PDF"
@@ -195,7 +195,7 @@
         <a
           href="/files"
           class="bg-transparent border-none p-1.5 rounded-lg cursor-pointer text-fg-sub flex
-                  items-center flex-shrink-0 transition-all duration-100 hover:bg-surface-hover
+                  items-center shrink-0 transition-all duration-100 hover:bg-surface-hover
                   hover:text-fg no-underline"
           aria-label="文件浏览器"
           title="文件浏览器"
@@ -207,7 +207,7 @@
         <a
           href="/settings"
           class="bg-transparent border-none p-1.5 rounded-lg cursor-pointer text-fg-sub flex
-                  items-center flex-shrink-0 transition-all duration-100 hover:bg-surface-hover
+                  items-center shrink-0 transition-all duration-100 hover:bg-surface-hover
                   hover:text-fg no-underline"
           aria-label="设置"
         >
@@ -332,7 +332,7 @@
             <div class="flex items-center gap-3 py-3.5">
               <div
                 class="w-7 h-7 rounded-full bg-surface-elevated text-fg-sub border border-line
-                          flex items-center justify-center flex-shrink-0"
+                          flex items-center justify-center shrink-0"
               >
                 <Bot size={14} />
               </div>
@@ -354,13 +354,13 @@
               class="flex items-center gap-2 bg-error-bg text-error border border-error
                         rounded-lg px-3.5 py-2 text-sm my-2"
             >
-              <AlertCircle size={14} class="flex-shrink-0" />
+              <AlertCircle size={14} class="shrink-0" />
               <span class="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
                 {$streamError}
               </span>
               <button
                 class="bg-transparent border-none cursor-pointer px-2 py-1 rounded-[5px] text-[0.78rem]
-                       text-error opacity-80 whitespace-nowrap flex-shrink-0 flex items-center gap-1
+                       text-error opacity-80 whitespace-nowrap shrink-0 flex items-center gap-1
                        transition-all duration-100 hover:bg-[color-mix(in_srgb,var(--error)_15%,transparent)]
                        hover:opacity-100"
                 onclick={() => retryLastMessage()}
@@ -370,7 +370,7 @@
               </button>
               <button
                 class="bg-transparent border-none cursor-pointer px-2 py-1 rounded-[5px] text-[0.85rem]
-                       text-error opacity-50 flex-shrink-0 flex items-center
+                       text-error opacity-50 shrink-0 flex items-center
                        transition-all duration-100 hover:bg-[color-mix(in_srgb,var(--error)_15%,transparent)]
                        hover:opacity-100"
                 onclick={() => streamError.set(null)}
@@ -415,7 +415,7 @@
   {#if chatInputOpen}
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <div
-      class="fixed inset-0 bg-black/40 z-[60] animate-modal-fade-in"
+      class="fixed inset-0 bg-black/40 z-60 animate-modal-fade-in"
       role="presentation"
       onclick={() => (chatInputOpen = false)}
     ></div>

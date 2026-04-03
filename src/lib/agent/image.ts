@@ -9,7 +9,7 @@
  * per conversation via the image tool toggle in the chat UI.
  *
  * Supported models (configured via Settings.imageGenerationModel):
- *   laozhang:gemini-3-pro-image-preview          — laozhang.ai  (generate + edit)
+ *   laozhang:gemini-3.1-flash-lite-preview       — laozhang.ai  (generate + edit)
  *   lingyaai:gemini-3.1-flash-image-preview      — lingyaai.cn  (generate + edit)
  *
  * Last-image context:
@@ -36,10 +36,10 @@ export interface ImageModelConfig {
 
 export const IMAGE_MODELS: ImageModelConfig[] = [
   {
-    key: 'laozhang:gemini-3-pro-image-preview',
-    name: 'Gemini 3 Pro Image · 老张',
+    key: 'laozhang:gemini-3.1-flash-lite-preview',
+    name: 'Gemini 3.1 Flash Image · 老张',
     provider: 'laozhang',
-    modelId: 'gemini-3-pro-image-preview',
+    modelId: 'gemini-3.1-flash-lite-preview',
     baseUrl: 'https://api.laozhang.ai',
   },
   {
@@ -51,7 +51,7 @@ export const IMAGE_MODELS: ImageModelConfig[] = [
   },
 ]
 
-export const DEFAULT_IMAGE_MODEL_KEY = 'laozhang:gemini-3-pro-image-preview'
+export const DEFAULT_IMAGE_MODEL_KEY = 'lingyaai:gemini-3.1-flash-image-preview'
 
 export function getImageModelByKey(key: string): ImageModelConfig {
   return IMAGE_MODELS.find((m) => m.key === key) ?? IMAGE_MODELS[0]
@@ -336,9 +336,7 @@ export const imageEditTool: AgentTool<typeof imageEditParams> = {
     }
 
     if (!_lastImageContext) {
-      throw new Error(
-        'No image in context to edit. Please upload an image or generate one first.',
-      )
+      throw new Error('No image in context to edit. Please upload an image or generate one first.')
     }
 
     // Preserve the source image's aspect ratio

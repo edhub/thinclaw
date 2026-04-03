@@ -88,7 +88,7 @@
   class:mobile-open={open}
 >
   <!-- Header -->
-  <div class="flex items-center justify-between px-4 py-3 border-b border-line flex-shrink-0">
+  <div class="flex items-center justify-between px-4 py-3 border-b border-line shrink-0">
     <span class="text-base font-bold tracking-tight text-fg">ThinClaw</span>
     <button
       class="flex items-center justify-center w-8 h-8 rounded-lg border border-line
@@ -134,7 +134,7 @@
             <!-- Star button: always in front of title -->
             <button
               class="flex items-center justify-center w-5 h-5 rounded bg-transparent
-                     border-none cursor-pointer flex-shrink-0 transition-colors duration-100
+                     border-none cursor-pointer shrink-0 transition-colors duration-100
                      {conv.starred
                 ? 'text-accent'
                 : 'text-transparent group-hover/item:text-fg-muted hover:!text-accent'}"
@@ -165,7 +165,7 @@
             <!-- Actions: visible on hover OR when active -->
             <div
               class="hidden group-hover/item:flex group-[.is-active]/item:flex
-                     items-center gap-0.5 flex-shrink-0"
+                     items-center gap-0.5 shrink-0"
             >
               <button
                 class="flex items-center justify-center w-5 h-5 rounded bg-transparent

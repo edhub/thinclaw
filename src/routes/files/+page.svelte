@@ -165,11 +165,11 @@
     <!-- Mobile top bar (hidden on sm+) -->
     <header
       class="flex sm:hidden items-center gap-1.5 h-[52px] px-2 pl-3
-                   border-b border-line bg-surface flex-shrink-0"
+                   border-b border-line bg-surface shrink-0"
     >
       <button
         class="bg-transparent border-none p-1.5 rounded-lg cursor-pointer text-fg-sub
-               flex items-center flex-shrink-0 transition-all duration-100
+               flex items-center shrink-0 transition-all duration-100
                hover:bg-surface-hover hover:text-fg"
         onclick={() => (treeOpen = true)}
         aria-label="打开文件树"
@@ -184,7 +184,7 @@
       </span>
       <button
         class="bg-transparent border-none p-1.5 rounded-lg cursor-pointer text-fg-sub
-               flex items-center flex-shrink-0 transition-all duration-100
+               flex items-center shrink-0 transition-all duration-100
                hover:bg-surface-hover hover:text-fg"
         onclick={() => history.back()}
         aria-label="返回"

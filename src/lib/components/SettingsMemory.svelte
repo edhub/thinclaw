@@ -80,7 +80,7 @@
         </span>
         <button
           class="bg-transparent border-none cursor-pointer text-fg-muted p-0.5 rounded
-                 flex flex-shrink-0 transition-all duration-100 hover:text-error hover:bg-error-bg"
+                 flex shrink-0 transition-all duration-100 hover:text-error hover:bg-error-bg"
           onclick={() => memories.remove(mem.id)}
           aria-label="删除记忆"
           type="button"

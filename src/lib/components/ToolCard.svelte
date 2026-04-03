@@ -91,7 +91,7 @@
   >
     <!-- Status icon -->
     <span
-      class="flex items-center justify-center w-4 h-4 rounded-full flex-shrink-0"
+      class="flex items-center justify-center w-4 h-4 rounded-full shrink-0"
       class:status-pending={isPending}
       class:status-error={isError}
       class:status-ok={!isPending && !isError}
@@ -114,7 +114,7 @@
 
     <ChevronDown
       size={11}
-      class="flex-shrink-0 text-fg-muted transition-transform duration-[180ms]
+      class="shrink-0 text-fg-muted transition-transform duration-[180ms]
              {expanded ? 'rotate-180' : ''}"
     />
   </button>

@@ -49,8 +49,8 @@
           onSelect(file)
         }}
       >
-        <FileText size={13} class="text-fg-muted flex-shrink-0" />
-        <span class="text-sm text-fg font-medium whitespace-nowrap flex-shrink-0">{file.name}</span>
+        <FileText size={13} class="text-fg-muted shrink-0" />
+        <span class="text-sm text-fg font-medium whitespace-nowrap shrink-0">{file.name}</span>
         {#if file.path !== file.name}
           <span
             class="text-[0.75rem] text-fg-muted overflow-hidden text-ellipsis whitespace-nowrap min-w-0"

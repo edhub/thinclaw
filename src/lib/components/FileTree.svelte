@@ -80,11 +80,11 @@
 
 <aside
   class="ft-sidebar flex flex-col bg-surface-sidebar border-r border-line overflow-hidden
-         w-[220px] flex-shrink-0"
+         w-[220px] shrink-0"
   class:mobile-open={open}
 >
   <!-- Header -->
-  <div class="flex items-center px-3 pt-3.5 pb-2.5 border-b border-line flex-shrink-0">
+  <div class="flex items-center px-3 pt-3.5 pb-2.5 border-b border-line shrink-0">
     <span class="flex-1 text-[0.75rem] font-semibold uppercase tracking-[0.06em] text-fg-muted">
       Files
     </span>
@@ -147,7 +147,7 @@
             onClose?.()
           }}
         >
-          <MessageSquare size={12} class="flex-shrink-0 mt-0.5 opacity-50" />
+          <MessageSquare size={12} class="shrink-0 mt-0.5 opacity-50" />
           <span class="flex flex-col gap-0.5 min-w-0 flex-1">
             <span class="text-[0.82rem] overflow-hidden text-ellipsis whitespace-nowrap block">
               {item.title}
@@ -174,10 +174,10 @@
     >
       <ChevronRight
         size={10}
-        class="flex-shrink-0 transition-transform duration-150
+        class="shrink-0 transition-transform duration-150
                {node.expanded ? 'rotate-90' : ''}"
       />
-      <Folder size={13} class="flex-shrink-0 opacity-50" />
+      <Folder size={13} class="shrink-0 opacity-50" />
       <span class="overflow-hidden text-ellipsis flex-1">{node.name}</span>
     </button>
     {#if node.expanded && node.children}
@@ -196,7 +196,7 @@
         onClose?.()
       }}
     >
-      <FileText size={12} class="flex-shrink-0 opacity-50" />
+      <FileText size={12} class="shrink-0 opacity-50" />
       <span class="overflow-hidden text-ellipsis flex-1">{node.name}</span>
     </button>
   {/if}

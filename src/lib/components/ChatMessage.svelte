@@ -156,7 +156,7 @@
     <div class="flex items-center gap-1.5 min-h-[22px]">
       <!-- Avatar -->
       <div
-        class="w-[22px] h-[22px] rounded-full flex items-center justify-center flex-shrink-0"
+        class="w-[22px] h-[22px] rounded-full flex items-center justify-center shrink-0"
         class:user-av={isUser}
         class:asst-av={isAssistant}
       >
@@ -168,7 +168,7 @@
       </span>
 
       <!-- Metadata -->
-      <div class="flex items-center gap-1.5 flex-shrink-0 opacity-50">
+      <div class="flex items-center gap-1.5 shrink-0 opacity-50">
         {#if msgTimestamp}
           <span class="text-[0.7rem] text-fg-muted leading-none whitespace-nowrap">
             {formatTime(msgTimestamp)}
@@ -228,7 +228,7 @@
             >
               <ChevronRight
                 size={12}
-                class="transition-transform duration-200 flex-shrink-0
+                class="transition-transform duration-200 shrink-0
                      {thinkingOpen ? 'rotate-90' : ''}"
               />
               <span>思考过程</span>
@@ -283,15 +283,15 @@
                 type="button"
                 aria-expanded={errorExpanded}
               >
-                <AlertTriangle size={12} class="flex-shrink-0 opacity-85" />
+                <AlertTriangle size={12} class="shrink-0 opacity-85" />
                 <span class="flex-1 font-medium">请求失败</span>
                 <ChevronRight
                   size={10}
-                  class="flex-shrink-0 text-error opacity-70 transition-transform duration-[180ms]
+                  class="shrink-0 text-error opacity-70 transition-transform duration-[180ms]
                        {errorExpanded ? 'rotate-90' : ''}"
                 />
               </button>
-              <div class="flex items-center gap-0.5 pr-1.5 flex-shrink-0">
+              <div class="flex items-center gap-0.5 pr-1.5 shrink-0">
                 {#if onRetry}
                   <button
                     class="inline-flex items-center gap-1 bg-transparent border-none cursor-pointer

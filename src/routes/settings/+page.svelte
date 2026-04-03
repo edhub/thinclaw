@@ -114,13 +114,13 @@
 <div class="flex flex-col h-screen bg-surface text-fg font-[inherit]">
   <!-- Top bar -->
   <header
-    class="flex items-center gap-3 px-6 h-[52px] border-b border-line flex-shrink-0
+    class="flex items-center gap-3 px-6 h-[52px] border-b border-line shrink-0
                  max-sm:px-4"
   >
     <h1 class="text-[0.9rem] font-semibold text-fg m-0 flex-1">设置</h1>
     <button
       class="flex items-center justify-center w-7 h-7 rounded-lg text-fg-muted bg-transparent
-             border-none cursor-pointer p-0 transition-all duration-100 flex-shrink-0
+             border-none cursor-pointer p-0 transition-all duration-100 shrink-0
              hover:bg-surface-hover hover:text-fg"
       onclick={closeSettings}
       type="button"
@@ -132,13 +132,13 @@
 
   <!-- Mobile tab bar (hidden on sm+) -->
   <div
-    class="hidden max-sm:flex overflow-x-auto flex-shrink-0 border-b border-line
+    class="hidden max-sm:flex overflow-x-auto shrink-0 border-b border-line
               px-2 gap-0.5 no-scrollbar"
     role="tablist"
   >
     {#each NAV as item (item.id)}
       <button
-        class="flex items-center gap-1.5 flex-shrink-0 bg-transparent border-none
+        class="flex items-center gap-1.5 shrink-0 bg-transparent border-none
                border-b-2 border-transparent px-3 pb-3 pt-2.5 text-[0.82rem] text-fg-muted
                cursor-pointer font-[inherit] transition-all duration-150 whitespace-nowrap
                hover:text-fg"
@@ -163,7 +163,7 @@
   <div class="flex flex-1 overflow-hidden">
     <!-- Sidebar nav (hidden on mobile) -->
     <nav
-      class="hidden sm:flex w-[180px] flex-shrink-0 py-4 px-2.5 border-r border-line
+      class="hidden sm:flex w-[180px] shrink-0 py-4 px-2.5 border-r border-line
                 flex-col gap-0.5 overflow-y-auto"
       aria-label="设置导航"
     >
@@ -263,27 +263,26 @@
               </select>
               <p class="text-[0.75rem] text-fg-muted m-0 leading-[1.5]">
                 用于 <span class="font-mono text-fg-sub">generate_image</span> 和
-                <span class="font-mono text-fg-sub">edit_image</span> 工具。需确保对应供应商已配置
-                API 密钥。
+                <span class="font-mono text-fg-sub">edit_image</span> 工具。需确保对应供应商已配置 API
+                密钥。
               </p>
             </div>
           {/if}
 
           <div class="h-px bg-line my-5"></div>
-
           {@render providerCard(
-            'laozhang',
-            '老张 · laozhang.ai',
-            $settings.laozhangApiKey,
-            '⚠ 未配置密钥，该供应商下的模型和图像生成功能不可用。',
-            'laozhang-key',
-            showLaozhang,
-            laozhangKey,
-            () => (showLaozhang = !showLaozhang),
-            (v) => (laozhangKey = v),
-            saveLaozhangKey,
-            'api.laozhang.ai',
-            laozhangModels,
+            'lingyaai',
+            '灵芽 · lingyaai.cn',
+            $settings.lingyaaiApiKey,
+            '⚠ 未配置密钥，该供应商下的模型不可用。',
+            'lingyaai-key',
+            showLingyaai,
+            lingyaaiKey,
+            () => (showLingyaai = !showLingyaai),
+            (v) => (lingyaaiKey = v),
+            saveLingyaaiKey,
+            'api.lingyaai.cn',
+            lingyaaiModels,
           )}
           <div class="h-px bg-line my-5"></div>
           {@render providerCard(
@@ -302,18 +301,18 @@
           )}
           <div class="h-px bg-line my-5"></div>
           {@render providerCard(
-            'lingyaai',
-            '灵芽 · lingyaai.cn',
-            $settings.lingyaaiApiKey,
-            '⚠ 未配置密钥，该供应商下的模型不可用。',
-            'lingyaai-key',
-            showLingyaai,
-            lingyaaiKey,
-            () => (showLingyaai = !showLingyaai),
-            (v) => (lingyaaiKey = v),
-            saveLingyaaiKey,
-            'api.lingyaai.cn',
-            lingyaaiModels,
+            'laozhang',
+            '老张 · laozhang.ai',
+            $settings.laozhangApiKey,
+            '⚠ 未配置密钥，该供应商下的模型和图像生成功能不可用。',
+            'laozhang-key',
+            showLaozhang,
+            laozhangKey,
+            () => (showLaozhang = !showLaozhang),
+            (v) => (laozhangKey = v),
+            saveLaozhangKey,
+            'api.laozhang.ai',
+            laozhangModels,
           )}
           <div class="h-px bg-line my-5"></div>
           {@render providerCard(
@@ -357,9 +356,7 @@
                     <span class="swatch-bar" style="background:{theme.bg}">
                       <span class="swatch-dot" style="background:{theme.accent}"></span>
                       <span class="swatch-line" style="background:{theme.text}"></span>
-                      <span
-                        class="swatch-line swatch-line-short"
-                        style="background:{theme.text}"
+                      <span class="swatch-line swatch-line-short" style="background:{theme.text}"
                       ></span>
                     </span>
                   </span>
@@ -506,7 +503,7 @@
         <button
           class="bg-surface border border-line rounded-lg px-3 min-w-[40px] text-[0.8rem]
                  cursor-pointer text-fg-sub whitespace-nowrap transition-all duration-100
-                 flex-shrink-0 flex items-center justify-center
+                 shrink-0 flex items-center justify-center
                  hover:bg-surface-hover hover:text-fg max-sm:w-full max-sm:py-2.5"
           type="button"
           onclick={onToggleShow}
@@ -547,7 +544,7 @@
               onchange={() => toggleModel(modelKey(m))}
             />
             <span class="text-[0.85rem] text-fg flex-1 max-sm:text-[0.82rem]">{m.name}</span>
-            <span class="flex gap-1 flex-shrink-0">
+            <span class="flex gap-1 shrink-0">
               {#if m.reasoning}
                 <span
                   class="text-[0.68rem] px-1.5 py-0.5 rounded-[5px] tabular-nums whitespace-nowrap

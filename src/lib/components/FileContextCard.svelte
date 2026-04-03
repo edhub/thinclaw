@@ -37,7 +37,7 @@
     type="button"
     aria-expanded={expanded}
   >
-    <span class="flex-shrink-0 text-fg-muted" class:error-icon={file.error}>
+    <span class="shrink-0 text-fg-muted" class:error-icon={file.error}>
       {#if file.error}
         <AlertCircle size={12} />
       {:else}
@@ -46,7 +46,7 @@
     </span>
 
     <span
-      class="fc-path font-medium text-fg whitespace-nowrap flex-shrink-0 font-mono text-[0.78rem]"
+      class="fc-path font-medium text-fg whitespace-nowrap shrink-0 font-mono text-[0.78rem]"
       title={file.path}>{fileName}</span
     >
 
@@ -60,7 +60,7 @@
     {/if}
 
     {#if metaLabel}
-      <span class="text-fg-muted whitespace-nowrap flex-shrink-0 ml-0.5 text-[0.78rem]">
+      <span class="text-fg-muted whitespace-nowrap shrink-0 ml-0.5 text-[0.78rem]">
         {metaLabel}
       </span>
     {/if}
@@ -68,13 +68,13 @@
     {#if file.truncated}
       <span
         class="text-[0.68rem] px-1.5 py-px rounded bg-surface-hover text-fg-muted
-                   border border-line flex-shrink-0">截断</span
+                   border border-line shrink-0">截断</span
       >
     {/if}
 
     <ChevronRight
       size={11}
-      class="ml-auto flex-shrink-0 text-fg-muted transition-transform duration-[180ms]
+      class="ml-auto shrink-0 text-fg-muted transition-transform duration-[180ms]
              {expanded ? 'rotate-90' : ''}"
     />
   </button>

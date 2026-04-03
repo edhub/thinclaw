@@ -468,7 +468,7 @@
 />
 
 <div
-  class="input-area px-6 pb-4 pt-3 border-t border-line bg-surface flex-shrink-0"
+  class="input-area px-6 pb-4 pt-3 border-t border-line bg-surface shrink-0"
   class:modal-mode={isModal}
   role="region"
   aria-label="消息输入框"
@@ -480,7 +480,7 @@
   {#if images.length > 0}
     <div class="flex flex-wrap gap-2 mb-2">
       {#each images as img, i}
-        <div class="relative w-16 h-16 flex-shrink-0">
+        <div class="relative w-16 h-16 shrink-0">
           <img
             src={previewSrc(img)}
             alt="attachment {i + 1}"
@@ -509,11 +509,11 @@
           class="inline-flex items-center gap-1.5 bg-surface-elevated border border-line
                     rounded-md px-2 py-1 text-[0.78rem] text-fg-sub max-w-[240px]"
         >
-          <FileText size={11} class="text-fg-muted flex-shrink-0" />
+          <FileText size={11} class="text-fg-muted shrink-0" />
           <span class="truncate min-w-0">{chip.name}</span>
           <button
             class="bg-transparent border-none p-0 cursor-pointer text-fg-muted flex
-                   items-center flex-shrink-0 rounded transition-colors duration-100
+                   items-center shrink-0 rounded transition-colors duration-100
                    hover:text-error"
             onclick={() => removeChip(chip.path)}
             type="button"
@@ -532,7 +532,7 @@
       class="flex items-center gap-1.5 text-[0.78rem] text-error bg-error-bg
                 border border-error rounded-md px-2.5 py-1.5 mb-2"
     >
-      <AlertCircle size={12} class="flex-shrink-0" />
+      <AlertCircle size={12} class="shrink-0" />
       不支持：{uploadErrors.join('、')}（仅限文本 / 代码文件）
     </div>
   {/if}
@@ -572,7 +572,7 @@
         <div class="flex items-center gap-0.5">
           <button
             class="attach-btn w-[34px] h-[34px] flex items-center justify-center rounded-lg
-                   bg-transparent border-none cursor-pointer text-fg-muted flex-shrink-0
+                   bg-transparent border-none cursor-pointer text-fg-muted shrink-0
                    transition-colors duration-100 hover:text-fg-sub hover:bg-surface-hover"
             type="button"
             onclick={() => fileInputEl?.click()}
@@ -582,7 +582,7 @@
           </button>
           <button
             class="attach-btn w-[34px] h-[34px] flex items-center justify-center rounded-lg
-                   bg-transparent border-none cursor-pointer text-fg-muted flex-shrink-0
+                   bg-transparent border-none cursor-pointer text-fg-muted shrink-0
                    transition-colors duration-100 hover:text-fg-sub hover:bg-surface-hover"
             type="button"
             onclick={() => textFileInputEl?.click()}
@@ -612,7 +612,7 @@
           {#if $isStreaming}
             <button
               class="w-[34px] h-[34px] flex items-center justify-center rounded-lg
-                     bg-transparent border border-line cursor-pointer text-fg-sub flex-shrink-0
+                     bg-transparent border border-line cursor-pointer text-fg-sub shrink-0
                      transition-all duration-100 hover:text-error hover:border-error hover:bg-error-bg"
               onclick={onAbort}
               title="停止"
@@ -623,7 +623,7 @@
           {/if}
           <button
             class="w-[34px] h-[34px] flex items-center justify-center rounded-lg bg-accent
-                   border-none cursor-pointer text-white flex-shrink-0
+                   border-none cursor-pointer text-white shrink-0
                    transition-opacity duration-100 disabled:opacity-40 disabled:cursor-not-allowed
                    not-disabled:hover:opacity-85"
             disabled={!canSend}
