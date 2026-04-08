@@ -1,6 +1,12 @@
 @import 'tailwindcss';
 @import 'highlight.js/styles/github.css';
 
+/* Ensure the iOS safe area inset regions match the app surface color */
+html,
+body {
+  background: var(--surface-main);
+}
+
 /* ─── Tailwind theme — maps design tokens to utility classes ─── */
 @theme inline {
   --color-accent: var(--accent);
@@ -489,8 +495,8 @@ select {
   /* Hide all UI chrome */
   .sidebar,
   .chat-controls,
-  .mobile-header,
-  .mobile-backdrop,
+  .chat-fab,
+  .sidebar-fab,
   .floating-input-btn,
   .chat-input-backdrop,
   .chat-input-modal,

@@ -4,7 +4,7 @@
     Settings,
     Printer,
     FolderOpen,
-    Menu,
+    PanelLeftOpen,
     Plus,
     Bot,
     AlertCircle,
@@ -135,6 +135,14 @@
     }
   })
 
+  // Prevent background scroll-through on iOS: consume touchmove on the backdrop
+  // (must be non-passive so preventDefault() is respected by the browser)
+  function preventScroll(node: HTMLElement) {
+    const stop = (e: TouchEvent) => e.preventDefault()
+    node.addEventListener('touchmove', stop, { passive: false })
+    return { destroy: () => node.removeEventListener('touchmove', stop) }
+  }
+
   async function handleSend(content: string, images: ImageContent[]) {
     chatInputOpen = false
     await sendMessage(content, images)
@@ -194,11 +202,12 @@
 </svelte:head>
 
 <div class="app-shell flex h-screen overflow-hidden bg-surface">
-  <!-- Mobile backdrop -->
+  <!-- Sidebar backdrop: fixed inset-0 covers full screen incl. iOS safe area (viewport-fit=cover) -->
   {#if sidebarOpen}
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <div
-      class="mobile-backdrop fixed inset-0 bg-black/40 z-40 hidden"
+      use:preventScroll
+      class="fixed inset-0 bg-black/40 z-40 sm:hidden"
       role="presentation"
       onclick={() => (sidebarOpen = false)}
     ></div>
@@ -211,33 +220,9 @@
   />
 
   <main class="flex-1 flex flex-col overflow-hidden min-w-0 relative">
-    <!-- Mobile top bar -->
-    <header
-      class="mobile-header hidden items-center gap-1.5 h-[52px] px-2 pl-3
-                   border-b border-line bg-surface shrink-0"
-    >
-      <button
-        class="bg-transparent border-none p-1.5 rounded-lg cursor-pointer text-fg-sub flex
-               items-center shrink-0 transition-all duration-100 hover:bg-surface-hover hover:text-fg"
-        onclick={() => (sidebarOpen = true)}
-        aria-label="打开侧边栏"
-      >
-        <Menu size={18} />
-      </button>
-      <span
-        class="flex-1 text-[0.9rem] font-semibold text-fg overflow-hidden text-ellipsis
-                   whitespace-nowrap text-center"
-      >
-        {$activeConversation?.title ?? 'ThinClaw'}
-      </span>
-      <div class="flex items-center shrink-0">
-        {@render printBtn()}
-        {@render filesLink()}
-        {@render settingsLink()}
-      </div>
-    </header>
-
-    <!-- Desktop floating controls (top-right) -->
+    <!-- iOS safe area spacer (viewport-fit=cover) -->
+    <div class="sm:hidden shrink-0 bg-surface" style="height: env(safe-area-inset-top, 0px)"></div>
+    <!-- Floating controls (top-right) — shown on all screen sizes -->
     <div class="chat-controls absolute top-2.5 right-3.5 flex items-center flex-col gap-0.5 z-10">
       <div class="flex flex-col gap-0.5">
         {@render settingsLink()}
@@ -277,7 +262,7 @@
         bind:this={messagesScrollEl}
         class="flex-1 overflow-y-auto overflow-x-hidden px-6 messages-scroll"
       >
-        <div class="max-w-[860px] mx-auto py-6">
+        <div class="max-w-[860px] mx-auto py-6 messages-inner">
           <!-- Persona picker + new message actions -->
           {#if $activeMessages.length === 0 && !$isStreaming && !$pendingUserMessage}
             <PersonaPicker />
@@ -412,14 +397,28 @@
     ></div>
   {/if}
 
+  <!-- Mobile: sidebar toggle at bottom-left -->
+  {#if !sidebarOpen}
+    <button
+      class="fixed bottom-6 left-5 z-50 w-11 h-11 rounded-full bg-surface-elevated border border-line
+             text-fg-sub flex items-center justify-center cursor-pointer sm:hidden
+             shadow-[0_2px_10px_rgba(0,0,0,0.12)] transition-all duration-200
+             hover:bg-surface-hover hover:text-fg active:scale-95 sidebar-fab"
+      onclick={() => (sidebarOpen = true)}
+      aria-label="打开侧边栏"
+    >
+      <PanelLeftOpen size={18} />
+    </button>
+  {/if}
+
   <!-- Floating action button -->
   {#if !chatInputOpen}
     <button
-      class="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-accent border-none text-white
+      class="fixed bottom-6 right-5 w-14 h-14 rounded-full bg-accent border-none text-white
              flex items-center justify-center cursor-pointer z-50
              shadow-[0_4px_12px_rgba(0,0,0,0.15)] transition-all duration-200
              hover:scale-110 hover:shadow-[0_6px_16px_rgba(0,0,0,0.2)]
-             active:scale-95"
+             active:scale-95 chat-fab"
       onclick={() => (chatInputOpen = true)}
       aria-label="打开聊天输入"
       title="打开聊天输入"
@@ -430,20 +429,27 @@
 </div>
 
 <style>
-  /* Mobile: show backdrop + header, hide desktop controls */
   @media (max-width: 639px) {
-    .mobile-backdrop {
-      display: block !important;
-    }
-    .mobile-header {
-      display: flex !important;
-    }
+    /* Offset controls below iOS status bar safe area */
     .chat-controls {
-      display: none !important;
+      top: calc(0.625rem + env(safe-area-inset-top, 0px));
     }
+
+    /* Tighten horizontal padding on narrow screens */
     .messages-scroll {
       padding-left: 12px;
       padding-right: 12px;
+    }
+
+    /* Reduce inner top padding now that there's no title bar */
+    .messages-inner {
+      padding-top: 0.5rem;
+    }
+
+    /* Lift FABs above home indicator */
+    .chat-fab,
+    .sidebar-fab {
+      bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
     }
   }
 

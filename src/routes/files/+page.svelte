@@ -1,6 +1,13 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
   import { Menu, X } from 'lucide-svelte'
+
+  // Prevent background scroll-through on iOS when sidebar backdrop is visible
+  function preventScroll(node: HTMLElement) {
+    const stop = (e: TouchEvent) => e.preventDefault()
+    node.addEventListener('touchmove', stop, { passive: false })
+    return { destroy: () => node.removeEventListener('touchmove', stop) }
+  }
   import { readFile, writeFile } from '$lib/fs/opfs'
   import { renderMarkdown } from '$lib/utils/markdown'
   import { readSessionFile, parseSessionJsonl, type SessionEntry } from '$lib/fs/session-recorder'
@@ -146,6 +153,7 @@
   {#if treeOpen}
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <div
+      use:preventScroll
       class="fixed inset-0 bg-black/40 z-40 sm:hidden"
       role="presentation"
       onclick={() => (treeOpen = false)}
@@ -162,6 +170,8 @@
   />
 
   <main class="flex-1 flex flex-col overflow-hidden">
+    <!-- iOS safe area spacer (viewport-fit=cover) -->
+    <div class="sm:hidden shrink-0 bg-surface" style="height: env(safe-area-inset-top, 0px)"></div>
     <!-- Mobile top bar (hidden on sm+) -->
     <header
       class="flex sm:hidden items-center gap-1.5 h-[52px] px-2 pl-3

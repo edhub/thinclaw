@@ -220,6 +220,8 @@
       transform: translateX(-100%);
       transition: transform 0.25s ease;
       box-shadow: 4px 0 24px rgba(0, 0, 0, 0.18);
+      /* Push content below iOS status bar; background still fills the safe area */
+      padding-top: env(safe-area-inset-top, 0px);
     }
     .ft-sidebar.mobile-open {
       transform: translateX(0);

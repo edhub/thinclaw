@@ -131,6 +131,8 @@
 
 <!-- ── Page shell ──────────────────────────────────────────────────────── -->
 <div class="flex flex-col h-screen bg-surface text-fg font-[inherit]">
+  <!-- iOS safe area spacer (viewport-fit=cover) -->
+  <div class="sm:hidden shrink-0 bg-surface" style="height: env(safe-area-inset-top, 0px)"></div>
   <!-- Top bar -->
   <header
     class="flex items-center gap-3 px-6 h-[52px] border-b border-line shrink-0
