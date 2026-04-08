@@ -1,6 +1,14 @@
 /**
  * Chat store — manages conversation state using @mariozechner/pi-agent-core Agent.
  *
+ * Each conversation gets its own Agent instance, allowing multiple conversations
+ * to stream concurrently. Users can freely switch topics while an AI reply is in
+ * progress — the background agent keeps running uninterrupted.
+ *
+ * Per-conversation state is held in `_convStates: Writable<Record<string, ConvState>>`.
+ * The exported reactive stores (isStreaming, activeMessages, …) are all `derived`
+ * from the currently active conversation's slice of that record.
+ *
  * System prompt is assembled before every message from three sources:
  *   soul        — AI's identity (localStorage, can self-update via soul_update tool)
  *   memories    — persistent facts (IndexedDB, managed via memory_* tools)
@@ -21,7 +29,6 @@ import { soul } from '$lib/agent/soul'
 import { memories } from '$lib/stores/memory'
 import { browserTools } from '$lib/agent/tools'
 import { imageGenerateTool, imageEditTool, setLastImageContextFromUpload } from '$lib/agent/image'
-import { onPayload, capturedPayloads, clearCapturedPayloads } from '$lib/agent/payload'
 import { settings, getApiKeyForProvider } from '$lib/stores/settings'
 import {
   listConversations,
@@ -35,122 +42,108 @@ import {
 } from '$lib/db'
 import { generateAiTitle, countUserMessages } from '$lib/agent/title'
 import { recordSession, updateSessionTitle, type SerializedTool } from '$lib/fs/session-recorder'
+import type { SessionPayloadEntry } from '$lib/fs/session-recorder'
 
-// ─── Streaming throttle (rAF batching) ───────────────────────────────────────
-// Buffer incoming message_update events and flush at most once per animation
-// frame. On fast models this cuts mobile re-renders from hundreds/sec to ~60.
+// ─── Per-conversation state ───────────────────────────────────────────────────
 
-/** Flush streaming updates at most twice per second — plenty for reading, easy on mobile. */
+interface ConvState {
+  messages: AgentMessage[]
+  streamingMessage: AgentMessage | null
+  isStreaming: boolean
+  streamError: string | null
+  pendingUserMessage: AgentMessage | null
+  queueLength: number
+  lastPromptContent: string
+  lastPromptImages: ImageContent[]
+}
+
+function defaultConvState(): ConvState {
+  return {
+    messages: [],
+    streamingMessage: null,
+    isStreaming: false,
+    streamError: null,
+    pendingUserMessage: null,
+    queueLength: 0,
+    lastPromptContent: '',
+    lastPromptImages: [],
+  }
+}
+
+/** Per-conversation agent instances (created lazily on first access). */
+const _agents = new Map<string, Agent>()
+
+/** Per-conversation captured LLM payloads for session recording. */
+const _convPayloads = new Map<string, SessionPayloadEntry[]>()
+
+/** Reactive per-conversation state map. Updating any field creates a new object ref. */
+const _convStates = writable<Record<string, ConvState>>({})
+
+function getConvState(convId: string): ConvState {
+  return get(_convStates)[convId] ?? defaultConvState()
+}
+
+function updateConvState(convId: string, patch: Partial<ConvState>): void {
+  _convStates.update((s) => ({
+    ...s,
+    [convId]: { ...(s[convId] ?? defaultConvState()), ...patch },
+  }))
+}
+
+// ─── Streaming throttle (rAF batching) — per conversation ────────────────────
 const STREAM_THROTTLE_MS = 500
 
-let _pendingStreamMsg: AgentMessage | null = null
-let _streamTimerId: ReturnType<typeof setTimeout> | null = null
+const _pendingStreamMsgs = new Map<string, AgentMessage>()
+const _streamTimerIds = new Map<string, ReturnType<typeof setTimeout>>()
 
-function scheduleStreamingUpdate(msg: AgentMessage): void {
-  _pendingStreamMsg = msg
-  if (_streamTimerId === null) {
-    _streamTimerId = setTimeout(() => {
-      _streamTimerId = null
-      if (_pendingStreamMsg) {
-        streamingMessage.set({ ..._pendingStreamMsg })
-        _pendingStreamMsg = null
+function scheduleStreamingUpdate(convId: string, msg: AgentMessage): void {
+  _pendingStreamMsgs.set(convId, msg)
+  if (!_streamTimerIds.has(convId)) {
+    const timerId = setTimeout(() => {
+      _streamTimerIds.delete(convId)
+      const pending = _pendingStreamMsgs.get(convId)
+      if (pending) {
+        _pendingStreamMsgs.delete(convId)
+        updateConvState(convId, { streamingMessage: { ...pending } })
       }
     }, STREAM_THROTTLE_MS)
+    _streamTimerIds.set(convId, timerId)
   }
 }
 
-function cancelStreamingRaf(): void {
-  if (_streamTimerId !== null) {
-    clearTimeout(_streamTimerId)
-    _streamTimerId = null
+function cancelStreamingRaf(convId: string): void {
+  const timerId = _streamTimerIds.get(convId)
+  if (timerId !== undefined) {
+    clearTimeout(timerId)
+    _streamTimerIds.delete(convId)
   }
-  _pendingStreamMsg = null
+  _pendingStreamMsgs.delete(convId)
 }
 
-// ─── API call rate limiter ────────────────────────────────────────────────────
-// Tracks the timestamp of the most recent outgoing LLM API call.
-// The custom streamFn enforces a minimum gap between consecutive calls so that
-// rapid tool-call loops don't hit provider rate limits.
+// ─── API call rate limiter — per conversation ─────────────────────────────────
+const _lastApiCallMs = new Map<string, number>()
 
-let _lastApiCallMs = 0
-
-/**
- * Enforce the configured inter-call delay.
- * Waits until `toolCallDelay` seconds have elapsed since the previous call,
- * then records the new call time.
- */
-async function throttleApiCall(delayMs: number): Promise<void> {
+async function throttleApiCall(convId: string, delayMs: number): Promise<void> {
+  const last = _lastApiCallMs.get(convId) ?? 0
   const now = Date.now()
-  const elapsed = now - _lastApiCallMs
-  if (_lastApiCallMs > 0 && elapsed < delayMs) {
+  const elapsed = now - last
+  if (last > 0 && elapsed < delayMs) {
     await new Promise<void>((resolve) => setTimeout(resolve, delayMs - elapsed))
   }
-  _lastApiCallMs = Date.now()
+  _lastApiCallMs.set(convId, Date.now())
 }
 
-/**
- * Reset the rate limiter — called at the start of each fresh user prompt so
- * the very first API call in a new conversation turn is never artificially delayed.
- */
-function resetApiCallThrottle(): void {
-  _lastApiCallMs = 0
+function resetApiCallThrottle(convId: string): void {
+  _lastApiCallMs.delete(convId)
 }
+
+// ─── Utility ──────────────────────────────────────────────────────────────────
 
 /** Return the utility model used for background tasks (compaction, auto-title). */
 function getUtilityModel() {
   const s = get(settings)
   const key = s.utilityModelKey || DEFAULT_UTILITY_MODEL_KEY
   return getModelByKey(key)
-}
-
-let _agent: Agent | null = null
-
-/**
- * Custom stream function that injects `Authorization: Bearer` headers for providers
- * (e.g. lingyaai) whose google-generative-ai proxy does not recognise the
- * `x-goog-api-key` header used by the @google/genai SDK.
- *
- * For every other model the call is passed through unchanged.
- */
-function makeStreamFn() {
-  return async function customStreamFn(
-    model: Model<any>,
-    context: Parameters<typeof streamSimple>[1],
-    options: Parameters<typeof streamSimple>[2],
-  ) {
-    if (model.api === 'google-generative-ai' && model.provider === 'lingyaai') {
-      const apiKey = getApiKeyForProvider(model.provider, get(settings))
-      if (apiKey) {
-        model = {
-          ...model,
-          headers: { Authorization: `Bearer ${apiKey}`, ...(model.headers ?? {}) },
-        }
-      }
-    }
-    // Enforce minimum inter-call delay to avoid provider rate limits.
-    const delayMs = (get(settings).toolCallDelay ?? 4) * 1000
-    await throttleApiCall(delayMs)
-    return streamSimple(model, context, options)
-  }
-}
-
-function getAgent(): Agent {
-  if (!_agent) {
-    _agent = new Agent({
-      initialState: {
-        tools: buildTools(),
-        systemPrompt: '',
-      },
-      onPayload: onPayload,
-      streamFn: makeStreamFn(),
-    })
-    // Resolve api key dynamically so runtime changes are picked up.
-    _agent.getApiKey = async (provider: string) => {
-      return getApiKeyForProvider(provider, get(settings))
-    }
-    _agent.subscribe(handleAgentEvent)
-  }
-  return _agent
 }
 
 /** Build the agent tool list. Image tools are always included when configured. */
@@ -172,106 +165,135 @@ function assembleSystemPrompt(convId?: string): string {
   return buildSystemPrompt(soulContent, persona?.content, s.systemPrompt, memoriesText)
 }
 
-// ─── Svelte stores ────────────────────────────────────────────────────────────
-export const conversations = writable<Conversation[]>([])
-export const activeConversationId = writable<string | null>(null)
-export const activeMessages = writable<AgentMessage[]>([])
-export const streamingMessage = writable<AgentMessage | null>(null)
-export const isStreaming = writable(false)
-export const streamError = writable<string | null>(null)
-/** Number of follow-up messages queued via agent.followUp() waiting to be processed. */
-export const queueLength = writable(0)
-/**
- * Optimistic user message shown immediately after sendMessage() is called,
- * before the first message_end event confirms it's in agent.state.messages.
- */
-export const pendingUserMessage = writable<AgentMessage | null>(null)
+// ─── Per-conversation Agent factory ──────────────────────────────────────────
 
-/**
- * Content of the most recently attempted sendMessage call.
- * Used to enable "retry" on pre-request errors where no assistant message was created.
- */
-export const lastPromptContent = writable<string>('')
-export const lastPromptImages = writable<ImageContent[]>([])
+function makeStreamFn(convId: string) {
+  return async function customStreamFn(
+    model: Model<any>,
+    context: Parameters<typeof streamSimple>[1],
+    options: Parameters<typeof streamSimple>[2],
+  ) {
+    if (model.api === 'google-generative-ai' && model.provider === 'lingyaai') {
+      const apiKey = getApiKeyForProvider(model.provider, get(settings))
+      if (apiKey) {
+        model = {
+          ...model,
+          headers: { Authorization: `Bearer ${apiKey}`, ...(model.headers ?? {}) },
+        }
+      }
+    }
+    const delayMs = (get(settings).toolCallDelay ?? 4) * 1000
+    await throttleApiCall(convId, delayMs)
+    return streamSimple(model, context, options)
+  }
+}
 
-export const activeConversation = derived(
-  [conversations, activeConversationId],
-  ([$convs, $id]) => $convs.find((c) => c.id === $id) ?? null,
-)
+function makePayloadHandler(convId: string): (payload: unknown) => unknown {
+  return (payload: unknown): unknown => {
+    try {
+      const payloads = _convPayloads.get(convId) ?? []
+      payloads.push({
+        type: 'payload',
+        timestamp: Date.now(),
+        params: JSON.parse(JSON.stringify(payload)) as Record<string, unknown>,
+      })
+      _convPayloads.set(convId, payloads)
+    } catch {
+      // Non-fatal
+    }
+    return payload
+  }
+}
 
-// Using a Map prevents cross-conversation pollution when onAgentEnd and
-// selectConversation race on the same module-level variable.
+function getAgent(convId: string): Agent {
+  if (_agents.has(convId)) return _agents.get(convId)!
+  const agent = new Agent({
+    initialState: {
+      tools: buildTools(),
+      systemPrompt: '',
+    },
+    onPayload: makePayloadHandler(convId),
+    streamFn: makeStreamFn(convId),
+  })
+  agent.getApiKey = async (provider: string) => {
+    return getApiKeyForProvider(provider, get(settings))
+  }
+  agent.subscribe((event) => handleAgentEvent(convId, event))
+  _agents.set(convId, agent)
+  return agent
+}
+
+/** Guard against double-initialisation when selectConversation is called
+ * twice for the same unseen conversation before the first IDB read completes. */
+const _initializingConvs = new Set<string>()
+
 const _prevMessageCounts = new Map<string, number>()
 
-function handleAgentEvent(event: AgentEvent) {
+function handleAgentEvent(convId: string, event: AgentEvent) {
   switch (event.type) {
     case 'agent_start':
-      isStreaming.set(true)
-      streamError.set(null)
+      updateConvState(convId, { isStreaming: true, streamError: null })
       break
 
     case 'message_update':
       if (event.message.role === 'assistant') {
-        scheduleStreamingUpdate(event.message)
+        scheduleStreamingUpdate(convId, event.message)
       }
       break
 
-    case 'message_end':
-      // Cancel any pending rAF flush — the message is now finalised.
-      cancelStreamingRaf()
-      streamingMessage.set(null)
-      activeMessages.set([...getAgent().state.messages])
-      // User message is now in agent.state.messages — clear the optimistic placeholder.
-      pendingUserMessage.set(null)
-      // If this was a queued follow-up user message, decrement the counter.
+    case 'message_end': {
+      cancelStreamingRaf(convId)
+      const agent = _agents.get(convId)
+      const msgs = agent ? [...agent.state.messages] : []
+      const patch: Partial<ConvState> = {
+        streamingMessage: null,
+        messages: msgs,
+        pendingUserMessage: null,
+      }
       if ((event.message as any).role === 'user') {
-        queueLength.update((n) => (n > 0 ? n - 1 : 0))
+        const curr = getConvState(convId)
+        patch.queueLength = Math.max(0, curr.queueLength - 1)
       }
+      updateConvState(convId, patch)
       break
+    }
 
-    case 'turn_end':
-      // Note: error information lives on the assistant message itself (msg.errorMessage).
-      // The ChatMessage component renders it as a collapsible error card — no need to
-      // mirror it in the streamError banner here.
-      break
-
-    case 'agent_end':
-      isStreaming.set(false)
-      cancelStreamingRaf()
-      streamingMessage.set(null)
-      activeMessages.set([...getAgent().state.messages])
-      queueLength.set(0) // safety reset — all follow-ups have been processed
-      // Fire-and-forget: persist messages after agent completes.
-      // Catch here so IDB errors surface to the user instead of
-      // becoming silent unhandled rejections.
-      onAgentEnd().catch((err: unknown) => {
+    case 'agent_end': {
+      const agent = _agents.get(convId)
+      cancelStreamingRaf(convId)
+      updateConvState(convId, {
+        isStreaming: false,
+        streamingMessage: null,
+        messages: agent ? [...agent.state.messages] : [],
+        queueLength: 0,
+      })
+      onAgentEnd(convId).catch((err: unknown) => {
         console.error('[chat] Failed to save messages:', err)
-        streamError.set('Failed to save messages — please refresh if they appear missing.')
+        updateConvState(convId, {
+          streamError: 'Failed to save messages — please refresh if they appear missing.',
+        })
       })
       break
+    }
   }
 }
 
-async function onAgentEnd(): Promise<void> {
-  await persistNewMessages()
+async function onAgentEnd(convId: string): Promise<void> {
+  await persistNewMessages(convId)
   await loadConversations()
-  // Record session snapshot after agent completes.
-  persistSessionSnapshot().catch((err: unknown) => {
+  persistSessionSnapshot(convId).catch((err: unknown) => {
     console.warn('[session] Failed to record session:', err)
   })
-  // Auto-title after 5 rounds (fire-and-forget, non-blocking).
-  const convId = get(activeConversationId)
-  if (convId) maybeGenerateTitle(convId, 5).catch(() => {})
+  maybeGenerateTitle(convId, 5).catch(() => {})
 }
 
-/** Write the current conversation to OPFS sessions/{convId}.jsonl. */
-async function persistSessionSnapshot(): Promise<void> {
-  const convId = get(activeConversationId)
-  if (!convId) return
+/** Write the conversation to OPFS sessions/{convId}.jsonl. */
+async function persistSessionSnapshot(convId: string): Promise<void> {
   const conv = get(conversations).find((c) => c.id === convId)
   const title = conv?.title ?? '新对话'
   const createdAt = conv?.createdAt ?? Date.now()
-  const agent = getAgent()
+  const agent = _agents.get(convId)
+  if (!agent) return
   const model = agent.state.model?.id ?? ''
   const thinkingLevel = (agent.state as any).thinkingLevel ?? 'off'
   const systemPrompt = agent.state.systemPrompt ?? ''
@@ -282,6 +304,7 @@ async function persistSessionSnapshot(): Promise<void> {
     description: t.description,
     parameters: t.parameters,
   }))
+  const payloads = _convPayloads.get(convId)
   await recordSession(
     convId,
     title,
@@ -292,16 +315,16 @@ async function persistSessionSnapshot(): Promise<void> {
     systemPrompt,
     messages,
     tools,
-    capturedPayloads.length > 0 ? capturedPayloads : undefined,
+    payloads && payloads.length > 0 ? payloads : undefined,
   )
+  // Clear after recording so old payloads don't re-appear on next snapshot
+  _convPayloads.set(convId, [])
 }
 
-async function persistNewMessages(): Promise<void> {
-  const convId = get(activeConversationId)
-  if (!convId) return
-  const all = getAgent().state.messages
-  // Use per-conversation count so concurrent onAgentEnd / selectConversation
-  // calls on different conversations don't overwrite each other's offsets.
+async function persistNewMessages(convId: string): Promise<void> {
+  const agent = _agents.get(convId)
+  if (!agent) return
+  const all = agent.state.messages
   const prevCount = _prevMessageCounts.get(convId) ?? 0
   const newMsgs = all.slice(prevCount)
   if (newMsgs.length === 0) return
@@ -313,12 +336,63 @@ async function persistNewMessages(): Promise<void> {
   _prevMessageCounts.set(convId, all.length)
 }
 
+// ─── Svelte stores ────────────────────────────────────────────────────────────
+export const conversations = writable<Conversation[]>([])
+export const activeConversationId = writable<string | null>(null)
+
+// Derived from the active conversation's per-conv state
+export const activeMessages = derived(
+  [_convStates, activeConversationId],
+  ([$s, $id]) => ($id ? ($s[$id]?.messages ?? []) : []),
+)
+export const streamingMessage = derived(
+  [_convStates, activeConversationId],
+  ([$s, $id]) => ($id ? ($s[$id]?.streamingMessage ?? null) : null),
+)
+export const isStreaming = derived(
+  [_convStates, activeConversationId],
+  ([$s, $id]) => ($id ? ($s[$id]?.isStreaming ?? false) : false),
+)
+export const streamError = derived(
+  [_convStates, activeConversationId],
+  ([$s, $id]) => ($id ? ($s[$id]?.streamError ?? null) : null),
+)
+export const queueLength = derived(
+  [_convStates, activeConversationId],
+  ([$s, $id]) => ($id ? ($s[$id]?.queueLength ?? 0) : 0),
+)
+export const pendingUserMessage = derived(
+  [_convStates, activeConversationId],
+  ([$s, $id]) => ($id ? ($s[$id]?.pendingUserMessage ?? null) : null),
+)
+export const lastPromptContent = derived(
+  [_convStates, activeConversationId],
+  ([$s, $id]) => ($id ? ($s[$id]?.lastPromptContent ?? '') : ''),
+)
+export const lastPromptImages = derived(
+  [_convStates, activeConversationId],
+  ([$s, $id]) => ($id ? ($s[$id]?.lastPromptImages ?? []) : []),
+)
+
+/**
+ * Set of conversation IDs that are currently streaming.
+ * Used by the sidebar to show per-conversation streaming indicators.
+ */
+export const streamingConversationIds = derived(_convStates, ($s) => {
+  const ids = new Set<string>()
+  for (const [id, state] of Object.entries($s)) {
+    if (state.isStreaming) ids.add(id)
+  }
+  return ids
+})
+
+export const activeConversation = derived(
+  [conversations, activeConversationId],
+  ([$convs, $id]) => $convs.find((c) => c.id === $id) ?? null,
+)
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
-// loadConversations no longer calls memories.load() — memories are loaded
-// once at app startup (see +page.svelte onMount) and kept in sync by
-// memory_save / memory_delete tools incrementally.
 export async function loadConversations(): Promise<void> {
   await sweepOldConversations()
   const list = await listConversations()
@@ -332,22 +406,36 @@ export async function selectConversation(id: string): Promise<void> {
     maybeGenerateTitle(prevId, 1).catch(() => {})
   }
 
-  const msgs = await getMessages(id)
-  const agent = getAgent()
-  const conv = get(conversations).find((c) => c.id === id)
-
-  agent.setSystemPrompt(assembleSystemPrompt(id))
-  const selectedModel = getModelByKey(get(settings).model)
-  agent.setModel(selectedModel)
-  agent.setThinkingLevel(selectedModel.reasoning ? 'medium' : 'off')
-  agent.replaceMessages(msgs)
-  agent.setTools(buildTools())
-
-  _prevMessageCounts.set(id, msgs.length)
+  // Switch the active pointer immediately so the UI feels responsive.
   activeConversationId.set(id)
-  activeMessages.set(msgs)
-  streamingMessage.set(null)
-  streamError.set(null)
+
+  const existingState = get(_convStates)[id]
+
+  if (!existingState && !_initializingConvs.has(id)) {
+    // First visit: load messages from IndexedDB and initialise the agent.
+    _initializingConvs.add(id)
+    const msgs = await getMessages(id)
+    _initializingConvs.delete(id)
+    const agent = getAgent(id)
+
+    agent.setSystemPrompt(assembleSystemPrompt(id))
+    const selectedModel = getModelByKey(get(settings).model)
+    agent.setModel(selectedModel)
+    agent.setThinkingLevel(selectedModel.reasoning ? 'medium' : 'off')
+    agent.replaceMessages(msgs)
+    agent.setTools(buildTools())
+    _prevMessageCounts.set(id, msgs.length)
+
+    updateConvState(id, { messages: msgs })
+  } else if (!existingState.isStreaming) {
+    // Already visited but idle — refresh system prompt and model in case settings changed.
+    const agent = getAgent(id)
+    agent.setSystemPrompt(assembleSystemPrompt(id))
+    const selectedModel = getModelByKey(get(settings).model)
+    agent.setModel(selectedModel)
+    agent.setThinkingLevel(selectedModel.reasoning ? 'medium' : 'off')
+  }
+  // If the conversation is currently streaming, leave the agent completely untouched.
 }
 
 export async function createConversation(): Promise<string> {
@@ -374,15 +462,14 @@ export async function createConversation(): Promise<string> {
 export async function setConversationPersona(personaId: string | null): Promise<void> {
   const convId = get(activeConversationId)
   if (!convId) return
-  // Guard: persona is locked once the conversation has messages.
   if (get(activeMessages).length > 0) return
   conversations.update((list) =>
     list.map((c) => (c.id === convId ? { ...c, personaId: personaId ?? undefined } : c)),
   )
   const conv = get(conversations).find((c) => c.id === convId)
   if (conv) await saveConversation(conv)
-  // Immediately update agent system prompt to reflect the new persona.
-  getAgent().setSystemPrompt(assembleSystemPrompt())
+  const agent = _agents.get(convId)
+  if (agent) agent.setSystemPrompt(assembleSystemPrompt())
 }
 
 export async function starConversation(id: string, starred: boolean): Promise<void> {
@@ -394,14 +481,26 @@ export async function starConversation(id: string, starred: boolean): Promise<vo
 export async function removeConversation(id: string): Promise<void> {
   await deleteConversation(id)
   conversations.update((list) => list.filter((c) => c.id !== id))
+
+  // Abort and clean up the agent if it exists.
+  const agent = _agents.get(id)
+  if (agent) {
+    try {
+      agent.clearFollowUpQueue?.()
+      agent.abort?.()
+    } catch {}
+    _agents.delete(id)
+  }
+  _convStates.update((s) => {
+    const { [id]: _, ...rest } = s
+    return rest
+  })
+  _convPayloads.delete(id)
+  _prevMessageCounts.delete(id)
+  cancelStreamingRaf(id)
+
   activeConversationId.update((current) => {
-    if (current === id) {
-      getAgent().replaceMessages([])
-      _prevMessageCounts.delete(id)
-      activeMessages.set([])
-      streamingMessage.set(null)
-      return null
-    }
+    if (current === id) return null
     return current
   })
 }
@@ -411,11 +510,15 @@ export async function renameConversation(id: string, title: string): Promise<voi
   conversations.update((list) =>
     list.map((c) => (c.id === id ? { ...c, title, updatedAt: now } : c)),
   )
-  // Read back from the already-updated store — no extra IDB round-trip needed.
   const conv = get(conversations).find((c) => c.id === id)
   if (conv) await saveConversation(conv)
-  // Keep the session file header in sync (fire-and-forget — non-fatal).
   updateSessionTitle(id, title).catch(() => {})
+}
+
+/** Clear streamError for the active conversation (replaces the old streamError.set(null)). */
+export function clearStreamError(): void {
+  const id = get(activeConversationId)
+  if (id) updateConvState(id, { streamError: null })
 }
 
 /** Construct a user AgentMessage from text content and optional images. */
@@ -431,14 +534,14 @@ function buildUserMessage(content: string, images: ImageContent[]): AgentMessage
 }
 
 export async function sendMessage(content: string, images: ImageContent[] = []): Promise<void> {
-  const agent = getAgent()
+  let convId = get(activeConversationId)
+  if (!convId) {
+    convId = await createConversation()
+  }
 
   // Always track the last attempted content so the error banner retry is correct.
-  lastPromptContent.set(content)
-  lastPromptImages.set(images)
+  updateConvState(convId, { lastPromptContent: content, lastPromptImages: images })
 
-  // Keep last-image context in sync so edit_image can use it automatically.
-  // Aspect ratio is detected asynchronously from image dimensions — fire-and-forget.
   if (images.length > 0) {
     setLastImageContextFromUpload(images[0].data, images[0].mimeType).catch(() => {})
   }
@@ -447,95 +550,92 @@ export async function sendMessage(content: string, images: ImageContent[] = []):
   const activeModel = getModelByKey(s.model)
   const requiredKey = getApiKeyForProvider(activeModel.provider, s)
   if (!requiredKey) {
-    streamError.set('API key is not set. Please add it in Settings.')
+    updateConvState(convId, {
+      streamError: 'API key is not set. Please add it in Settings.',
+    })
     return
   }
+
+  const agent = getAgent(convId)
 
   // If the agent is already running, queue this message as a follow-up.
-  // The SDK's agent loop will process it automatically after the current turn.
   if (agent.state.isStreaming) {
     agent.followUp(buildUserMessage(content, images))
-    queueLength.update((n) => n + 1)
+    updateConvState(convId, { queueLength: getConvState(convId).queueLength + 1 })
     return
-  }
-
-  let convId = get(activeConversationId)
-  if (!convId) {
-    convId = await createConversation()
   }
 
   // Rebuild system prompt before every message so soul/memory changes take effect
   const selectedModel = getModelByKey(s.model)
-  agent.setSystemPrompt(assembleSystemPrompt())
+  agent.setSystemPrompt(assembleSystemPrompt(convId))
   agent.setModel(selectedModel)
   agent.setThinkingLevel(selectedModel.reasoning ? 'medium' : 'off')
 
   _prevMessageCounts.set(convId, agent.state.messages.length)
 
-  // Show the user message in the UI immediately — don't wait for the API round-trip.
-  pendingUserMessage.set(buildUserMessage(content, images))
+  // Reset per-conv payloads for this new run
+  _convPayloads.set(convId, [])
+
+  // Show the user message in the UI immediately
+  updateConvState(convId, { pendingUserMessage: buildUserMessage(content, images) })
 
   try {
-    clearCapturedPayloads() // Clear previous payloads before new agent run
-    resetApiCallThrottle() // First API call of a fresh turn is never delayed
+    resetApiCallThrottle(convId)
     await agent.prompt(content, images.length > 0 ? images : undefined)
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
-    streamError.set(msg)
-    pendingUserMessage.set(null)
+    updateConvState(convId, { streamError: msg, pendingUserMessage: null })
   }
 }
 
 export function abortStreaming(): void {
-  const agent = getAgent()
-  // Clear queued follow-ups before aborting so stale messages don't resurface
-  // on the next prompt() call.
+  const convId = get(activeConversationId)
+  if (!convId) return
+  const agent = _agents.get(convId)
+  if (!agent) return
   agent.clearFollowUpQueue()
-  queueLength.set(0)
+  updateConvState(convId, { queueLength: 0 })
   agent.abort()
 }
 
 /**
  * Remove an error assistant message (and its immediately preceding user message)
  * from agent state, the active UI, and IndexedDB.
- *
- * Safe to call while the agent is idle. No-ops if the agent is currently streaming.
  */
 export async function deleteErrorMessage(errorMsg: AgentMessage): Promise<void> {
-  if (get(isStreaming)) return
-  const agent = getAgent()
+  const convId = get(activeConversationId)
+  if (!convId) return
+  if (getConvState(convId).isStreaming) return
+  const agent = _agents.get(convId)
+  if (!agent) return
   const msgs = agent.state.messages
   const idx = msgs.indexOf(errorMsg)
   if (idx < 0) return
 
-  // Also remove the user message that triggered this error, if present.
   const prevIdx = idx > 0 && msgs[idx - 1].role === 'user' ? idx - 1 : -1
   const filtered = msgs.filter((_, i) => i !== idx && i !== prevIdx)
 
   agent.replaceMessages(filtered)
-  activeMessages.set([...filtered])
+  updateConvState(convId, { messages: [...filtered] })
 
-  const convId = get(activeConversationId)
-  if (convId) {
-    await replaceAllMessages(convId, filtered)
-    _prevMessageCounts.set(convId, filtered.length)
-  }
+  await replaceAllMessages(convId, filtered)
+  _prevMessageCounts.set(convId, filtered.length)
 }
 
 /**
  * Delete the error assistant message (and its preceding user message), then
  * re-send the same user content so the request is retried immediately.
- *
- * No-ops if the agent is currently streaming.
  */
 export async function retryFromError(errorMsg: AgentMessage): Promise<void> {
-  if (get(isStreaming)) return
-  const agent = getAgent()
+  const convId = get(activeConversationId)
+  if (!convId) return
+  if (getConvState(convId).isStreaming) return
+  const agent = _agents.get(convId)
+  if (!agent) return
   const msgs = agent.state.messages
   const idx = msgs.indexOf(errorMsg)
   if (idx < 0) return
 
-  // Extract the content we need to resend BEFORE deleting.
   const prevIdx = idx > 0 && msgs[idx - 1].role === 'user' ? idx - 1 : -1
   let content = ''
   let images: ImageContent[] = []
@@ -561,11 +661,12 @@ export async function retryFromError(errorMsg: AgentMessage): Promise<void> {
 
 /**
  * Retry the last attempted sendMessage call.
- * Used by the pre-request error banner (e.g., when an API key is added after
- * the first attempt failed before the agent loop even started).
+ * Used by the pre-request error banner.
  */
 export async function retryLastMessage(): Promise<void> {
-  if (get(isStreaming)) return
+  const convId = get(activeConversationId)
+  if (!convId) return
+  if (getConvState(convId).isStreaming) return
   const content = get(lastPromptContent)
   const images = get(lastPromptImages)
   if (!content && images.length === 0) return
@@ -574,20 +675,12 @@ export async function retryLastMessage(): Promise<void> {
 
 // ─── AI title generation ──────────────────────────────────────────────────────
 
-/**
- * Generate an AI title for a conversation if:
- *   - The title is still the default 'New conversation' (never been titled).
- *   - The user has sent at least `minRounds` messages.
- *
- * minRounds=5  → triggered after 5 back-and-forths
- * minRounds=1  → triggered on conversation switch (any content)
- */
 async function maybeGenerateTitle(convId: string, minRounds: number): Promise<void> {
   const conv = get(conversations).find((c) => c.id === convId)
-  // Skip if already titled.
   if (!conv || conv.title !== '新对话') return
 
-  const agent = getAgent()
+  const agent = _agents.get(convId)
+  if (!agent) return
   const messages = agent.state.messages
   if (countUserMessages(messages) < minRounds) return
 

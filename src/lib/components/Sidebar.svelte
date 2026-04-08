@@ -7,7 +7,7 @@
     starConversation,
     conversations,
     activeConversationId,
-    isStreaming,
+    streamingConversationIds,
   } from '$lib/stores/chat'
   import { getPersonaById } from '$lib/agent/personas'
   import type { Conversation } from '$lib/db'
@@ -25,7 +25,6 @@
   }
 
   async function handleSelect(id: string) {
-    if ($isStreaming) return
     if ($activeConversationId === id) {
       onScrollToBottom?.()
       onClose?.()
@@ -149,7 +148,19 @@
             </button>
 
             <div class="flex-1 flex flex-col gap-0.5 overflow-hidden min-w-0">
-              <span class="truncate">{conv.title}</span>
+              <div class="flex items-center gap-1.5 min-w-0">
+                <span class="truncate min-w-0 flex-1">{conv.title}</span>
+                {#if $streamingConversationIds.has(conv.id) && $activeConversationId !== conv.id}
+                  <span
+                    class="inline-flex items-center gap-px shrink-0"
+                    title="AI 正在回复中"
+                  >
+                    <span class="streaming-dot [animation-delay:0ms]"></span>
+                    <span class="streaming-dot [animation-delay:200ms]"></span>
+                    <span class="streaming-dot [animation-delay:400ms]"></span>
+                  </span>
+                {/if}
+              </div>
               {#if conv.personaId}
                 {@const persona = getPersonaById(conv.personaId)}
                 {#if persona}
@@ -189,6 +200,21 @@
   .is-active {
     background: var(--surface-active);
     color: var(--text-primary);
+  }
+
+  /* Background streaming indicator dots */
+  .streaming-dot {
+    display: inline-block;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: dot-bounce 1.2s ease-in-out infinite;
+  }
+
+  @keyframes dot-bounce {
+    0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+    40% { transform: scale(1); opacity: 1; }
   }
 
   /* Mobile slide-in drawer */

@@ -32,6 +32,7 @@
     deleteErrorMessage,
     retryFromError,
     retryLastMessage,
+    clearStreamError,
   } from '$lib/stores/chat'
   import { get } from 'svelte/store'
   import { nanoid } from '$lib/utils/nanoid'
@@ -105,13 +106,20 @@
     )
   }
 
-  // Scroll to top when switching conversations
+  // Scroll to top when switching conversations; scroll to bottom if the
+  // target conversation is currently streaming (user is returning to an
+  // ongoing reply).
   let lastConvId = ''
   $effect(() => {
     const convId = $activeConversationId ?? ''
     if (!convId || convId === lastConvId) return
     lastConvId = convId
-    if (messagesScrollEl) messagesScrollEl.scrollTop = 0
+    if (!messagesScrollEl) return
+    if ($isStreaming || $streamingMessage) {
+      scrollToBottom('instant')
+    } else {
+      messagesScrollEl.scrollTop = 0
+    }
   })
 
   // Scroll once to bottom when user sends a message
@@ -356,7 +364,7 @@
                        text-error opacity-50 shrink-0 flex items-center
                        transition-all duration-100 hover:bg-[color-mix(in_srgb,var(--error)_15%,transparent)]
                        hover:opacity-100"
-                onclick={() => streamError.set(null)}
+                onclick={() => clearStreamError()}
                 title="关闭"
               >
                 <X size={14} />
@@ -366,7 +374,7 @@
           <div bind:this={messagesEndEl} class="h-32"></div>
         </div>
         <!-- reading space: visible after sending a new message -->
-        <div class="h-[70vh]" aria-hidden="true"></div>
+        <div class="h-[60vh]" aria-hidden="true"></div>
         <div bind:this={chatEndEl}></div>
       </div>
     {/if}
@@ -378,7 +386,7 @@
                w-[min(calc(100%-2rem),760px)]
                bg-surface border border-line rounded-2xl
                shadow-[0_10px_40px_rgba(0,0,0,0.2)]
-               max-h-[70vh] animate-modal-slide-up"
+               max-h-[60vh] animate-modal-slide-up"
       >
         <ChatInput
           bind:this={chatInputRef}
