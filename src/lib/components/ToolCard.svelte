@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { ToolCall, ToolResultMessage, TextContent } from '@mariozechner/pi-ai'
   import type { GeneratedImage } from '$lib/agent/image'
+  import { toast } from '$lib/stores/toast'
   import {
     Loader2,
     AlertCircle,
@@ -19,6 +20,42 @@
   let { call, result = null, defaultExpanded = false }: Props = $props()
 
   let expanded = $state(false)
+
+  async function handleSaveImage(mimeType: string, imageData: string, filename: string) {
+    // base64 → Blob
+    const binary = atob(imageData)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+    const blob = new Blob([bytes], { type: mimeType })
+
+    // 优先 Web Share API（iOS / Android 原生分享/存照片）
+    // 仅在触摸设备上使用，避免桌面端弹出分享菜单
+    const isTouchDevice = navigator.maxTouchPoints > 0
+    const file = new File([blob], filename, { type: mimeType })
+    if (isTouchDevice && navigator.canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: filename })
+        toast.show('图片已分享 / 保存')
+      } catch (err) {
+        // 用户主动取消（AbortError）——静默处理，不走 fallback
+        if (!(err instanceof DOMException && err.name === 'AbortError')) {
+          toast.show('保存失败，请重试', 'error')
+        }
+      }
+      return
+    }
+
+    // 桌面端 fallback：Blob URL + 模拟点击
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    setTimeout(() => URL.revokeObjectURL(url), 10_000)
+    toast.show('图片已保存')
+  }
 
   let prevResult: ToolResultMessage | null = null
   $effect(() => {
@@ -172,16 +209,20 @@
                 <span class="text-[0.72rem] text-fg-muted font-mono">
                   {generatedImage.operation === 'edit' ? '编辑' : '生成'} · {generatedImage.aspectRatio}{generatedImage.imageSize ? ' · ' + generatedImage.imageSize : ''}
                 </span>
-                <a
-                  href="data:{generatedImage.mimeType};base64,{generatedImage.imageData}"
-                  download="generated-{result.timestamp ??
-                    Date.now()}.{generatedImage.mimeType.split('/')[1] ?? 'png'}"
-                  class="inline-flex items-center gap-1 text-[0.75rem] text-accent no-underline
+                <button
+                  type="button"
+                  onclick={() => handleSaveImage(
+                    generatedImage.mimeType,
+                    generatedImage.imageData,
+                    `generated-${result.timestamp ?? Date.now()}.${generatedImage.mimeType.split('/')[1] ?? 'png'}`
+                  )}
+                  class="inline-flex items-center gap-1 text-[0.75rem] text-accent
+                         bg-transparent border-none cursor-pointer font-[inherit]
                          px-1.5 py-0.5 rounded transition-colors duration-100 hover:bg-surface-active"
                 >
                   <Download size={11} />
                   保存图片
-                </a>
+                </button>
               </div>
             </div>
           {:else}

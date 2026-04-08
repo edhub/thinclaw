@@ -7,6 +7,7 @@
   let { children } = $props()
 
   import { THEMES } from '$lib/themes'
+  import Toast from '$lib/components/Toast.svelte'
 
   // Reactively write the chosen theme id to <html data-theme="...">
   // so that :root[data-theme="xxx"] CSS blocks in app.css take effect.
@@ -30,3 +31,4 @@
 </script>
 
 {@render children()}
+<Toast />

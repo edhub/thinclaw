@@ -253,7 +253,7 @@
           <ToolCard
             {call}
             result={toolResultMap?.get(call.id) ?? null}
-            defaultExpanded={call.name === 'generate_image'}
+            defaultExpanded={call.name === 'generate_image' || call.name === 'edit_image'}
           />
         {/each}
 

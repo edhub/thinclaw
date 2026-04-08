@@ -22,6 +22,7 @@
   --color-error-bg: var(--error-bg);
   --color-warn: var(--warn-color);
   --color-warn-bg: var(--warn-bg);
+  --color-success: var(--success);
 
   /* Custom animations */
   --animate-blink: blink 1s step-end infinite;
@@ -121,6 +122,9 @@
   --warn-color: #a8620e; /* darkened for readability on light bg */
   --warn-bg: #fff4e0;
 
+  /* Success state */
+  --success: #3a9e5f;
+
   /* ── Badge tokens (session viewer, etc.) ── */
   --badge-session-bg: #d6ebf9;
   --badge-session-fg: #1f6fa8;
@@ -155,6 +159,7 @@
   --error-bg: #fce6e6;
   --warn-color: #c07700;
   --warn-bg: #fff6d8;
+  --success: #26a269;
 }
 
 /* ─── Base16 Default Light ─── */
@@ -178,6 +183,7 @@
   --error-bg: #f9ecec;
   --warn-color: #a16946; /* base0F — brown */
   --warn-bg: #fdf3ec;
+  --success: #a1b56c; /* base0B — green */
 }
 
 /* ─── Catppuccin Latte ─── */
@@ -201,6 +207,7 @@
   --error-bg: #fce4e8;
   --warn-color: #df8e1d; /* Yellow */
   --warn-bg: #fef9ec;
+  --success: #40a02b; /* Green */
 }
 
 /* ─── Ingrid ─── */
@@ -224,6 +231,7 @@
   --error-bg: #fdecea;
   --warn-color: #a07000;
   --warn-bg: #fdf5cc;
+  --success: #4e9a4e;
 }
 
 /* ─── Zed One Light ─── */
@@ -248,6 +256,7 @@
   --error-bg: #fce4e4;
   --warn-color: #986801;
   --warn-bg: #fff4e0;
+  --success: #50a14f;
 }
 
 /* ─── Reset & base ─── */
