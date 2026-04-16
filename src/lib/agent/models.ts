@@ -10,14 +10,45 @@
  *
  * Claude models  → Anthropic Messages API  (native format, POST /v1/messages)
  * Gemini models  → Google Generative AI API (native format, POST /v1beta/models/…)
+ * Qwen / DashScope → OpenAI Completions API (OpenAI-compatible, POST /compatible-mode/v1/chat/completions)
  *
  * Using native formats gives access to provider-specific features:
  *   - Anthropic: extended thinking, cache control, fine-grained tool streaming
  *   - Google: thinkingConfig, thoughtSignature, native tool use
+ *   - Qwen/DashScope: implicit context cache (auto, 20% cached token price),
+ *     explicit cache via cache_control (10% cached, 125% create)
  */
 import type { Model } from '@mariozechner/pi-ai'
 
-export const MODELS: Model<'anthropic-messages' | 'google-generative-ai'>[] = [
+export const MODELS: Model<'anthropic-messages' | 'google-generative-ai' | 'openai-completions'>[] = [
+  // ── 阿里百炼 · DashScope (OpenAI-compatible) ───────────────────────────────
+  {
+    id: 'qwen3.6-plus',
+    name: '千问 3.6 Plus · 百炼',
+    api: 'openai-completions',
+    provider: 'bailian',
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    reasoning: false,
+    input: ['text', 'image'],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: 131072,
+    maxTokens: 8192,
+    compat: { supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false },
+  },
+  {
+    id: 'qwen3.5-flash',
+    name: '千问 3.5 Flash · 百炼',
+    api: 'openai-completions',
+    provider: 'bailian',
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    reasoning: false,
+    input: ['text', 'image'],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: 131072,
+    maxTokens: 8192,
+    compat: { supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false },
+  },
+
   // ── Google Gemini (via laozhang.ai) ───────────────────────────────────────
   {
     id: 'gemini-3.1-flash-lite-preview',
@@ -146,6 +177,6 @@ export function modelKey(m: Model<any>): string {
 export const DEFAULT_MODEL_KEY = 'bianxie:gemini-3-flash-preview'
 export const DEFAULT_UTILITY_MODEL_KEY = 'bianxie:gemini-3.1-flash-lite-preview'
 
-export function getModelByKey(key: string): Model<'anthropic-messages' | 'google-generative-ai'> {
+export function getModelByKey(key: string): Model<'anthropic-messages' | 'google-generative-ai' | 'openai-completions'> {
   return MODELS.find((m) => modelKey(m) === key) ?? MODELS[0]
 }

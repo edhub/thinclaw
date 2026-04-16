@@ -6,6 +6,7 @@
  *   bianxieApiKey         — bianxie.ai API key
  *   lingyaaiApiKey        — lingyaai.cn API key
  *   qiniuApiKey           — qnaigc.com (七牛) API key
+ *   bailianApiKey         — dashscope.aliyuncs.com (阿里百炼) API key
  *   enabledModelKeys      — explicit list of enabled model keys ([] = all models whose provider has a key)
  *   model                 — active conversation model key (`${provider}:${modelId}`)
  *   utilityModelKey       — utility model key (compaction, auto-title)
@@ -36,6 +37,7 @@ export interface Settings {
   bianxieApiKey: string
   lingyaaiApiKey: string
   qiniuApiKey: string
+  bailianApiKey: string
   enabledModelKeys: string[] // [] means all models of providers with keys
   model: string // active model key: `${provider}:${modelId}`
   utilityModelKey: string // utility model key (compaction / auto-title)
@@ -55,6 +57,7 @@ const DEFAULTS: Settings = {
   bianxieApiKey: '',
   lingyaaiApiKey: '',
   qiniuApiKey: '',
+  bailianApiKey: '',
   enabledModelKeys: [],
   model: DEFAULT_MODEL_KEY,
   utilityModelKey: DEFAULT_UTILITY_MODEL_KEY,
@@ -67,7 +70,7 @@ const DEFAULTS: Settings = {
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 /** Keys of the Settings interface that hold provider API keys. */
-export type ApiKeyField = 'laozhangApiKey' | 'bianxieApiKey' | 'lingyaaiApiKey' | 'qiniuApiKey'
+export type ApiKeyField = 'laozhangApiKey' | 'bianxieApiKey' | 'lingyaaiApiKey' | 'qiniuApiKey' | 'bailianApiKey'
 
 /** Maps provider id → Settings key field that holds its API key. */
 const PROVIDER_KEY_FIELD: Record<string, ApiKeyField> = {
@@ -75,6 +78,7 @@ const PROVIDER_KEY_FIELD: Record<string, ApiKeyField> = {
   bianxie:  'bianxieApiKey',
   lingyaai: 'lingyaaiApiKey',
   qiniu:    'qiniuApiKey',
+  bailian:  'bailianApiKey',
 }
 
 /** Returns true if the given provider has an API key configured. */

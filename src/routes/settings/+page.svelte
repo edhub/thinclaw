@@ -61,6 +61,11 @@
 
   const PROVIDER_CONFIGS: ProviderConfig[] = [
     {
+      id: 'bailian', field: 'bailianApiKey', name: '阿里百炼 · dashscope.aliyuncs.com',
+      notice: '⚠ 未配置密饰，该供应商下的模型不可用。',
+      inputId: 'bailian-key', apiDomain: 'dashscope.aliyuncs.com',
+    },
+    {
       id: 'lingyaai', field: 'lingyaaiApiKey', name: '灵芽 · lingyaai.cn',
       notice: '⚠ 未配置密钙，该供应商下的模型不可用。',
       inputId: 'lingyaai-key', apiDomain: 'api.lingyaai.cn',
@@ -87,6 +92,7 @@
     bianxieApiKey:  $settings.bianxieApiKey,
     lingyaaiApiKey: $settings.lingyaaiApiKey,
     qiniuApiKey:    $settings.qiniuApiKey,
+    bailianApiKey:  $settings.bailianApiKey,
   })
 
   const keyVisible = $state<Record<ApiKeyField, boolean>>({
@@ -94,6 +100,7 @@
     bianxieApiKey:  false,
     lingyaaiApiKey: false,
     qiniuApiKey:    false,
+    bailianApiKey:  false,
   })
 
   // Keep drafts in sync when settings change externally (e.g. import/reset)
@@ -102,6 +109,7 @@
     keyDraft.bianxieApiKey  = $settings.bianxieApiKey
     keyDraft.lingyaaiApiKey = $settings.lingyaaiApiKey
     keyDraft.qiniuApiKey    = $settings.qiniuApiKey
+    keyDraft.bailianApiKey  = $settings.bailianApiKey
   })
 
   function saveKey(field: ApiKeyField): void {

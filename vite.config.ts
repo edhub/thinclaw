@@ -36,7 +36,7 @@ const UNUSED_PI_AI_PROVIDERS = new Set([
   'google-vertex',
   'openai-codex-responses',
   'openai-responses',
-  'openai-completions',
+  // 'openai-completions' — used by bailian (DashScope) provider
   'amazon-bedrock',
 ])
 
@@ -125,12 +125,12 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         // Don't precache highlight.js language chunks — they're huge and lazily loaded.
         globIgnores: ['**/highlight.js/**'],
-        // navigateFallback is intentionally omitted.
-        // adapter-static already sets fallback: 'index.html', so the hosting layer
-        // handles SPA routing.  VitePWA runs during the Vite build step, before
-        // adapter-static writes index.html, so /index.html is never in the
-        // precache manifest — referencing it via navigateFallback would make
-        // Workbox throw "non-precached-url" on every SW initialization.
+        // navigateFallback must be explicitly null — VitePWA defaults to 'index.html'
+        // which causes Workbox to throw "non-precached-url" because adapter-static
+        // writes index.html after Vite build, so it never appears in the precache
+        // manifest. SPA routing is handled by the hosting layer (adapter-static
+        // sets fallback: 'index.html' in its own config).
+        navigateFallback: null,
       },
       manifest: {
         name: 'ThinClaw',

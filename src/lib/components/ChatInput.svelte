@@ -17,7 +17,15 @@
     isModal?: boolean
     lastMessageAt?: number
   }
-  let { onSend, onNewTopicSend, onAbort, open = true, onClose, isModal = false, lastMessageAt }: Props = $props()
+  let {
+    onSend,
+    onNewTopicSend,
+    onAbort,
+    open = true,
+    onClose,
+    isModal = false,
+    lastMessageAt,
+  }: Props = $props()
 
   const DRAFT_KEY = 'thinclaw:input-draft'
 
@@ -37,7 +45,7 @@
   let nowTimer: ReturnType<typeof setInterval> | null = null
 
   // 默认：距最后一条消息超过 1 小时则高亮
-  const newTopicDefault = $derived(!!lastMessageAt && now - lastMessageAt > 3_600_000)
+  const newTopicDefault = $derived(!!lastMessageAt && now - lastMessageAt > 1_800_000)
 
   const newTopicActive = $derived(
     !!onNewTopicSend && (newTopicOverride !== null ? newTopicOverride : newTopicDefault),
@@ -68,11 +76,11 @@
     dropdownIndex = 0
   })
 
-
-
   onMount(() => {
     isMobile = window.matchMedia('(max-width: 639px)').matches
-    nowTimer = setInterval(() => { now = Date.now() }, 60_000)
+    nowTimer = setInterval(() => {
+      now = Date.now()
+    }, 60_000)
 
     const saved = localStorage.getItem(DRAFT_KEY)
     if (saved) {

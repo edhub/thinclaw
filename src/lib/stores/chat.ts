@@ -41,6 +41,7 @@ import {
   type Conversation,
 } from '$lib/db'
 import { generateAiTitle, countUserMessages } from '$lib/agent/title'
+import { injectBailianCacheControl } from '$lib/agent/bailian-cache'
 import { recordSession, updateSessionTitle, type SerializedTool } from '$lib/fs/session-recorder'
 import type { SessionPayloadEntry } from '$lib/fs/session-recorder'
 
@@ -188,8 +189,12 @@ function makeStreamFn(convId: string) {
   }
 }
 
-function makePayloadHandler(convId: string): (payload: unknown) => unknown {
-  return (payload: unknown): unknown => {
+function makePayloadHandler(convId: string): (payload: unknown, model: Model<any>) => unknown {
+  return (payload: unknown, model: Model<any>): unknown => {
+    // Inject explicit cache markers for Bailian (DashScope) before recording snapshot.
+    if (model?.provider === 'bailian') {
+      payload = injectBailianCacheControl(payload)
+    }
     try {
       const payloads = _convPayloads.get(convId) ?? []
       payloads.push({
